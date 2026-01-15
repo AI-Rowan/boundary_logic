@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Optional: ignore outputs if you don't want generated files tracked
+outputs/
+data/
+
+#Note: If you do want outputs tracked (sometimes helpful for papers), remove outputs/.
