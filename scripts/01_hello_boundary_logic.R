@@ -1,6 +1,6 @@
 # scripts/01_hello_boundary_logic.R
 # Purpose: sanity check that the repo runs and produces an output.
-
+# test merge
 message("Hello from boundary_logic (feature branch).")
 
 set.seed(1)
