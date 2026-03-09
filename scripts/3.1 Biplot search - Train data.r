@@ -18,15 +18,15 @@
 rm(list = ls())
 
 {
-source("1 Functions for biplot.R")
+source("scripts/1 Functions for biplot.R")
   # replace with two new functions
-source("1.1 biplot_plane_optimized.R")
-source("1.2 Run_Shapley_optimized.R")
+source("scripts/1.1 biplot_plane_optimized.R")
+source("scripts/1.2 Run_Shapley_optimized.R")
   
 # load functions
-source("1.3 Optimal Rotation.R")   # Provides Biplot_rotation
-source("1.4 Biplot Boundary Search_optimized.R")  # Provides Biplot_boundary_search
-source("1.5 Data point Picker.R") # select a point on the biplot - default 2 points
+source("scripts/1.3 Optimal Rotation.R")   # Provides Biplot_rotation
+source("scripts/1.4 Biplot Boundary Search_optimized.R")  # Provides Biplot_boundary_search
+source("scripts/1.5 Data point Picker.R") # select a point on the biplot - default 2 points
 
 }
 
@@ -57,6 +57,7 @@ source("1.5 Data point Picker.R") # select a point on the biplot - default 2 poi
 {
   glm_use <- F
  ##>> Remove this option: lda <- F
+  lda <- F
   svm_u <- F
   gam_used <- F
   gbm_used <- F
@@ -81,16 +82,17 @@ Polygon_filter <- F
 ## source("2 Data File.R")
 
 # prepare the data file for use by MLM and Biplots
-source("2.1 Data Setup.R")          # Updates data object with var_names, num_vars, etc.
+source("scripts/2.1 Data Setup.R")          # Updates data object with var_names, num_vars, etc.
 
 # fit the MLM model , or load existing
 {
   # include the prediction funtion 
-  source("2.2 Model_use fitting v2.R") # run model, Requires "train_data" data.frame
+  source("scripts/2.2 Model_use fitting v2.R") # run model, Requires "train_data" data.frame
   
   if(Polygon_filter == F) model_results <- model_fitting(train_data = train_data)  
   if(Polygon_filter == T) model_results <- model_fitting(train_data = biplot_data[,1:(num_vars+1)])  
-  
+
+
   # Allocate results, or load exising model
   model_select <- model_results$model_select
   model_use <- model_results$model_use
