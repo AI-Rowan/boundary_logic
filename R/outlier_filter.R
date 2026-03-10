@@ -1,0 +1,180 @@
+############################################################
+# bl_filter_outliers(): iterative convex hull polygon filter
+# Implements the iterative polygon filter step from Phase 1.
+# Refactored from: scripts/3.1 Biplot search - Train data.r (Steps 3.1-3.2)
+############################################################
+
+#' Iteratively remove outliers from training data using a convex hull filter
+#'
+#' Projects training data into the current biplot space, computes a convex
+#' hull polygon enclosing `hull_fraction` of the projected points, removes
+#' observations outside that polygon from the feature space, re-fits the
+#' specified model on the retained data, and reports accuracy and Gini.
+#'
+#' This function implements the iterative polygon filter step of Phase 1.
+#' Call it multiple times with different `hull_fraction` values to explore
+#' the trade-off between data coverage and outlier removal. Once satisfied,
+#' pass the returned object to `bl_build_projection()` and `bl_build_grid()`.
+#'
+#' @section How the polygon filter works:
+#' The polygon is constructed in the standardised feature space (all variables
+#' centred and scaled), not in a biplot Z-space, so that it can be applied
+#' before the projection matrix is computed. The convex hull is computed using
+#' `aplpack::plothulls()` on the first two principal components of the raw
+#' feature matrix, which is a lightweight proxy for the full biplot projection.
+#'
+#' @param bl_data      A `"bl_data"` object returned by `bl_prepare_data()`.
+#' @param model_type   Character scalar; the model to fit after filtering.
+#'   One of `"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`,
+#'   `"RForrest"`, `"XGB"`. Default `"GLM"`.
+#' @param hull_fraction Numeric in (0, 1]; the `fraction` argument for
+#'   `aplpack::plothulls()`. Values below `1` trim the most extreme points.
+#'   `1.0` retains all points (no trimming). Default `0.9`.
+#' @param cutoff       Numeric; decision threshold for accuracy computation.
+#'   Default `0.5`.
+#' @param rounding     Integer; floor-based rounding precision. Default `2`.
+#' @param model_params Named list of model hyperparameter overrides.
+#' @param verbose      Logical; if `TRUE`, prints a summary line after
+#'   fitting. Default `TRUE`.
+#'
+#' @return A list of class `"bl_filter_result"` with components:
+#' \describe{
+#'   \item{`train_data`}{Filtered training data frame.}
+#'   \item{`test_data`}{Test data frame (filtered to training variable ranges).}
+#'   \item{`var_names`}{Feature column names.}
+#'   \item{`num_vars`}{Number of features.}
+#'   \item{`target_class`}{The positive class value (passed through).}
+#'   \item{`polygon`}{`SpatialPolygons` convex hull in standardised PCA space.}
+#'   \item{`hull_fraction`}{The fraction value used.}
+#'   \item{`accuracy`}{Training accuracy after refitting.}
+#'   \item{`gini`}{Training Gini coefficient after refitting.}
+#'   \item{`n_retained`}{Number of training rows retained.}
+#'   \item{`n_removed`}{Number of training rows removed.}
+#' }
+#'
+#' @examples
+#' bl_dat  <- bl_prepare_data(iris,
+#'                             class_col    = "Species",
+#'                             target_class = "versicolor")
+#' bl_filt <- bl_filter_outliers(bl_dat, model_type = "GLM",
+#'                                hull_fraction = 0.9)
+#' print(bl_filt)
+#'
+#' @export
+bl_filter_outliers <- function(bl_data,
+                               model_type    = "GLM",
+                               hull_fraction = 0.9,
+                               cutoff        = 0.5,
+                               rounding      = 2L,
+                               model_params  = list(),
+                               verbose       = TRUE) {
+
+  # ---- Validation -------------------------------------------------------
+  if (!inherits(bl_data, "bl_data"))
+    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data().",
+         call. = FALSE)
+  stop_if_not_in_range(hull_fraction, 0, 1.001, "hull_fraction")  # allow == 1
+  if (hull_fraction > 1) hull_fraction <- 1.0
+
+  train_data <- bl_data$train_data
+  test_data  <- bl_data$test_data
+  var_names  <- bl_data$var_names
+  num_vars   <- bl_data$num_vars
+  n_original <- nrow(train_data)
+
+  # ---- Standardise features for PCA proxy ------------------------------
+  X <- as.matrix(train_data[, var_names, drop = FALSE])
+  X_center <- colMeans(X)
+  X_sd     <- apply(X, 2L, stats::sd)
+  X_sd[X_sd == 0] <- 1  # avoid division by zero for constant columns
+  X_st     <- scale(X, center = X_center, scale = X_sd)
+
+  # ---- Project to first 2 PCs (lightweight proxy) ----------------------
+  svd_x  <- svd(X_st, nu = 2L, nv = 2L)
+  Z_train <- X_st %*% svd_x$v[, 1:2, drop = FALSE]
+  colnames(Z_train) <- c("x", "y")
+
+  # ---- Build convex hull polygon in Z-space ----------------------------
+  min_val <- min(Z_train)
+  max_val <- max(Z_train)
+
+  polygon <- .build_hull_polygon(Z_train, min_val, max_val,
+                                 outlie = hull_fraction)
+
+  # ---- Identify points inside polygon ----------------------------------
+  inside <- .points_in_polygon(Z_train, polygon)
+
+  train_filtered <- train_data[inside, , drop = FALSE]
+  rownames(train_filtered) <- NULL
+  n_retained <- nrow(train_filtered)
+  n_removed  <- n_original - n_retained
+
+  if (n_retained < 10L)
+    warning(sprintf(
+      "Only %d training rows remain after hull_fraction = %g. ",
+      n_retained, hull_fraction
+    ), "Consider increasing hull_fraction.", call. = FALSE)
+
+  # ---- Filter test data to training variable ranges --------------------
+  train_ranges <- get_variable_ranges(train_filtered[, var_names, drop = FALSE])
+  test_rows    <- get_filter_logical_vector(test_data[, var_names, drop = FALSE],
+                                           train_ranges)
+  test_filtered <- test_data[test_rows, , drop = FALSE]
+  rownames(test_filtered) <- NULL
+
+  # ---- Refit model on filtered training data ---------------------------
+  fit_result <- .fit_model(train_filtered, var_names, model_type, model_params)
+
+  pred_prob  <- .pred_function(
+    model_use  = fit_result$model,
+    model_type = model_type,
+    rounding   = rounding,
+    new_data   = train_filtered[, var_names, drop = FALSE]
+  )
+  pred_class <- as.numeric(pred_prob >= cutoff)
+  actual     <- train_filtered[["class"]]
+  accuracy   <- mean(pred_class == actual, na.rm = TRUE)
+  gini       <- calc_gini(actual, pred_prob)
+
+  # ---- Verbose output --------------------------------------------------
+  if (isTRUE(verbose)) {
+    cat(sprintf(
+      "Hull fraction: %.2f | Retained: %d (removed: %d) | Accuracy: %.4f | Gini: %.4f\n",
+      hull_fraction, n_retained, n_removed, accuracy, gini
+    ))
+  }
+
+  # ---- Return ----------------------------------------------------------
+  structure(
+    list(
+      train_data    = train_filtered,
+      test_data     = test_filtered,
+      var_names     = var_names,
+      num_vars      = num_vars,
+      target_class  = bl_data$target_class,
+      polygon       = polygon,
+      hull_fraction = hull_fraction,
+      accuracy      = accuracy,
+      gini          = gini,
+      n_retained    = n_retained,
+      n_removed     = n_removed
+    ),
+    class = "bl_filter_result"
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# S3 print method
+# --------------------------------------------------------------------------
+
+#' @export
+print.bl_filter_result <- function(x, ...) {
+  cat("<bl_filter_result>\n")
+  cat(sprintf("  Hull fraction : %.2f\n", x$hull_fraction))
+  cat(sprintf("  Retained rows : %d  |  Removed: %d\n",
+              x$n_retained, x$n_removed))
+  cat(sprintf("  Accuracy      : %.4f  |  Gini: %.4f\n",
+              x$accuracy, x$gini))
+  invisible(x)
+}

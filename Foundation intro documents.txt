@@ -1,0 +1,206 @@
+Below is a draft instruction manual that serves as the foundation document for the new project. It is written as an internal project guide for future LLM coding agents. 
+Instruction Manual for the Decision-Boundary Biplot R Package Project
+1. Project overview
+1.1 Project name
+Working title: Boundary Logic
+Alternative package names may later be considered, but this document assumes the package will provide a reusable R implementation of the user’s biplot-based interpretability methodology.
+1.2 Purpose of the project
+This project exists to convert an existing research-oriented R codebase into a structured, documented, and installable R package that allows other users to apply a biplot-based method for:
+•	visualising high-dimensional data in a low-dimensional space;
+•	approximating model decision boundaries in that space;
+•	identifying and plotting counterfactuals;
+•	interpreting which variable changes are associated with movement across a decision boundary; and
+•	supporting both local and global model interpretability analyses.
+The package is intended to operationalise a research contribution from the PhD, namely a post hoc explanation framework that combines:
+•	biplot methods,
+•	decision-boundary approximation, and
+•	inverse projection from reduced space back to original feature space.
+•	counterfactual reasoning,
+The long-term aim is for the package to be sufficiently robust, documented, and modular that:
+1.	researchers can reproduce the proposed methodology;
+2.	practitioners can apply it to their own fitted classification models;
+3.	users can generate visual explanations and counterfactual guidance without needing to understand the full internal mathematics; and
+4.	future extensions can support additional models, projection methods, and explanation diagnostics.
+2. Background and conceptual objective
+2.1 Research problem addressed
+Modern machine-learning models often provide strong predictive performance but poor interpretability. Existing interpretability methods may be:
+•	computationally expensive,
+•	restricted to local or global explanations only,
+•	difficult to visualise,
+•	model-specific rather than model-agnostic, or
+•	insufficiently actionable for stakeholders.
+The methodology underlying this project seeks to address that gap by constructing a reduced two-dimensional representation of the data and model behaviour, then using that representation to approximate model decision boundaries and identify feasible counterfactual movements.
+2.2 Core methodological idea
+The central idea is that a biplot-like low-dimensional representation can preserve enough of the original geometric structure of the data to allow:
+•	approximation of model decision boundaries in the reduced space, and
+•	identification of the nearest counterfactual point or boundary-crossing direction.
+This turns an otherwise opaque model into a framework that supports both explanation and action:
+•	Why was this prediction made?
+•	What would need to change for the prediction to change?
+
+3. Current codebase: inferred structure and purpose
+3.1 Broad structure of the current code
+The current code include the following functional components:
+A. Data preprocessing
+Functions that:
+•	Fit a machine learning model from a set of generic functions, including GLM, SVM, GAM and GBM to a training dataset
+•	accept new data - either the training or test dataset
+•	standardise or centre the data where required;
+•	prepare data for PCA or CVA projection;
+•	align the feature structure between training data, projection objects, and new observations.
+B. Projection and biplot construction
+Functions that:
+•	create transformation matrices such as Vmat and tVmat;
+•	construct PCA- or CVA-based biplot coordinates
+•	Rotate the matrix to ensure a target data point is on the approximated decision surface
+•	project observations from original feature space into a reduced two-dimensional space;
+•	support specialised behaviour under CVA, where standardisation may be constrained or disabled.
+•	Visualise the data and the variables
+C. Inverse projection and Decision-boundary approximation
+Functions that:
+•	map points from the reduced biplot space back into approximate original-variable values;
+•	evaluate model outputs over a grid in the reduced space;
+•	determine where predicted class membership changes;
+•	approximate the model’s decision boundary in two dimensions - as the location where the predicted class membership changes.
+This is the mechanism that allows the package to visually represent boundary structure and prediction regions even when the original model is fitted in a higher-dimensional feature space.
+D. Counterfactual identification
+Functions that:
+•	find the nearest counterfactual using the two-dimensional decision boundary;
+•	calculate movement required along the biplot plane;
+•	transform that movement back into variable-level feature changes;
+•	Create projections with different combinations of principal or canonical variables to find the nearest counterfactual in different dimension approximations;
+•	Limit the change in variable values allowed for individual data points to ensure the changes are actionable, feasible and plausible.
+E. Variable contribution / importance analysis and Robustness analysis
+Function that
+•	calculating average distance to the nearest counterfactual along each variable axis over all the test data points;
+•	ranking variables by how strongly they contribute to changing prediction outcomes;
+•	evaluate the overall distance from observations to the decision boundary;
+•	summarise model robustness globally or by subgroup.
+F. Create surrogate model
+Function that approximates the model predictions using the location of the data points in the regions generated by the biplot
+G. Variable contribution / importance analysis and Robustness analysis
+Function that calculates the contribution of each variable to the prediction outcome using Shapley values to allocate the change from the data point to the counterfactual value.
+
+4. Intended package objective
+The package should provide a coherent user-facing workflow with the following logic:
+1.	Fit or supply a predictive classification model.
+2.	Supply the original training or a test dataset used to fit or explain the model.
+3.	Build a reduced-space representation using PCA/CVA biplot logic.
+4.	Estimate decision boundaries in reduced space.
+5.	Plot the data, boundaries, and counterfactual structure.
+6.	Query specific observations.
+7.	Recover variable-level explanations through inverse projection.
+8.	Summarise local and global interpretability measures.
+In package terms, the library should convert a collection of research scripts into:
+•	reusable objects,
+•	consistent function naming,
+•	documented inputs and outputs,
+•	reproducible examples, and
+•	vignettes for end users.
+
+5. Design principles for the package
+The package should be developed according to the following principles.
+5.1 Research fidelity
+The implementation must preserve the mathematical intent of the PhD method. Convenience features should not alter the methodological core without clear versioning and documentation.
+5.2 Modularity
+Projection, inverse projection, boundary estimation, counterfactual search, and plotting should be separable modules.
+5.3 Reproducibility
+Every major output should be reproducible from a clearly defined input object and parameter set.
+5.4 Transparency
+Outputs should retain enough metadata that users can inspect:
+•	centring/scaling values,
+•	projection matrices,
+•	model metadata,
+•	grid settings,
+•	boundary estimation assumptions,
+•	counterfactual search settings.
+5.5 Extensibility
+The code should be written so new projection methods, model backends, and explanation summaries can be added later without redesigning the whole package.
+5.6 Package usability
+The package should be intuitive for statisticians and applied data scientists. Complex mathematics should be hidden behind well-documented functions, but not obscured.
+6. What should be preserved from the current code
+The following elements appear central and should be preserved carefully during refactoring:
+1.	The mathematical logic of the projection and inverse projection.
+2.	The distinction between PCA and CVA pathways.
+3.	The ability to standardise or not standardise depending on method and use case.
+4.	The object components such as transformation matrices and centring/scaling values.
+5.	The connection between projected space and original variable interpretation.
+6.	The decision-boundary approximation workflow.
+7.	The counterfactual identification logic.
+
+7. What should change in the new package project
+The current codebase likely contains research-style scripts, exploratory code, and function interdependencies that are acceptable for thesis work but not ideal for a public package. The new project should therefore introduce the following changes.
+7.1 Remove hidden dependencies
+Functions should not rely on objects existing in the global environment.
+7.2 Standardise input and output contracts
+Every function should have:
+•	well-defined arguments,
+•	clear return values,
+•	documented classes,
+•	meaningful error messages.
+7.3 Avoid script-style execution flow
+The package should expose reusable functions rather than long procedural scripts.
+7.4 Improve naming consistency
+Function and object names should follow a coherent package naming convention, ideally with a common prefix.
+8 Introduce unit tests
+Make use of unit tests to cover:
+•	projection correctness
+•	inverse projection consistency
+•	counterfactual and boundary extraction validity
+•	Correct adjustment for rotation of data point
+•	Correct selection of actionable, feasible and plausible counterfactual
+•	error handling
+
+9. Guidance for LLM coding agents working on this project
+This section is intended specifically for future LLM agents.
+9.1 Primary task
+Refactor and extend the existing R research code into a production-quality R package without altering the underlying mathematical methodology unless explicitly instructed.
+9.2 Do not do the following
+•	Do not simplify the methodology merely to make the code shorter.
+•	Do not replace custom mathematical logic with generic package shortcuts unless the outputs are proven equivalent.
+•	Do not silently change default scaling, centring, or projection conventions.
+•	Do not remove metadata that may be needed for inverse projection or interpretation.
+•	Do not entangle plotting code with computation code.
+9.3 Always do the following
+•	Preserve mathematical fidelity.
+•	Add roxygen2 documentation to all exported functions.
+•	Keep functions small and modular.
+•	Write unit tests for new features.
+•	Use explicit validation checks.
+•	Make assumptions transparent in comments and documentation.
+•	Prefer deterministic behaviour where possible.
+•	Document approximation steps clearly, especially for boundary estimation and inverse projection.
+9.4 Coding standards
+•	Use idiomatic R.
+•	Prefer clear function names over compact ones.
+•	Minimise side effects.
+•	Use S3 classes where useful.
+•	Use testthat for testing.
+•	Use roxygen2 for documentation.
+•	Keep package dependencies limited and justified.
+9.5 Documentation priorities
+LLM agents should prioritise:
+1.	package README;
+2.	getting-started vignette;
+3.	mathematical-method vignette;
+4.	function help files;
+5.	reproducible examples using a simple dataset.
+
+10. Known technical risks and design cautions
+11.1 Reduced-space approximation risk
+The decision boundary in two dimensions is an approximation of a higher-dimensional model. Users must not be allowed to assume it is exact without qualification.
+11.3 Dependence on preprocessing conventions
+If centring/scaling is inconsistent across functions, the whole framework can become invalid.
+11.4 Over-coupling to one model type
+The package should avoid becoming dependent on only one classifier implementation.
+11.5 Research code complexity
+Some parts of the current code may have evolved iteratively and may mix experimentation with final logic. Refactoring must distinguish core methodology from historical artefacts.
+12. Definition of success
+This project will be successful if, at minimum:
+•	the code is installable as an R package;
+•	the main workflow can be executed by a new user from documented examples;
+•	projection, inverse projection, boundary estimation, and counterfactual functions are stable and tested;
+•	the package accurately reflects the PhD methodology;
+•	the package is structured well enough that LLM agents can safely extend it.
+At a higher level, success means that the package becomes the reference implementation of your biplot-based interpretable machine-learning method.
+
