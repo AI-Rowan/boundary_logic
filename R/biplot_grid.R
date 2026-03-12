@@ -23,6 +23,9 @@
 #' @param Z_train    n x 2 matrix of projected training coordinates (fallback
 #'   if biplotEZ rendering fails).
 #'
+#' @importFrom biplotEZ samples axes
+#' @importFrom grDevices png dev.off
+#' @importFrom graphics par
 #' @return Numeric vector of length 2: `c(min_val, max_val)`.
 #' @keywords internal
 .bl_get_plot_bounds <- function(biplot_obj, Z_train) {
@@ -125,8 +128,12 @@
 #'     training point.}
 #' }
 #'
+#' @importFrom grDevices contourLines colorRampPalette
+#' @importFrom dplyr case_when
+#' @importFrom sp coordinates over
+#'
 #' @examples
-#' bl_dat  <- bl_prepare_data(iris,
+#' bl_dat  <- bl_prepare_data(datasets::iris,
 #'                             class_col    = "Species",
 #'                             target_class = "versicolor")
 #' bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
@@ -214,6 +221,7 @@ bl_build_grid <- function(train_data,
   inside_data <- !is.na(sp::over(Z_df, polygon))
 
   # ---- Score each grid point (chunked for memory safety) ---------------
+  ##A : make use of the .pred_function to determine grid_prob
   chunk     <- 50000L
   grid_prob <- numeric(nrow(Xgrid))
   for (i0 in seq(1L, nrow(Xgrid), by = chunk)) {
@@ -249,7 +257,12 @@ bl_build_grid <- function(train_data,
     )
   }
 
-  # ---- Optional: remove grid points outside polygon --------------------
+  # ---- Create datapoint colour coding --------------------
+  ##A can use results of the bl_mod in bl_proj where these were created for CVA. 
+  ##A They were not created for PCA, so need to do here for both cases
+  
+  ##A where the classes are not know, so for new test data, need to colour based on prediction:so just red or blue
+  
   pred_prob_train <- .pred_function(
     model_use  = bl_model$model,
     model_type = bl_model$model_type,
@@ -265,6 +278,8 @@ bl_build_grid <- function(train_data,
     actual != pred_use & actual == 0L ~ "purple", # FP
     TRUE                              ~ "orange"  # FN
   )
+  
+  # ---- Optional: remove grid points outside polygon --------------------
 
   if (isTRUE(calc_hull)) {
     grid_prob <- grid_prob[inside_grid]

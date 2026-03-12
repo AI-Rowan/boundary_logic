@@ -55,7 +55,7 @@ source("scripts/1.5 Data point Picker.R") # select a point on the biplot - defau
 # Select the MLM type used
 # to name the plot in graphs later automatically: Set default GLM
 {
-  glm_use <- F
+  glm_use <- T
  ##>> Remove this option: lda <- F
   lda <- F
   svm_u <- F
@@ -63,7 +63,7 @@ source("scripts/1.5 Data point Picker.R") # select a point on the biplot - defau
   gbm_used <- F
   rpart_used <- F
   nnet_used <- F
-  xgb_used <- T
+  xgb_used <- F
   
 }
 

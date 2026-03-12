@@ -32,7 +32,13 @@ data <- iris[,c(1:4,5)]
 # # # data <- iris[,c(1:4,5)] 
 
 
-
+  #PIMA data
+  {
+    data <- read.csv("pima diabetes.csv")
+    data <- data %>% filter(Insulin >0, SkinThickness>0)
+    data <- data[,-c(3)] #; data <- data[,-c(1,3,4,7)]; tdp_class <- 1
+    tdp_class <- 1 # 2 for iris, 1 for PIMA
+  }
 
 
 ####################

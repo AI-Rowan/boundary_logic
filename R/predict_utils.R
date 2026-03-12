@@ -1,14 +1,22 @@
 ############################################################
-# Internal prediction utilities
+# Internal prediction utilities — tidymodels edition
 # Refactored from: scripts/2.2 Model_use fitting v2.R
-# All global references replaced with explicit arguments.
+#
+# Primary path: models fitted by bl_fit_model() (except "GBM") are
+# stored as workflows::workflow objects; prediction uses the unified
+# predict(<workflow>, new_data, type = "prob") interface.
+#
+# Legacy / fallback path: raw model objects (GBM, or models passed
+# via bl_wrap_model()) are handled by a model_type switch.
 ############################################################
 
+
 # --------------------------------------------------------------------------
-# SVM probability extraction
+# SVM probability extraction — legacy fallback only
+# Used when a raw e1071 SVM object is passed via bl_wrap_model().
 # --------------------------------------------------------------------------
 
-#' Extract class-1 probability from an e1071 SVM model
+#' Extract class-1 probability from a raw e1071 SVM model
 #'
 #' @param model_use An e1071 SVM model trained with `probability = TRUE`.
 #' @param new_data  Data frame for prediction.
@@ -37,77 +45,86 @@
 
 #' Standardise prediction calls across all supported model families
 #'
-#' Applies floor-based rounding and dispatches to the correct prediction
-#' method for each model type.
+#' Dispatches to one of three paths:
 #'
-#' @param model_use    Fitted model object. For XGB this must be a list with
-#'   fields `model` (an `xgb.Booster`) and `features` (character vector of
-#'   column names used during training).
-#' @param model_type   Character scalar identifying the model family. One of
-#'   `"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`, `"RForrest"`,
-#'   `"XGB"`.
-#' @param rounding     Integer number of decimal places for floor-based
-#'   rounding. Default `2`.
+#' 1. **tidymodels workflow** (`inherits(model_use, "workflow")`): all model
+#'    types fitted by `bl_fit_model()` except `"GBM"`. Uses
+#'    `predict(<workflow>, new_data, type = "prob")` and extracts `.pred_1`.
+#'
+#' 2. **Legacy / raw model**: `"GBM"` (raw `gbm` object) and any model passed
+#'    via `bl_wrap_model()` using a raw fitted object. Model-type-specific
+#'    predict calls are used.
+#'
+#' 3. **Custom**: `model_type = "custom"` from `bl_wrap_model()`. Calls the
+#'    user-supplied `predict_fn`.
+#'
+#' @param model_use    Fitted model. A `workflows::workflow` for tidymodels
+#'   types; a raw `gbm` object for `"GBM"`; a list with `model` and
+#'   `predict_fn` for `"custom"`.
+#' @param model_type   Character scalar identifying the model family.
+#' @param rounding     Integer; floor-based rounding decimal places. Default `2`.
 #' @param new_data     Data frame of observations to score.
 #'
-#' @return Numeric vector of predicted probabilities / scores, length
-#'   `nrow(new_data)`, rounded via `floor(x * 10^rounding) / 10^rounding`.
+#' @importFrom xgboost xgb.DMatrix
+#' @return Numeric vector of predicted probabilities, length `nrow(new_data)`,
+#'   rounded via `floor(x * 10^rounding) / 10^rounding`.
 #' @keywords internal
 .pred_function <- function(model_use, model_type, rounding = 2L, new_data) {
 
   floor_round <- function(x) floor(x * (10^rounding)) / (10^rounding)
 
-  pred_value <- switch(
-    model_type,
+  pred_value <- if (model_type == "custom") {
+    # User-supplied predict_fn from bl_wrap_model()
+    floor_round(model_use$predict_fn(model_use$model, new_data))
 
-    # GLM / GAM: type = "response" gives probabilities directly
-    "GLM" = ,
-    "GAM" = {
-      floor_round(predict(model_use, newdata = new_data, type = "response"))
-    },
+  } else if (inherits(model_use, "workflow")) {
+    # tidymodels workflow: unified predict interface
+    # predict() returns a tibble with .pred_0 and .pred_1
+    preds <- predict(model_use, new_data = new_data, type = "prob")
+    floor_round(preds$.pred_1)
 
-    # GBM: requires n.trees; use the number the model was trained with
-    "GBM" = {
-      floor_round(
+  } else {
+    # Legacy: raw model object (GBM fitted by bl_fit_model(), or a raw
+    # model object passed via bl_wrap_model())
+    switch(
+      model_type,
+
+      "GBM" = floor_round(
         predict(model_use, newdata = new_data,
                 n.trees = model_use$n.trees, type = "response")
-      )
-    },
+      ),
 
-    # LDA: extract class-2 posterior
-    "LDA" = {
-      floor_round(predict(model_use, newdata = new_data)$posterior[, 2])
-    },
+      "GLM" = ,
+      "GAM" = floor_round(
+        predict(model_use, newdata = new_data, type = "response")
+      ),
 
-    # SVM: use the internal probability helper
-    "SVM" = {
-      floor_round(.svm_pred(model_use, new_data))
-    },
+      "LDA" = floor_round(
+        predict(model_use, newdata = new_data)$posterior[, 2]
+      ),
 
-    # NNET: predict() returns probabilities directly (single-output net)
-    "NNET" = {
-      floor_round(predict(model_use, newdata = new_data))
-    },
+      "SVM" = floor_round(.svm_pred(model_use, new_data)),
 
-    # rpart (labelled RForrest in original code)
-    "RForrest" = {
-      floor_round(predict(model_use, newdata = new_data)[, 2])
-    },
+      "NNET" = floor_round(
+        predict(model_use, newdata = new_data)
+      ),
 
-    # XGBoost: model_use is list(model = <booster>, features = <char vec>)
-    "XGB" = {
-      new_mat <- as.matrix(new_data[, model_use$features, drop = FALSE])
-      preds   <- predict(model_use$model,
-                         newdata = xgboost::xgb.DMatrix(new_mat))
-      floor_round(preds)
-    },
+      "RForrest" = floor_round(
+        predict(model_use, newdata = new_data)[, 2]
+      ),
 
-    # Unknown model type
-    stop(sprintf(
-      "Unknown model_type '%s'. Must be one of: GLM, GAM, GBM, LDA, SVM, NNET, RForrest, XGB.",
-      model_type
-    ), call. = FALSE)
-  )
+      "XGB" = {
+        new_mat <- as.matrix(new_data[, model_use$features, drop = FALSE])
+        floor_round(predict(model_use$model,
+                            newdata = xgboost::xgb.DMatrix(new_mat)))
+      },
+
+      stop(sprintf(
+        "Unknown model_type '%s'. Must be one of: GLM, GAM, GBM, LDA, SVM, NNET, RForrest, XGB, custom.",
+        model_type
+      ), call. = FALSE)
+    )
+  }
 
   as.numeric(pred_value)
 }

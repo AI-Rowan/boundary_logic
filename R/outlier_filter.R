@@ -4,17 +4,17 @@
 # Refactored from: scripts/3.1 Biplot search - Train data.r (Steps 3.1-3.2)
 ############################################################
 
-#' Iteratively remove outliers from training data using a convex hull filter
+#' Remove outliers from training data using a convex hull polygon filter
 #'
-#' Projects training data into the current biplot space, computes a convex
-#' hull polygon enclosing `hull_fraction` of the projected points, removes
-#' observations outside that polygon from the feature space, re-fits the
-#' specified model on the retained data, and reports accuracy and Gini.
+#' Projects training data into a lightweight 2-PC space, builds a convex hull
+#' enclosing `hull_fraction` of the points, removes observations outside the
+#' hull, and reports the number and percentage of rows retained and removed.
 #'
-#' This function implements the iterative polygon filter step of Phase 1.
-#' Call it multiple times with different `hull_fraction` values to explore
-#' the trade-off between data coverage and outlier removal. Once satisfied,
-#' pass the returned object to `bl_build_projection()` and `bl_build_grid()`.
+#' This function implements the polygon filter step of Phase 1. Call it
+#' multiple times with different `hull_fraction` values to explore the
+#' trade-off between data coverage and outlier removal. Once satisfied, fit
+#' the final model using `bl_fit_model()` or `bl_wrap_model()` and then
+#' pass the filtered data to `bl_build_projection()` and `bl_build_grid()`.
 #'
 #' @section How the polygon filter works:
 #' The polygon is constructed in the standardised feature space (all variables
@@ -23,19 +23,13 @@
 #' `aplpack::plothulls()` on the first two principal components of the raw
 #' feature matrix, which is a lightweight proxy for the full biplot projection.
 #'
-#' @param bl_data      A `"bl_data"` object returned by `bl_prepare_data()`.
-#' @param model_type   Character scalar; the model to fit after filtering.
-#'   One of `"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`,
-#'   `"RForrest"`, `"XGB"`. Default `"GLM"`.
+#' @param bl_data       A `"bl_data"` object returned by `bl_prepare_data()`
+#'   or `bl_wrap_data()`.
 #' @param hull_fraction Numeric in (0, 1]; the `fraction` argument for
 #'   `aplpack::plothulls()`. Values below `1` trim the most extreme points.
 #'   `1.0` retains all points (no trimming). Default `0.9`.
-#' @param cutoff       Numeric; decision threshold for accuracy computation.
-#'   Default `0.5`.
-#' @param rounding     Integer; floor-based rounding precision. Default `2`.
-#' @param model_params Named list of model hyperparameter overrides.
-#' @param verbose      Logical; if `TRUE`, prints a summary line after
-#'   fitting. Default `TRUE`.
+#' @param verbose       Logical; if `TRUE`, prints a one-line summary showing
+#'   rows retained and removed with percentages. Default `TRUE`.
 #'
 #' @return A list of class `"bl_filter_result"` with components:
 #' \describe{
@@ -46,27 +40,20 @@
 #'   \item{`target_class`}{The positive class value (passed through).}
 #'   \item{`polygon`}{`SpatialPolygons` convex hull in standardised PCA space.}
 #'   \item{`hull_fraction`}{The fraction value used.}
-#'   \item{`accuracy`}{Training accuracy after refitting.}
-#'   \item{`gini`}{Training Gini coefficient after refitting.}
 #'   \item{`n_retained`}{Number of training rows retained.}
 #'   \item{`n_removed`}{Number of training rows removed.}
 #' }
 #'
 #' @examples
-#' bl_dat  <- bl_prepare_data(iris,
+#' bl_dat  <- bl_prepare_data(datasets::iris,
 #'                             class_col    = "Species",
 #'                             target_class = "versicolor")
-#' bl_filt <- bl_filter_outliers(bl_dat, model_type = "GLM",
-#'                                hull_fraction = 0.9)
+#' bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 #' print(bl_filt)
 #'
 #' @export
 bl_filter_outliers <- function(bl_data,
-                               model_type    = "GLM",
                                hull_fraction = 0.9,
-                               cutoff        = 0.5,
-                               rounding      = 2L,
-                               model_params  = list(),
                                verbose       = TRUE) {
 
   # ---- Validation -------------------------------------------------------
@@ -116,31 +103,20 @@ bl_filter_outliers <- function(bl_data,
     ), "Consider increasing hull_fraction.", call. = FALSE)
 
   # ---- Filter test data to training variable ranges --------------------
+  ##A consider removing
   train_ranges <- get_variable_ranges(train_filtered[, var_names, drop = FALSE])
   test_rows    <- get_filter_logical_vector(test_data[, var_names, drop = FALSE],
                                            train_ranges)
   test_filtered <- test_data[test_rows, , drop = FALSE]
   rownames(test_filtered) <- NULL
 
-  # ---- Refit model on filtered training data ---------------------------
-  fit_result <- .fit_model(train_filtered, var_names, model_type, model_params)
-
-  pred_prob  <- .pred_function(
-    model_use  = fit_result$model,
-    model_type = model_type,
-    rounding   = rounding,
-    new_data   = train_filtered[, var_names, drop = FALSE]
-  )
-  pred_class <- as.numeric(pred_prob >= cutoff)
-  actual     <- train_filtered[["class"]]
-  accuracy   <- mean(pred_class == actual, na.rm = TRUE)
-  gini       <- calc_gini(actual, pred_prob)
-
   # ---- Verbose output --------------------------------------------------
   if (isTRUE(verbose)) {
+    pct_removed  <- 100 * n_removed  / n_original
+    pct_retained <- 100 * n_retained / n_original
     cat(sprintf(
-      "Hull fraction: %.2f | Retained: %d (removed: %d) | Accuracy: %.4f | Gini: %.4f\n",
-      hull_fraction, n_retained, n_removed, accuracy, gini
+      "Hull fraction: %.2f | Retained: %d (%.1f%%) | Removed: %d (%.1f%%)\n",
+      hull_fraction, n_retained, pct_retained, n_removed, pct_removed
     ))
   }
 
@@ -154,8 +130,6 @@ bl_filter_outliers <- function(bl_data,
       target_class  = bl_data$target_class,
       polygon       = polygon,
       hull_fraction = hull_fraction,
-      accuracy      = accuracy,
-      gini          = gini,
       n_retained    = n_retained,
       n_removed     = n_removed
     ),
@@ -170,11 +144,12 @@ bl_filter_outliers <- function(bl_data,
 
 #' @export
 print.bl_filter_result <- function(x, ...) {
+  n_total      <- x$n_retained + x$n_removed
+  pct_retained <- 100 * x$n_retained / n_total
+  pct_removed  <- 100 * x$n_removed  / n_total
   cat("<bl_filter_result>\n")
   cat(sprintf("  Hull fraction : %.2f\n", x$hull_fraction))
-  cat(sprintf("  Retained rows : %d  |  Removed: %d\n",
-              x$n_retained, x$n_removed))
-  cat(sprintf("  Accuracy      : %.4f  |  Gini: %.4f\n",
-              x$accuracy, x$gini))
+  cat(sprintf("  Retained      : %d (%.1f%%)\n", x$n_retained, pct_retained))
+  cat(sprintf("  Removed       : %d (%.1f%%)\n", x$n_removed,  pct_removed))
   invisible(x)
 }

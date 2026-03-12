@@ -1,0 +1,735 @@
+---
+title: "Phase 1: Setting Up a Boundary Logic Analysis"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Phase 1: Setting Up a Boundary Logic Analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 6,
+  fig.height = 5
+)
+```
+
+## Overview
+
+**boundarylogic** provides a biplot-based post hoc explanation framework
+for binary classification models. The workflow has two phases:
+
+-   **Phase 1 (this vignette):** Prepare data, fit a model, project to a
+    2D biplot space, build a prediction grid that approximates the
+    model's decision boundary, and visualise the result.
+-   **Phase 2 (forthcoming):** Use the Phase 1 result to perform local
+    and global model interpretability analyses — counterfactual search,
+    Shapley attribution, and variable importance.
+
+All Phase 1 artifacts are stored in a single `bl_result` object that
+acts as the reproducible anchor for Phase 2.
+
+------------------------------------------------------------------------
+
+## Project structure and file layout
+
+```         
+boundary_logic/               ← R project root (open .Rproj in RStudio)
+│
+├── R/                        ← Package source (do not edit directly)
+│   ├── utils.R               ← Input validators and calc_gini()
+│   ├── predict_utils.R       ← Internal .pred_function() dispatcher
+│   ├── feasibility_utils.R   ← Variable range helpers
+│   ├── hull_utils.R          ← Convex hull polygon helpers
+│   ├── model_utils.R         ← Internal .fit_model()
+│   ├── data_prepare.R        ← bl_prepare_data(), bl_wrap_data()
+│   ├── model_fit.R           ← bl_fit_model(), bl_wrap_model()
+│   ├── outlier_filter.R      ← bl_filter_outliers()
+│   ├── projection.R          ← bl_build_projection()
+│   ├── biplot_grid.R         ← bl_build_grid()
+│   ├── plot_biplot.R         ← plot_biplotEZ()
+│   └── result.R              ← bl_assemble(), print, summary
+│
+├── tests/
+│   ├── testthat.R            ← Test runner entry point
+│   └── testthat/
+│       ├── helper.R          ← Shared test fixtures
+│       ├── test-data_prepare.R
+│       ├── test-model_fit.R
+│       ├── test-projection.R
+│       ├── test-biplot_grid.R
+│       ├── test-result.R
+│       ├── test-predict_utils.R
+│       └── test-feasibility_utils.R
+│
+├── vignettes/
+│   └── phase1-workflow.Rmd   ← This vignette
+│
+├── DESCRIPTION
+└── NAMESPACE
+```
+
+------------------------------------------------------------------------
+
+## Setup: load the package in RStudio
+
+Open `boundary_logic.Rproj` in RStudio. In the **Build** pane (top
+right), click **Install** to install the package, or run:
+
+``` r
+# In the RStudio Console:
+devtools::load_all()   # fast load for development (no install needed)
+```
+
+`devtools::load_all()` re-sources all `R/` files into the session and
+makes all exported functions available immediately — including
+`plot_biplotEZ()`, `bl_wrap_data()`, and `bl_wrap_model()`.
+
+> **Important:** always run `devtools::load_all()` (or click **Install**
+> in the Build pane) after adding or modifying source files. If you
+> encounter `could not find function`, it means the package has not been
+> reloaded since the file was added. To regenerate the NAMESPACE from
+> roxygen2 tags after structural changes, run `devtools::document()`
+> first, then `devtools::load_all()`.
+
+------------------------------------------------------------------------
+
+## Phase 1 workflow
+
+Phase 1 has seven steps. At each step there is a **standard route** and
+one or more **alternative routes** depending on your starting point.
+
+```         
+ DATA ENTRY
+ ┌─────────────────────────────────────────────────────────┐
+ │ Option A  bl_prepare_data()   raw data frame → bl_data  │
+ │ Option B  bl_wrap_data()      pre-split data → bl_data  │
+ └─────────────────────────────────────────────────────────┘
+                          ↓
+ OUTLIER FILTER  [optional]
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │ bl_filter_outliers()   reports % of data retained / removed          │
+ └──────────────────────────────────────────────────────────────────────┘
+                          ↓
+ MODEL
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │ Option A  bl_fit_model()    built-in types with optional overrides   │
+ │ Option B  bl_wrap_model()   your own model / custom predict function │
+ └──────────────────────────────────────────────────────────────────────┘
+                          ↓
+              bl_build_projection() (step 4)
+                          ↓
+                  bl_build_grid() (step 5)
+                          ↓
+                   bl_assemble()  →  bl_result (step 6)
+                          ↓
+                  plot_biplotEZ() (step 7)
+```
+
+------------------------------------------------------------------------
+
+### Step 1 — Prepare data
+
+#### Option A: `bl_prepare_data()` — raw data frame
+
+`bl_prepare_data()` converts a raw data frame into a binary-class data
+frame and produces a reproducible train/test split.
+
+The iris dataset has three species. We treat `"versicolor"` as the
+positive class (coded `1`); all other species become `0`.
+
+```{r step1}
+library(boundarylogic)
+
+bl_dat <- bl_prepare_data(
+  data           = iris,
+  class_col      = "Species",
+  target_class   = "versicolor",
+  train_fraction = 0.8,
+  seed           = 121L
+)
+
+print(bl_dat)
+```
+
+**What to check:**
+
+-   `Features` — the four iris measurement columns are selected
+    automatically.
+-   `Target` — confirms the 1/0 coding rule.
+-   `Train rows / Test rows` — should be close to 80/20 of 150 = 120/30.
+
+```{r step1-check}
+# Class balance in the training set
+table(bl_dat$train_data$class)
+
+# First few rows
+head(bl_dat$train_data)
+```
+
+#### Option B: `bl_wrap_data()` — pre-split data
+
+If your data is already split into training and test sets and your class
+column is already coded as numeric 0/1, use `bl_wrap_data()` to bypass
+the splitting and conversion steps:
+
+``` r
+# Example: data already prepared externally
+train_df <- my_train_data   # must have feature columns + a column named "class" (0/1)
+test_df  <- my_test_data    # same structure
+
+bl_dat <- bl_wrap_data(
+  train_data   = train_df,
+  test_data    = test_df,
+  target_class = "versicolor"   # informational label only
+)
+
+print(bl_dat)
+```
+
+`bl_wrap_data()` returns the same `bl_data` object as
+`bl_prepare_data()`, so all downstream functions work identically.
+
+------------------------------------------------------------------------
+
+### Step 2 — Filter outliers (optional)
+
+`bl_filter_outliers()` projects the training data to a lightweight 2-PC
+space, builds a convex hull enclosing `hull_fraction` of the points,
+removes observations outside the hull, and reports the number and
+percentage of rows retained and removed.
+
+Model fitting is done separately in Step 3. This step is **optional** —
+skip it if you want to use all training data.
+
+```{r step2}
+bl_filt <- bl_filter_outliers(
+  bl_data       = bl_dat,
+  hull_fraction = 0.9,   # retain innermost 90% of points
+  verbose       = TRUE
+)
+
+print(bl_filt)
+```
+
+**What to check:**
+
+-   `Retained / Removed` — rows and percentages trimmed by the filter.
+-   Try `hull_fraction = 1.0` to keep all points (no filtering).
+-   Try `hull_fraction = 0.8` for more aggressive trimming.
+
+Call `bl_filter_outliers()` multiple times with different
+`hull_fraction` values to find the best setting, then proceed to Step 3
+to fit the model on the retained data.
+
+------------------------------------------------------------------------
+
+### Step 3 — Fit the model
+
+#### Option A: `bl_fit_model()` — built-in model types
+
+`bl_fit_model()` fits the chosen classifier on the (filtered) training
+data and records training accuracy and Gini coefficient.
+
+```{r step3}
+bl_mod <- bl_fit_model(
+  train_data = bl_filt$train_data,
+  var_names  = bl_filt$var_names,
+  model_type = "GLM",     # logistic regression
+  cutoff     = 0.5,
+  rounding   = 2L
+)
+
+print(bl_mod)
+```
+
+> **Note on `cutoff`:** `cutoff = 0.5` selects the decision boundary
+> (the probability threshold at which a prediction switches from class 0
+> to class 1). The default is `0.5` and does not need to be specified
+> unless you want to investigate a different threshold. **Only
+> `cutoff = 0.5` gives valid boundary results in the current
+> methodology.** Other values are accepted but will not produce correct
+> decision boundary estimates.
+
+**Supported model types:**
+
+| `model_type` | Algorithm                    | Backend             |
+|--------------|------------------------------|---------------------|
+| `"GLM"`      | Logistic regression          | parsnip → `glm`     |
+| `"GAM"`      | Generalised additive model   | parsnip → `mgcv`    |
+| `"GBM"`      | Gradient boosting            | `gbm` (direct)      |
+| `"LDA"`      | Linear discriminant analysis | parsnip → `MASS`    |
+| `"SVM"`      | Support vector machine       | parsnip → `kernlab` |
+| `"NNET"`     | Neural network               | parsnip → `nnet`    |
+| `"RForrest"` | Decision tree                | parsnip → `rpart`   |
+| `"XGB"`      | XGBoost                      | parsnip → `xgboost` |
+
+> **tidymodels backends:** All model types except `"GBM"` are fitted
+> using the **tidymodels** ecosystem (`parsnip` + `workflows`). The
+> fitted `$model` field is a `workflows::workflow` object, and
+> predictions use parsnip's unified `predict(<workflow>, type = "prob")`
+> interface. `"GBM"` uses `gbm::gbm()` directly because gbm is not a
+> registered parsnip engine.
+
+**Hyperparameter overrides** via `model_params`:
+
+Parameter names follow **parsnip** conventions for all types except
+`"GBM"`.
+
+``` r
+# GBM — uses gbm package parameter names directly
+bl_fit_model(train_data, var_names, model_type = "GBM",
+             model_params = list(n.trees = 1000, shrinkage = 0.05))
+
+# NNET — parsnip parameter names
+bl_fit_model(train_data, var_names, model_type = "NNET",
+             model_params = list(hidden_units = 10, penalty = 0.01, epochs = 500))
+
+# XGB — parsnip parameter names
+bl_fit_model(train_data, var_names, model_type = "XGB",
+             model_params = list(trees = 300, tree_depth = 5, learn_rate = 0.05))
+```
+
+#### Option B: `bl_wrap_model()` — your own model
+
+Use `bl_wrap_model()` when you have fitted your own model externally —
+for example, using complex hyperparameter tuning, a caret/tidymodels
+workflow, or a model type not natively supported.
+
+**Wrapping a model of a standard type (e.g., GLM with custom
+settings):**
+
+``` r
+# Fit the model yourself with any settings you need
+my_glm <- glm(class ~ ., data = bl_filt$train_data,
+              family = binomial(link = "logit"))
+
+# Register it as a bl_model
+bl_mod <- bl_wrap_model(
+  model      = my_glm,
+  model_type = "GLM",                  # tells the package how to call predict()
+  var_names  = bl_filt$var_names,
+  train_data = bl_filt$train_data      # optional: compute accuracy/Gini
+)
+
+print(bl_mod)
+```
+
+**Wrapping a fully custom model type:**
+
+If your model uses a non-standard `predict()` interface, supply a
+`predict_fn` with signature `function(model, new_data)` returning a
+numeric probability vector:
+
+``` r
+# Example: a model fitted using a different package
+my_fn <- function(m, new_data) {
+  predict(m, new_data, type = "prob")[, "1"]  # extract class-1 column
+}
+
+bl_mod <- bl_wrap_model(
+  model      = my_custom_model,
+  model_type = "custom",
+  var_names  = bl_filt$var_names,
+  predict_fn = my_fn,
+  train_data = bl_filt$train_data
+)
+```
+
+The returned `bl_model` object is fully compatible with
+`bl_build_grid()` and `bl_assemble()`.
+
+------------------------------------------------------------------------
+
+### Step 4 — Build the projection
+
+`bl_build_projection()` computes the loading matrix V (and its inverse
+tV) that maps observations from the p-dimensional feature space to the
+2D biplot Z-space.
+
+```{r step4}
+bl_proj <- bl_build_projection(
+  train_data  = bl_filt$train_data,
+  var_names   = bl_filt$var_names,
+  method      = "PCA",   # or "CVA"
+  standardise = TRUE,
+  proj_dims   = c(1L, 2L)
+)
+
+print(bl_proj)
+```
+
+**PCA vs CVA:**
+
+-   **PCA** — works for any data; separates observations by overall
+    variance. Use this as the default starting point.
+-   **CVA** — maximises between-class separation relative to
+    within-class spread. CVA always forces `standardise = FALSE`
+    internally. CVA technically requires at least 3 class levels; by
+    supplying `bl_model`, the four confusion categories (TP, TN, FP, FN)
+    are used as labels (4 levels), which satisfies this requirement.
+
+``` r
+# CVA — supply bl_mod so confusion labels (TP/TN/FP/FN) are used automatically
+bl_proj_cva <- bl_build_projection(
+  train_data = bl_filt$train_data,
+  var_names  = bl_filt$var_names,
+  method     = "CVA",
+  proj_dims  = c(1L, 2L),
+  bl_model   = bl_mod          # derives TP/TN/FP/FN class labels internally
+)
+
+# Alternative when no model is available: pass binary class directly (2 levels)
+bl_proj_cva2 <- bl_build_projection(
+  train_data  = bl_filt$train_data,
+  var_names   = bl_filt$var_names,
+  method      = "CVA",
+  proj_dims   = c(1L, 2L),
+  cva_classes = as.factor(bl_filt$train_data$class)   # 2 levels only
+)
+```
+
+**What to check:**
+
+-   `V matrix` — should be p × p (4 × 4 for iris).
+-   `Standardise` — for CVA this will say `FALSE (forced by CVA)`.
+
+------------------------------------------------------------------------
+
+### Step 5 — Build the prediction grid
+
+`bl_build_grid()` creates an m × m regular grid of points in the
+Z-space, back-projects each point to X-space, scores each grid point
+through the fitted model, and extracts contour lines that bracket the
+decision boundary.
+
+```{r step5}
+bl_grid <- bl_build_grid(
+  train_data      = bl_filt$train_data,
+  bl_projection   = bl_proj,
+  bl_model        = bl_mod,
+  m               = 100L,   # 100 x 100 grid; use 200 for final analysis
+  cutoff          = 0.5,
+  b_margin        = NULL,   # auto: 1 / 10^rounding = 0.01
+  calc_hull       = FALSE,
+  calc_ct_in_hull = FALSE   # set TRUE when using CVA — see note below
+)
+
+print(bl_grid)
+```
+
+> **CVA and phantom contours:** When `method = "CVA"` was used in Step
+> 4, set `calc_ct_in_hull = TRUE`. CVA axes are not orthogonal, so the
+> square Z-space grid back-projects to a folded region in X-space. This
+> can produce a second set of phantom contour lines far outside the
+> training data hull. Setting `calc_ct_in_hull = TRUE` masks all grid
+> cells outside the convex hull before contour extraction, suppressing
+> phantom crossings.
+
+**Grid resolution guidance:**
+
+| `m` | Points | Notes                            |
+|-----|--------|----------------------------------|
+| 50  | 2,500  | Fast; use for quick checks       |
+| 100 | 10,000 | Good for interactive exploration |
+| 200 | 40,000 | Recommended for final analysis   |
+
+**What to check:**
+
+-   `Prob range` — should span values on both sides of 0.5 for a
+    meaningful boundary.
+-   `Contour lines` — should be ≥ 1; if 0, the model may predict a
+    single class across the entire biplot plane.
+
+------------------------------------------------------------------------
+
+### Step 6 — Assemble the result
+
+`bl_assemble()` collects all Phase 1 outputs into a single `bl_result`
+object. This is the object you save and pass to Phase 2 functions and to
+`plot_biplotEZ()`.
+
+```{r step6}
+result <- bl_assemble(
+  bl_data          = bl_dat,
+  bl_filter_result = bl_filt,   # pass NULL if Step 2 was skipped
+  bl_model         = bl_mod,
+  bl_projection    = bl_proj,
+  bl_grid          = bl_grid
+)
+
+print(result)
+```
+
+Use `summary()` for a more detailed view including the confusion matrix
+and contour statistics:
+
+```{r step6-summary}
+summary(result)
+```
+
+------------------------------------------------------------------------
+
+### Step 7 — Visualise: `plot_biplotEZ()`
+
+`plot_biplotEZ()` takes the assembled `bl_result` and draws a full
+biplot visualisation showing:
+
+-   **Coloured prediction grid** — blue for class 0, red for class 1
+    probability regions.
+-   **Training data points** — coloured by confusion category (TP = red,
+    TN = blue, FP = purple, FN = orange).
+-   **Variable axes** — biplot arrows showing the direction of each
+    feature in the 2D plane.
+-   **Decision boundary contour lines.**
+
+```{r step7}
+plot_biplotEZ(result)
+```
+
+#### Highlighting a target observation
+
+To highlight a specific data point — for example, a test observation you
+want to explain — pass it as a named numeric vector in original X-space.
+The point is projected to Z-space automatically and plotted in yellow.
+Supply `target_label` to display a number or identifier inside the
+marker:
+
+``` r
+# A single observation from the test set
+target <- unlist(result$test_data[1, result$var_names])
+
+plot_biplotEZ(
+  result,
+  target_point = target,
+  target_label = 1          # displayed inside the yellow marker
+)
+```
+
+#### Adjustable display options
+
+All visual elements can be tuned:
+
+``` r
+plot_biplotEZ(
+  result,
+  no_grid          = FALSE,        # set TRUE to hide the coloured grid
+  no_points        = FALSE,        # set TRUE to hide training points
+  no_contour       = FALSE,        # set TRUE to hide the boundary line
+  new_title        = "My GLM Boundary",
+  cex_z            = 0.8,          # larger training points
+  label_dir        = "Hor",        # axis label direction: "Hor" or "Rad"
+  tick_label_cex   = 0.5,          # axis tick label size
+  ticks_v          = 2L,           # ticks per variable axis
+  label_offset_var = 1L,           # shift label of variable 1 outward
+  label_offset_dist = 0.8,
+  contour_col      = "darkgreen",  # boundary colour
+  contour_lwd      = 2.0,          # boundary line width
+  contour_lty      = 2L            # dashed boundary
+)
+```
+
+------------------------------------------------------------------------
+
+## Separate workflow: bring your own data and model
+
+The following example shows the complete alternative workflow for a user
+who already has pre-split, pre-coded data and wants to fit their own
+model with full control over hyperparameters.
+
+``` r
+library(boundarylogic)
+
+# Step 1: wrap pre-split data (class column already 0/1)
+bl_dat <- bl_wrap_data(
+  train_data   = my_train_df,   # columns: features + "class"
+  test_data    = my_test_df,
+  target_class = "versicolor"
+)
+
+# Step 2: filter outliers (no model fitting at this stage)
+bl_filt <- bl_filter_outliers(
+  bl_data       = bl_dat,
+  hull_fraction = 0.9,
+  verbose       = TRUE
+)
+# Output: Hull fraction: 0.90 | Retained: 108 (90.0%) | Removed: 12 (10.0%)
+
+# Step 3a: fit your own model on the filtered training data
+my_svm <- e1071::svm(
+  class ~ .,
+  data        = bl_filt$train_data,
+  probability = TRUE,
+  type        = "C-classification",
+  kernel      = "radial",
+  cost        = 10,
+  gamma       = 0.5
+)
+
+# Step 3b: wrap it as a bl_model (include train_data for accuracy/Gini)
+bl_mod <- bl_wrap_model(
+  model      = my_svm,
+  model_type = "SVM",
+  var_names  = bl_filt$var_names,
+  train_data = bl_filt$train_data
+)
+print(bl_mod)
+
+# Steps 4–6: identical to the standard workflow
+bl_proj <- bl_build_projection(bl_filt$train_data, bl_filt$var_names,
+                                method = "PCA")
+
+bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod, m = 100L)
+
+result  <- bl_assemble(bl_dat,
+                       bl_filter_result = bl_filt,
+                       bl_model         = bl_mod,
+                       bl_projection    = bl_proj,
+                       bl_grid          = bl_grid)
+
+# Step 7: visualise
+plot_biplotEZ(result, new_title = "Custom SVM Boundary")
+```
+
+------------------------------------------------------------------------
+
+## Running without the outlier filter
+
+If you prefer not to use `bl_filter_outliers()`, skip Step 2 and pass
+`bl_data$train_data` directly to Steps 3–5:
+
+``` r
+bl_dat  <- bl_prepare_data(iris, class_col = "Species",
+                            target_class = "versicolor")
+
+bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
+                        model_type = "GLM")
+
+bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names,
+                               method = "PCA")
+
+bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 100L)
+
+result  <- bl_assemble(bl_dat,
+                       bl_filter_result = NULL,   # no filter applied
+                       bl_model         = bl_mod,
+                       bl_projection    = bl_proj,
+                       bl_grid          = bl_grid)
+
+plot_biplotEZ(result)
+```
+
+------------------------------------------------------------------------
+
+## Running the unit tests
+
+The package ships with 54 unit tests across 7 test files. Run them all
+at once from the RStudio **Build** pane → **Test** button, or from the
+Console:
+
+``` r
+devtools::test()
+```
+
+To run a single test file interactively:
+
+``` r
+testthat::test_file("tests/testthat/test-data_prepare.R")
+testthat::test_file("tests/testthat/test-model_fit.R")
+testthat::test_file("tests/testthat/test-projection.R")
+testthat::test_file("tests/testthat/test-biplot_grid.R")
+testthat::test_file("tests/testthat/test-result.R")
+testthat::test_file("tests/testthat/test-predict_utils.R")
+testthat::test_file("tests/testthat/test-feasibility_utils.R")
+```
+
+**Expected output:**
+
+```         
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 54 ]
+```
+
+------------------------------------------------------------------------
+
+## Verifying the result manually
+
+After assembling, you can inspect any component of the `bl_result`
+directly:
+
+``` r
+# Projection matrices
+dim(result$V)          # should be 4 x 4 for iris
+dim(result$tV)         # should be 4 x 4
+
+# Training data in Z-space (2D)
+head(result$biplot_grid$Z_train)
+
+# Decision boundary contour lines
+length(result$biplot_grid$ct)    # number of contour segments
+result$biplot_grid$ct[[1]]       # first contour: $level, $x, $y
+
+# Model accuracy and Gini
+result$accuracy
+result$gini
+
+# Prediction colours per training point (TP=red, TN=blue, FP=purple, FN=orange)
+table(result$biplot_grid$pred_col)
+```
+
+### Quick sanity checks
+
+``` r
+# 1. V and tV are inverse of each other (should be close to identity)
+round(result$V %*% result$tV, 10)
+
+# 2. Grid probabilities span both classes
+range(result$biplot_grid$grid_prob)
+
+# 3. At least one contour line found (boundary exists)
+stopifnot(length(result$biplot_grid$ct) > 0)
+
+# 4. Training rows match expectation
+nrow(result$train_data)   # filtered rows (if filter applied)
+nrow(result$test_data)
+```
+
+------------------------------------------------------------------------
+
+## Saving and reloading the result
+
+Save the `bl_result` object to disk so you can reload it in a future
+session without rerunning Phase 1:
+
+``` r
+# Save
+saveRDS(result, file = "outputs/bl_result_glm_pca.rds")
+
+# Reload in a new session
+result <- readRDS("outputs/bl_result_glm_pca.rds")
+print(result)
+```
+
+------------------------------------------------------------------------
+
+## Summary of Phase 1 functions
+
+| Step | Function                | Route       | Input                                      | Output class       |
+|------|-------------------------|-------------|--------------------------------------------|--------------------|
+| 1    | `bl_prepare_data()`     | Standard    | Raw data frame                             | `bl_data`          |
+| 1    | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames                  | `bl_data`          |
+| 2    | `bl_filter_outliers()`  | Optional    | `bl_data`                                  | `bl_filter_result` |
+| 3    | `bl_fit_model()`        | Standard    | Training data frame                        | `bl_model`         |
+| 3    | `bl_wrap_model()`       | Alternative | Any fitted model object                    | `bl_model`         |
+| 4    | `bl_build_projection()` | —           | Training data frame                        | `bl_projection`    |
+| 5    | `bl_build_grid()`       | —           | Training data, `bl_projection`, `bl_model` | `bl_grid`          |
+| 6    | `bl_assemble()`         | —           | All of the above                           | `bl_result`        |
+| 7    | `plot_biplotEZ()`       | —           | `bl_result`                                | (plot, invisible)  |
+
+Phase 2 functions (counterfactual search, local interpretation, global
+interpretation, and Shapley attribution) consume the `bl_result` object
+and are described in separate vignettes.

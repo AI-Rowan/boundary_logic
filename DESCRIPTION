@@ -3,7 +3,7 @@ Type: Package
 Title: Biplot-Based Decision Boundary Interpretability for Classification Models
 Version: 0.1.0
 Authors@R: person("Adriaan", "Rowan", role = c("aut", "cre"),
-                  email = "adriaan@example.com")
+                  email = "adriaanrowan@gmail.com")
 Description: Provides a biplot-based post hoc explanation framework for binary
     classification models. Projects high-dimensional data into a two-dimensional
     PCA or CVA biplot space, approximates model decision boundaries in that
@@ -30,6 +30,10 @@ Imports:
     rpart,
     nnet,
     xgboost,
+    kernlab,
+    parsnip,
+    workflows,
+    discrim,
     biplotEZ,
     aplpack
 Suggests:

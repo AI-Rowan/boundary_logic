@@ -12,6 +12,7 @@
 #'
 #' @param data A data frame. All columns are included.
 #'
+#' @importFrom rlang expr sym eval_tidy
 #' @return A list of expressions, one per column of `data`.
 #' @keywords internal
 get_variable_ranges <- function(data) {

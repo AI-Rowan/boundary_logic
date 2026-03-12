@@ -19,6 +19,10 @@
 #'   `aplpack::plothulls()`. Values below 1 trim the most extreme points.
 #'   Default `0.9`.
 #'
+#' @importFrom aplpack plothulls
+#' @importFrom sp Polygon Polygons SpatialPolygons coordinates over point.in.polygon
+#' @importFrom grDevices png dev.off
+#' @importFrom graphics par
 #' @return An `sp::SpatialPolygons` object representing the convex hull.
 #' @keywords internal
 .build_hull_polygon <- function(Z, min_val, max_val, outlie = 0.9) {

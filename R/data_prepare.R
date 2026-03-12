@@ -9,12 +9,12 @@
 #' selects feature columns, and produces a reproducible train/test split.
 #'
 #' @section Multiclass to binary conversion:
-#' If your data has more than two classes (e.g., `iris` has three Species),
+#' If your data has more than two classes (e.g., `datasets::iris` has three Species),
 #' supply `target_class` to specify which class maps to `1`. All other classes
 #' map to `0`. For example:
 #' ```r
-#' # iris: treat "versicolor" as the positive class
-#' bl_prepare_data(iris, class_col = "Species", target_class = "versicolor")
+#' # datasets::iris: treat "versicolor" as the positive class
+#' bl_prepare_data(datasets::iris, class_col = "Species", target_class = "versicolor")
 #' ```
 #' If `target_class = NULL`, the class column must already be numeric 0/1.
 #'
@@ -44,7 +44,7 @@
 #'
 #' @examples
 #' # Binary class, versicolor vs rest
-#' bl_dat <- bl_prepare_data(iris,
+#' bl_dat <- bl_prepare_data(datasets::iris,
 #'                            class_col    = "Species",
 #'                            target_class = "versicolor")
 #' table(bl_dat$train_data$class)
@@ -126,6 +126,97 @@ bl_prepare_data <- function(data,
       test_data    = test_data,
       var_names    = feature_cols,
       num_vars     = length(feature_cols),
+      target_class = target_class
+    ),
+    class = "bl_data"
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# bl_wrap_data(): bypass bl_prepare_data() for pre-split, pre-coded data
+# --------------------------------------------------------------------------
+
+#' Wrap already-prepared train/test data into a bl_data object
+#'
+#' Use this function when your data is already split into training and test
+#' sets and the class column is already coded as numeric 0/1. This bypasses
+#' the splitting and multiclass-conversion steps of `bl_prepare_data()`.
+#'
+#' @param train_data  Data frame; feature columns plus a column named
+#'   `"class"` (numeric 0/1).
+#' @param test_data   Data frame; same column structure as `train_data`.
+#'   If `NULL`, an empty data frame with matching columns is used.
+#' @param var_names   Character vector of feature column names. If `NULL`
+#'   (default), all columns except `"class"` are used.
+#' @param target_class Optional informational label indicating what the `1`
+#'   class represents. Does not affect any computation.
+#'
+#' @return A list of class `"bl_data"` compatible with all downstream
+#'   functions (`bl_filter_outliers()`, `bl_build_projection()`, etc.).
+#'
+#' @examples
+#' \dontrun{
+#' df       <- datasets::iris
+#' df$class <- as.numeric(df$Species == "versicolor")
+#' df$Species <- NULL
+#' train_df <- df[1:100, ]
+#' test_df  <- df[101:150, ]
+#' bl_dat   <- bl_wrap_data(train_df, test_df, target_class = "versicolor")
+#' }
+#'
+#' @export
+bl_wrap_data <- function(train_data,
+                         test_data    = NULL,
+                         var_names    = NULL,
+                         target_class = NULL) {
+
+  stop_if_not_data_frame(train_data, "train_data")
+
+  if (!"class" %in% names(train_data))
+    stop("'train_data' must contain a column named 'class'.", call. = FALSE)
+
+  class_num <- suppressWarnings(as.numeric(train_data[["class"]]))
+  if (any(is.na(class_num)) || !all(class_num %in% c(0, 1)))
+    stop("The 'class' column in 'train_data' must contain only 0 and 1.",
+         call. = FALSE)
+
+  if (is.null(var_names)) {
+    var_names <- setdiff(names(train_data), "class")
+  } else {
+    stop_if_not_character(var_names, "var_names")
+    missing_cols <- setdiff(var_names, names(train_data))
+    if (length(missing_cols) > 0L)
+      stop(sprintf("var_names not found in train_data: %s.",
+                   paste(missing_cols, collapse = ", ")), call. = FALSE)
+  }
+
+  if (length(var_names) == 0L)
+    stop("No feature columns found. Check 'var_names'.", call. = FALSE)
+
+  if (is.null(test_data)) {
+    test_data <- train_data[0L, , drop = FALSE]
+  } else {
+    stop_if_not_data_frame(test_data, "test_data")
+    if (!"class" %in% names(test_data))
+      stop("'test_data' must contain a column named 'class'.", call. = FALSE)
+    missing_test <- setdiff(var_names, names(test_data))
+    if (length(missing_test) > 0L)
+      stop(sprintf("var_names not found in test_data: %s.",
+                   paste(missing_test, collapse = ", ")), call. = FALSE)
+  }
+
+  train_data[["class"]] <- as.numeric(train_data[["class"]])
+  test_data[["class"]]  <- as.numeric(test_data[["class"]])
+  rownames(train_data)  <- NULL
+  rownames(test_data)   <- NULL
+
+  structure(
+    list(
+      train_data   = train_data,
+      test_data    = test_data,
+      var_names    = var_names,
+      num_vars     = length(var_names),
       target_class = target_class
     ),
     class = "bl_data"

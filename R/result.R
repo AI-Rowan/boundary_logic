@@ -14,12 +14,11 @@
 #' @section Phase 1 workflow:
 #' ```r
 #' # Step 1: prepare data
-#' bl_dat  <- bl_prepare_data(iris, class_col = "Species",
+#' bl_dat  <- bl_prepare_data(datasets::iris, class_col = "Species",
 #'                             target_class = "versicolor")
 #'
 #' # Step 2 (optional): iterative polygon filter
-#' bl_filt <- bl_filter_outliers(bl_dat, model_type = "GLM",
-#'                                hull_fraction = 0.9)
+#' bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 #'
 #' # Step 3: fit final model (on filtered data)
 #' bl_mod  <- bl_fit_model(bl_filt$train_data, bl_filt$var_names,
@@ -62,6 +61,8 @@
 #'   \item{`X_sd`}{Column standard deviations.}
 #'   \item{`method`}{`"PCA"` or `"CVA"`.}
 #'   \item{`standardise`}{Effective standardise flag.}
+#'   \item{`proj_dims`}{Integer vector of length 2; eigenvector indices used
+#'     for the 2D projection plane.}
 #'   \item{`biplot_obj`}{The biplotEZ object for Phase 2 plotting.}
 #'   \item{`polygon`}{Convex hull polygon (`SpatialPolygons` or `NULL`).}
 #'   \item{`hull_fraction`}{Hull fraction used, or `NULL`.}
@@ -134,6 +135,7 @@ bl_assemble <- function(bl_data,
       X_sd          = bl_projection$X_sd,
       method        = bl_projection$method,
       standardise   = standardise_eff,
+      proj_dims     = bl_projection$proj_dims,
       biplot_obj    = bl_projection$biplot_obj,
 
       # Filtering
