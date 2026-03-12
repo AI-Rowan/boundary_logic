@@ -63,7 +63,7 @@ bl_prepare_data <- function(data,
   if (length(class_col) != 1L)
     stop("'class_col' must be a single column name.", call. = FALSE)
   stop_if_col_missing(data, class_col, "class_col")
-  stop_if_not_in_range(train_fraction, 0, 1, "train_fraction")
+  stop_if_not_in_range(train_fraction, 0, 1.0001, "train_fraction")
 
   # ---- Select feature columns ------------------------------------------
   if (is.null(feature_cols)) {
