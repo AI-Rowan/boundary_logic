@@ -111,4 +111,5 @@ plot_biplotEZ(
   result,
   label_offset_var  = c(1L, 4L),
   label_offset_dist = c(0.6,1.2)
+  #rotate_deg = 90
 )

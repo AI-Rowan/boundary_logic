@@ -35,7 +35,7 @@ print(bl_dat)
 
 
 # ---- Step 2 (optional): Filter outliers --------------------------------
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 1)
+bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
 print(bl_filt)
 
@@ -93,8 +93,8 @@ bl_grid <- bl_build_grid(
   train_data      = bl_filt$train_data,
   bl_projection   = bl_proj,
   bl_model        = bl_mod,
-  m               = 200L,
-  calc_ct_in_hull = TRUE
+  m               = 200L
+  #calc_ct_in_hull = TRUE
 )
 
 print(bl_grid)
@@ -113,5 +113,16 @@ print(result)
 summary(result)
 
 
-# ---- Step 7: Plot CVA biplot ------------------------------------------
+# ---- Step 7a: Plot CVA biplot — training data -------------------------
+# Default: bl_project_points(result$train_data, result) used automatically
 plot_biplotEZ(result)
+
+
+# ---- Step 7b: Plot CVA biplot — test data -----------------------------
+# Project test data into the biplot space and pass as the points argument.
+# Confusion colours (TP/TN/FP/FN) are assigned because test_data has a
+# "class" column.
+test_pts <- bl_project_points(result$test_data, result)
+print(test_pts)
+
+plot_biplotEZ(result, points = test_pts)

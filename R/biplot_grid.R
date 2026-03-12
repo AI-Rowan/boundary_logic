@@ -109,8 +109,6 @@
 #'   \item{`Xgrid`}{Data frame (m² x p); grid back-projected to X-space.}
 #'   \item{`grid_prob`}{Numeric vector (length m²); model scores per grid
 #'     point, in [0, 1].}
-#'   \item{`Z_train`}{Numeric matrix (n x 2); training data projected to
-#'     Z-space.}
 #'   \item{`col_value`}{Character vector (length m²); colour per grid point
 #'     on a blue-white-red scale.}
 #'   \item{`min_val`}{Numeric; lower bound of the square plot region.}
@@ -120,12 +118,6 @@
 #'     `grDevices::contourLines()`.}
 #'   \item{`xseq`}{Numeric vector (length m); x-axis grid sequence.}
 #'   \item{`yseq`}{Numeric vector (length m); y-axis grid sequence.}
-#'   \item{`pred_use`}{Numeric 0/1 vector (length n); predicted class of
-#'     each training point.}
-#'   \item{`pred_col`}{Character vector (length n); colour label per training
-#'     point based on confusion category.}
-#'   \item{`class`}{Numeric 0/1 vector (length n); true class of each
-#'     training point.}
 #' }
 #'
 #' @importFrom grDevices contourLines colorRampPalette
@@ -257,39 +249,15 @@ bl_build_grid <- function(train_data,
     )
   }
 
-  # ---- Create datapoint colour coding --------------------
-  ##A can use results of the bl_mod in bl_proj where these were created for CVA. 
-  ##A They were not created for PCA, so need to do here for both cases
-  
-  ##A where the classes are not know, so for new test data, need to colour based on prediction:so just red or blue
-  
-  pred_prob_train <- .pred_function(
-    model_use  = bl_model$model,
-    model_type = bl_model$model_type,
-    rounding   = rounding,
-    new_data   = train_data[, var_names, drop = FALSE]
-  )
-  pred_use  <- as.numeric(pred_prob_train >= cutoff)
-  actual    <- train_data[["class"]]
-
-  pred_col <- dplyr::case_when(
-    actual == pred_use & actual == 1L ~ "red",    # TP
-    actual == pred_use & actual == 0L ~ "blue",   # TN
-    actual != pred_use & actual == 0L ~ "purple", # FP
-    TRUE                              ~ "orange"  # FN
-  )
-  
   # ---- Optional: remove grid points outside polygon --------------------
+  # Data point colouring is handled by bl_project_points(); only the
+  # prediction surface (grid) is filtered here.
 
   if (isTRUE(calc_hull)) {
     grid_prob <- grid_prob[inside_grid]
     col_value <- col_value[inside_grid]
     Zgrid     <- Zgrid[inside_grid, , drop = FALSE]
     Xgrid     <- Xgrid[inside_grid, , drop = FALSE]
-    Z_train   <- Z_train[inside_data, , drop = FALSE]
-    pred_use  <- pred_use[inside_data]
-    pred_col  <- pred_col[inside_data]
-    actual    <- actual[inside_data]
   }
 
   # ---- Return ----------------------------------------------------------
@@ -298,17 +266,13 @@ bl_build_grid <- function(train_data,
       Zgrid     = Zgrid,
       Xgrid     = Xgrid,
       grid_prob = grid_prob,
-      Z_train   = Z_train,
       col_value = col_value,
       min_val   = min_val,
       max_val   = max_val,
       polygon   = polygon,
       ct        = ct,
       xseq      = xseq,
-      yseq      = yseq,
-      pred_use  = pred_use,
-      pred_col  = pred_col,
-      class     = actual
+      yseq      = yseq
     ),
     class = "bl_grid"
   )
@@ -329,6 +293,5 @@ print.bl_grid <- function(x, ...) {
               min(x$grid_prob, na.rm = TRUE),
               max(x$grid_prob, na.rm = TRUE)))
   cat(sprintf("  Contour lines  : %d\n", length(x$ct)))
-  cat(sprintf("  Training points: %d\n", nrow(x$Z_train)))
   invisible(x)
 }

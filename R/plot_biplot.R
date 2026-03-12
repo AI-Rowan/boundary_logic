@@ -37,7 +37,11 @@
 #'   point is shown without a label.
 #' @param no_grid          Logical; if `TRUE`, the prediction grid is hidden.
 #'   Default `FALSE`.
-#' @param no_points        Logical; if `TRUE`, training data points are hidden.
+#' @param points           A `"bl_points"` object from `bl_project_points()`.
+#'   Controls which observations are plotted as coloured points. If `NULL`
+#'   (default), training data is projected automatically. Pass
+#'   `bl_project_points(result$test_data, result)` to show test data instead.
+#' @param no_points        Logical; if `TRUE`, data points are hidden.
 #'   Default `FALSE`.
 #' @param no_contour       Logical; if `TRUE`, decision boundary contour lines
 #'   are hidden. Default `FALSE`.
@@ -94,6 +98,7 @@
 #'
 #' @export
 plot_biplotEZ <- function(bl_result,
+                           points            = NULL,
                            target_point      = NULL,
                            target_label      = NULL,
                            no_grid           = FALSE,
@@ -116,6 +121,14 @@ plot_biplotEZ <- function(bl_result,
   if (!inherits(bl_result, "bl_result"))
     stop("'bl_result' must be a 'bl_result' object from bl_assemble().",
          call. = FALSE)
+
+  # ---- Resolve points to plot -------------------------------------------
+  if (is.null(points)) {
+    points <- bl_project_points(bl_result$train_data, bl_result)
+  } else if (!inherits(points, "bl_points")) {
+    stop("'points' must be a 'bl_points' object from bl_project_points().",
+         call. = FALSE)
+  }
 
   gr          <- bl_result$biplot_grid
   biplot_plot <- bl_result$biplot_obj
@@ -145,7 +158,7 @@ plot_biplotEZ <- function(bl_result,
     R <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), nrow = 2L)
 
     gr$Zgrid   <- gr$Zgrid %*% R
-    gr$Z_train <- gr$Z_train %*% R
+    points$Z   <- points$Z %*% R
 
     gr$ct <- lapply(gr$ct, function(cl) {
       pts      <- cbind(cl$x, cl$y) %*% R
@@ -180,11 +193,11 @@ plot_biplotEZ <- function(bl_result,
                      cex  = 0.5)
   }
 
-  # ---- Step 3: training data points ------------------------------------
+  # ---- Step 3: data points ---------------------------------------------
   if (!isTRUE(no_points)) {
-    graphics::points(x   = gr$Z_train[, 1L],
-                     y   = gr$Z_train[, 2L],
-                     col = gr$pred_col,
+    graphics::points(x   = points$Z[, 1L],
+                     y   = points$Z[, 2L],
+                     col = points$pred_col,
                      pch = 16L,
                      cex = cex_z)
   }
@@ -240,6 +253,33 @@ plot_biplotEZ <- function(bl_result,
                      font   = 2L)
     }
   }
+
+  # ---- Step 7: prediction summary -------------------------------------
+  n_total  <- length(points$pred_class)
+  n_pos    <- sum(points$pred_class == 1L)
+  n_neg    <- n_total - n_pos
+
+  cat("\n--- Prediction summary ---\n")
+  cat(sprintf("  Points plotted : %d\n", n_total))
+  cat(sprintf("  Predicted 1    : %d  (%.1f %%)\n",
+              n_pos, 100 * n_pos / n_total))
+  cat(sprintf("  Predicted 0    : %d  (%.1f %%)\n",
+              n_neg, 100 * n_neg / n_total))
+
+  if (!is.null(points$class)) {
+    correct  <- sum(points$pred_class == points$class)
+    accuracy <- correct / n_total
+    cat(sprintf("  Accuracy       : %d / %d  (%.1f %%)\n",
+                correct, n_total, 100 * accuracy))
+    tp <- sum(points$pred_class == 1L & points$class == 1L)
+    tn <- sum(points$pred_class == 0L & points$class == 0L)
+    fp <- sum(points$pred_class == 1L & points$class == 0L)
+    fn <- sum(points$pred_class == 0L & points$class == 1L)
+    cat(sprintf("  TP / TN / FP / FN : %d / %d / %d / %d\n", tp, tn, fp, fn))
+  } else {
+    cat("  (True labels unknown — accuracy not available)\n")
+  }
+  cat("--------------------------\n")
 
   invisible(bl_result)
 }
