@@ -263,16 +263,17 @@ bl_build_grid <- function(train_data,
   # ---- Return ----------------------------------------------------------
   structure(
     list(
-      Zgrid     = Zgrid,
-      Xgrid     = Xgrid,
-      grid_prob = grid_prob,
-      col_value = col_value,
-      min_val   = min_val,
-      max_val   = max_val,
-      polygon   = polygon,
-      ct        = ct,
-      xseq      = xseq,
-      yseq      = yseq
+      Zgrid         = Zgrid,
+      Xgrid         = Xgrid,
+      grid_prob     = grid_prob,
+      col_value     = col_value,
+      min_val       = min_val,
+      max_val       = max_val,
+      polygon       = polygon,
+      hull_fraction = outlie,
+      ct            = ct,
+      xseq          = xseq,
+      yseq          = yseq
     ),
     class = "bl_grid"
   )

@@ -37,9 +37,9 @@ print(bl_dat)
 bl_proj <- bl_build_projection(
   train_data  = bl_dat$train_data,
   var_names   = bl_dat$var_names,
-  method      = "CVA",
+  method      = "PCA",
   proj_dims   = c(1L, 2L),
-  cva_classes = as.factor(bl_dat$train_data$class),
+  cva_classes = as.factor(bl_dat$train_data$cldata:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAAWElEQVR42mNgGPTAxsZmJsVqQApgmGw1yApwKcQiT7phRBuCzzCSDSHGMKINIeDNmWQlA2IigKJwIssQkHdINgxfmBBtGDEBS3KCxBc7pMQgMYE5c/AXPwAwSX4lV3pTWwAAAABJRU5ErkJggg==ass),
   title       = "CVA biplot — class 1 (red) vs class 0 (blue)"
 )
 
@@ -47,15 +47,9 @@ print(bl_proj)
 
 
 # ---- Step 3: Plot — colour points by true class -----------------------
-point_col <- ifelse(bl_dat$train_data$class == 1, "red", "blue")
-
-bl_proj$biplot_obj |>
-  biplotEZ::samples(col = point_col, pch = 16, cex = 0.8) |>
-  biplotEZ::axes(col            = "grey22",
-                 label.dir      = "Hor",
-                 tick.label.cex = 0.6,
-                 ticks          = 1L) |>
-  plot()
+# Colours (red = class 1, blue = class 0) are derived automatically from
+# the binary cva_classes stored inside bl_proj.
+plot(bl_proj)
 
 # Add a legend manually
 legend("topright",

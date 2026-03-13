@@ -185,20 +185,100 @@ bl_build_projection <- function(train_data,
   V  <- bp$Lmat
   tV <- solve(V)
 
+  # ---- Default point colours -------------------------------------------
+  # Stored as metadata so plot.bl_projection() can colour automatically.
+  # Computation only; no plotting happens here.
+  # Per-observation colour vector. Used by plot.bl_projection() via
+  # graphics::points(), which accepts per-obs colours directly (unlike
+  # biplotEZ::samples(col=...) which maps colours to class levels).
+  point_col <- if (method == "CVA" && !is.null(cva_classes)) {
+    if (setequal(levels(cva_classes), c("FN", "FP", "TN", "TP"))) {
+      col_map <- c(TP = "green3", TN = "steelblue", FP = "orange", FN = "red")
+      unname(col_map[as.character(cva_classes)])
+    } else {
+      ifelse(as.character(cva_classes) == "1", "red", "blue")
+    }
+  } else if ("class" %in% names(train_data)) {
+    ifelse(train_data[["class"]] == 1L, "red", "blue")
+  } else {
+    NULL
+  }
+
+  # ---- Training variable ranges (min/max per feature) ------------------
+  train_ranges <- get_variable_ranges(train_data[, var_names, drop = FALSE])
+
   # ---- Return ----------------------------------------------------------
   structure(
     list(
-      V           = V,
-      tV          = tV,
-      X_center    = X_center,
-      X_sd        = X_sd,
-      method      = method,
-      standardise = standardise,
-      proj_dims   = proj_dims,
-      biplot_obj  = bp
+      V            = V,
+      tV           = tV,
+      X_center     = X_center,
+      X_sd         = X_sd,
+      method       = method,
+      standardise  = standardise,
+      proj_dims    = proj_dims,
+      biplot_obj   = bp,
+      cva_classes  = cva_classes,
+      point_col    = point_col,
+      train_ranges = train_ranges
     ),
     class = "bl_projection"
   )
+}
+
+
+# --------------------------------------------------------------------------
+# S3 plot method
+# --------------------------------------------------------------------------
+
+#' Plot a bl_projection biplot
+#'
+#' Renders the biplotEZ object stored in a `"bl_projection"` result.
+#' Default point colours are derived automatically:
+#' - CVA with TP/TN/FP/FN labels: green/steelblue/orange/red confusion colours.
+#' - CVA with binary 0/1 labels: red (class 1) / blue (class 0).
+#' - PCA (or any other case): red (class 1) / blue (class 0) when a
+#'   `"class"` column was present in `train_data`; grey otherwise.
+#'
+#' @param x   A `"bl_projection"` object from [bl_build_projection()].
+#' @param col Character vector of point colours (one per training row).
+#'   When `NULL` (default) the colours stored in `x$point_col` are used.
+#' @param pch Integer point character. Default `16`.
+#' @param cex Numeric point size. Default `0.8`.
+#' @param axes_col Colour for axis lines and labels. Default `"grey22"`.
+#' @param tick_cex Numeric tick-label size. Default `0.6`.
+#' @param ... Ignored; present for S3 compatibility.
+#'
+#' @return Invisibly returns `x`.
+#' @export
+plot.bl_projection <- function(x,
+                                col      = NULL,
+                                pch      = 16,
+                                cex      = 0.8,
+                                axes_col = "grey22",
+                                tick_cex = 0.6,
+                                ...) {
+  col <- if (!is.null(col)) col else x$point_col
+  if (is.null(col)) col <- "grey40"
+
+  # Use the same pattern as plot_biplotEZ(): hide biplotEZ's own sample
+  # rendering (opacity = 0) then draw points manually via graphics::points().
+  # This avoids biplotEZ::samples(col=...) mapping colours to class levels
+  # rather than to individual observations.
+  x$biplot_obj |>
+    biplotEZ::samples(opacity = 0, which = NULL) |>
+    biplotEZ::axes(col            = axes_col,
+                   label.dir      = "Hor",
+                   tick.label.cex = tick_cex,
+                   ticks          = 1L) |>
+    plot()
+
+  graphics::points(x$biplot_obj$Z[, x$proj_dims],
+                   col = col,
+                   pch = pch,
+                   cex = cex)
+
+  invisible(x)
 }
 
 

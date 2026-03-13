@@ -98,17 +98,25 @@ bl_assemble <- function(bl_data,
          call. = FALSE)
 
   # ---- Resolve filtered vs unfiltered data ------------------------------
+  # train/test data: use filtered data when available
   if (!is.null(bl_filter_result)) {
-    train_data    <- bl_filter_result$train_data
-    test_data     <- bl_filter_result$test_data
-    polygon       <- bl_filter_result$polygon
-    hull_fraction <- bl_filter_result$hull_fraction
+    train_data <- bl_filter_result$train_data
+    test_data  <- bl_filter_result$test_data
   } else {
-    train_data    <- bl_data$train_data
-    test_data     <- bl_data$test_data
-    polygon       <- bl_grid$polygon   # polygon from the grid computation
-    hull_fraction <- NULL
+    train_data <- bl_data$train_data
+    test_data  <- bl_data$test_data
   }
+
+  # train_ranges: always from bl_projection (computed from whatever training
+  # data was passed to bl_build_projection, filtered or unfiltered).
+  train_ranges <- bl_projection$train_ranges
+
+  # polygon and hull_fraction: always from bl_grid, because the grid is
+  # computed in the final biplot Z-space (PCA or CVA, possibly rotated).
+  # The bl_filter_result polygon is in PCA space only and would be
+  # inconsistent if the final projection differs.
+  polygon       <- bl_grid$polygon
+  hull_fraction <- bl_grid$hull_fraction
 
   # CVA always has standardise = FALSE; store the effective value
   standardise_eff <- bl_projection$standardise
@@ -141,6 +149,7 @@ bl_assemble <- function(bl_data,
       # Filtering
       polygon       = polygon,
       hull_fraction = hull_fraction,
+      train_ranges  = train_ranges,
 
       # Grid
       biplot_grid   = bl_grid,

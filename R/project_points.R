@@ -26,6 +26,9 @@
 #' @param filter_to_polygon Logical; if `TRUE`, rows whose projected
 #'   coordinates fall outside the training-data convex hull polygon are
 #'   removed from the returned object. Default `FALSE`.
+#' @param filter_to_train_ranges Logical; if `TRUE`, rows where any feature
+#'   value falls outside the min/max range of the training data (as seen by
+#'   `bl_build_projection()`) are removed before projection. Default `FALSE`.
 #'
 #' @return A list of class `"bl_points"` with components:
 #' \describe{
@@ -62,7 +65,9 @@
 #' @importFrom dplyr case_when
 #' @importFrom sp coordinates over
 #' @export
-bl_project_points <- function(data, bl_result, filter_to_polygon = FALSE) {
+bl_project_points <- function(data, bl_result,
+                              filter_to_polygon     = FALSE,
+                              filter_to_train_ranges = FALSE) {
 
   if (!inherits(bl_result, "bl_result"))
     stop("'bl_result' must be a 'bl_result' object from bl_assemble().",
@@ -77,6 +82,19 @@ bl_project_points <- function(data, bl_result, filter_to_polygon = FALSE) {
   standardise <- bl_result$standardise
   cutoff      <- bl_result$cutoff
   rounding    <- bl_result$rounding
+
+  # ---- Optional filter to training variable ranges -----------------------
+  if (isTRUE(filter_to_train_ranges)) {
+    if (is.null(bl_result$train_ranges)) {
+      warning("'filter_to_train_ranges = TRUE' ignored: no train_ranges in bl_result.",
+              call. = FALSE)
+    } else {
+      in_ranges <- get_filter_logical_vector(
+        data[, var_names, drop = FALSE], bl_result$train_ranges
+      )
+      data <- data[in_ranges, , drop = FALSE]
+    }
+  }
 
   # ---- Project to Z-space ------------------------------------------------
   sv   <- X_sd

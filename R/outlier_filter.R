@@ -102,14 +102,6 @@ bl_filter_outliers <- function(bl_data,
       n_retained, hull_fraction
     ), "Consider increasing hull_fraction.", call. = FALSE)
 
-  # ---- Filter test data to training variable ranges --------------------
-  ##A consider removing
-  train_ranges <- get_variable_ranges(train_filtered[, var_names, drop = FALSE])
-  test_rows    <- get_filter_logical_vector(test_data[, var_names, drop = FALSE],
-                                           train_ranges)
-  test_filtered <- test_data[test_rows, , drop = FALSE]
-  rownames(test_filtered) <- NULL
-
   # ---- Verbose output --------------------------------------------------
   if (isTRUE(verbose)) {
     pct_removed  <- 100 * n_removed  / n_original
@@ -124,7 +116,7 @@ bl_filter_outliers <- function(bl_data,
   structure(
     list(
       train_data    = train_filtered,
-      test_data     = test_filtered,
+      test_data     = test_data,
       var_names     = var_names,
       num_vars      = num_vars,
       target_class  = bl_data$target_class,
