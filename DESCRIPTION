@@ -32,7 +32,8 @@ Imports:
     workflows,
     discrim,
     biplotEZ,
-    aplpack
+    aplpack,
+    ggplot2
 Suggests:
     testthat (>= 3.0.0),
     knitr,

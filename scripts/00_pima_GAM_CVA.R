@@ -126,3 +126,37 @@ test_pts <- bl_project_points(result$test_data, result)
 print(test_pts)
 
 plot_biplotEZ(result, points = test_pts)
+
+
+# ---- Step 8: Find counterfactuals for test data -----------------------
+# bl_find_boundary() defaults to result$test_data.
+# train_ranges are always applied to ensure CFs stay within training space.
+bl_bnd <- bl_find_boundary(result)
+
+print(bl_bnd)
+
+# Quick look at the counterfactual X-space values vs the originals
+head(bl_bnd$B_x)
+head(bl_bnd$x_obs)
+
+
+# ---- Step 9: Distance-to-boundary jitter plot -------------------------
+# plot.bl_boundary() produces a signed per-variable jitter plot and
+# prints robustness (total distance) to the console.
+plot(bl_bnd)
+
+# Standalone robustness score (no plot)
+bl_robustness(bl_bnd)
+
+
+# ---- Step 10: Surrogate model -----------------------------------------
+# bl_surrogate() uses ct_surrogate (hull-clipped contours pre-computed in
+# bl_build_grid()) to assign each training observation to the nearest
+# contour region. Accuracy vs the fitted model and vs true labels is
+# reported.
+
+bl_surr <- bl_surrogate(result)
+print(bl_surr)
+
+# Biplot with surrogate region colouring and accuracy output
+plot(bl_surr)

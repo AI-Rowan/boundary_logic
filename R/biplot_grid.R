@@ -72,10 +72,16 @@
 #' research script.
 #'
 #' @section Contour lines:
-#' Contours are extracted at `cutoff - b_margin` and `cutoff + b_margin`.
-#' These two lines bracket the decision boundary. A narrower `b_margin`
-#' gives a more precise boundary estimate but may produce fewer contour
-#' points in regions where the model probability changes slowly.
+#' Two sets of contour lines are always computed and stored:
+#'
+#' * **`ct`** — standard boundary contours at `cutoff ± b_margin`. These
+#'   are used by `bl_find_boundary()` for counterfactual search.
+#'
+#' * **`ct_surrogate`** — hull-clipped contours for the surrogate model.
+#'   Grid cells outside the training-data convex hull are set to `cutoff`
+#'   before extraction, so contour lines are fully enclosed within the hull.
+#'   Used exclusively by `bl_surrogate()`. Do not use these for biplot
+#'   rendering or boundary search.
 #'
 #' @param train_data    Data frame with feature columns (post-filter training
 #'   data). Used to project points into Z-space and to define the hull
@@ -99,9 +105,6 @@
 #'   `polygon` is `NULL`. Default `0.9`.
 #' @param calc_hull     Logical; if `TRUE`, grid points outside the polygon
 #'   are removed from the returned grid. Default `FALSE`.
-#' @param calc_ct_in_hull Logical; if `TRUE`, outside-polygon grid cells are
-#'   set to `cutoff` before contour extraction, so contours are confined to
-#'   the hull interior. Default `FALSE`.
 #'
 #' @return A list of class `"bl_grid"` with components:
 #' \describe{
@@ -114,8 +117,10 @@
 #'   \item{`min_val`}{Numeric; lower bound of the square plot region.}
 #'   \item{`max_val`}{Numeric; upper bound of the square plot region.}
 #'   \item{`polygon`}{`sp::SpatialPolygons` convex hull.}
-#'   \item{`ct`}{List of contour line objects as returned by
-#'     `grDevices::contourLines()`.}
+#'   \item{`ct`}{List of contour line objects (boundary search contours).}
+#'   \item{`ct_surrogate`}{List of contour line objects with hull-clipped
+#'     boundaries for `bl_surrogate()`. Outside-hull cells are set to
+#'     `cutoff` before extraction. Not used in biplot rendering.}
 #'   \item{`xseq`}{Numeric vector (length m); x-axis grid sequence.}
 #'   \item{`yseq`}{Numeric vector (length m); y-axis grid sequence.}
 #' }
@@ -138,14 +143,13 @@
 bl_build_grid <- function(train_data,
                           bl_projection,
                           bl_model,
-                          m               = 200L,
-                          cutoff          = 0.5,
-                          b_margin        = NULL,
-                          rounding        = 2L,
-                          polygon         = NULL,
-                          outlie          = 0.9,
-                          calc_hull       = FALSE,
-                          calc_ct_in_hull = FALSE) {
+                          m        = 200L,
+                          cutoff   = 0.5,
+                          b_margin = NULL,
+                          rounding = 2L,
+                          polygon  = NULL,
+                          outlie   = 0.9,
+                          calc_hull = FALSE) {
 
   # ---- Validation -------------------------------------------------------
   stop_if_not_data_frame(train_data, "train_data")
@@ -235,19 +239,24 @@ bl_build_grid <- function(train_data,
   # ---- Contour lines ---------------------------------------------------
   grid_contour <- matrix(grid_prob, ncol = m, byrow = FALSE)
 
-  if (isTRUE(calc_ct_in_hull)) {
-    grid_contour[!inside_grid] <- cutoff
-    ct <- grDevices::contourLines(
-      xseq, yseq, grid_contour,
-      levels = c(cutoff - b_margin, cutoff, cutoff + b_margin)
-    )
-    ct <- ct[sapply(ct, function(cl) cl$level != cutoff)]
-  } else {
-    ct <- grDevices::contourLines(
-      xseq, yseq, grid_contour,
-      levels = c(cutoff - b_margin, cutoff + b_margin)
-    )
-  }
+  # Standard boundary contours: used by bl_find_boundary()
+  ct <- grDevices::contourLines(
+    xseq, yseq, grid_contour,
+    levels = c(cutoff - b_margin, cutoff + b_margin)
+  )
+
+  # Surrogate contours: outside-hull cells set to cutoff so contour lines
+  # are fully enclosed within the training-data hull. Used only by
+  # bl_surrogate() — do not use for biplot rendering or boundary search.
+  grid_contour_surr <- grid_contour
+  grid_contour_surr[!inside_grid] <- cutoff
+  ct_surrogate <- grDevices::contourLines(
+    xseq, yseq, grid_contour_surr,
+    levels = c(cutoff - b_margin, cutoff, cutoff + b_margin)
+  )
+  ct_surrogate <- ct_surrogate[
+    sapply(ct_surrogate, function(cl) cl$level != cutoff)
+  ]
 
   # ---- Optional: remove grid points outside polygon --------------------
   # Data point colouring is handled by bl_project_points(); only the
@@ -272,6 +281,7 @@ bl_build_grid <- function(train_data,
       polygon       = polygon,
       hull_fraction = outlie,
       ct            = ct,
+      ct_surrogate  = ct_surrogate,
       xseq          = xseq,
       yseq          = yseq
     ),
@@ -293,6 +303,7 @@ print.bl_grid <- function(x, ...) {
   cat(sprintf("  Prob range     : [%.4f, %.4f]\n",
               min(x$grid_prob, na.rm = TRUE),
               max(x$grid_prob, na.rm = TRUE)))
-  cat(sprintf("  Contour lines  : %d\n", length(x$ct)))
+  cat(sprintf("  Contour lines  : %d  (surrogate: %d)\n",
+              length(x$ct), length(x$ct_surrogate)))
   invisible(x)
 }
