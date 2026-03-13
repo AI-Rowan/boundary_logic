@@ -153,22 +153,44 @@ plot_biplotEZ <- function(bl_result,
   }
 
   # ---- Optional rotation (clockwise by rotate_deg degrees) -------------
+  # R_mat is NULL when no rotation is applied; used again in Step 6 for
+  # the target point.
+  R_mat <- NULL
   if (!is.null(rotate_deg) && rotate_deg != 0) {
     theta <- -rotate_deg * pi / 180   # negative = clockwise
-    R <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), nrow = 2L)
+    R_mat <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), nrow = 2L)
 
-    gr$Zgrid   <- gr$Zgrid %*% R
-    points$Z   <- points$Z %*% R
+    # Rotate the biplot-plane columns of V and recompute the inverse.
+    # This matches the original research approach (1.3 Optimal Rotation.R):
+    #   Vrho = V %*% t(A);  tVrho = solve(Vrho)
+    # For a simple angle rotation A is the 2x2 R_mat embedded in the
+    # proj_dims columns only.
+    V_new                  <- bl_result$V
+    V_new[, proj_dims]     <- V_new[, proj_dims] %*% R_mat
+    tV_new                 <- solve(V_new)
+    tVr_new                <- tV_new[proj_dims, , drop = FALSE]   # 2 x p
+
+    # Recompute ax.one.unit — the biplotEZ field that controls where axis
+    # arrows are drawn.  Formula from original research code:
+    #   ax.one.unit <- 1 / (diag(t(tVr) %*% tVr)) * t(tVr)
+    ax_one_unit_new        <- (1 / diag(t(tVr_new) %*% tVr_new)) * t(tVr_new)
+
+    # Patch the biplotEZ object BEFORE the first plot() call so that the
+    # coordinate frame and axis arrows are both rendered in the rotated space.
+    biplot_plot$Lmat[, proj_dims] <- V_new[, proj_dims]
+    biplot_plot$ax.one.unit       <- ax_one_unit_new
+    biplot_plot$Z[, proj_dims]    <- biplot_plot$Z[, proj_dims] %*% R_mat
+
+    # Rotate all other plotted elements to match.
+    gr$Zgrid <- gr$Zgrid %*% R_mat
+    points$Z <- points$Z %*% R_mat
 
     gr$ct <- lapply(gr$ct, function(cl) {
-      pts      <- cbind(cl$x, cl$y) %*% R
-      cl$x     <- pts[, 1L]
-      cl$y     <- pts[, 2L]
+      pts  <- cbind(cl$x, cl$y) %*% R_mat
+      cl$x <- pts[, 1L]
+      cl$y <- pts[, 2L]
       cl
     })
-
-    # Rotate the axis arrow directions in the biplotEZ object
-    biplot_plot$Lmat[, proj_dims] <- biplot_plot$Lmat[, proj_dims] %*% R
   }
 
   # ---- Step 1: biplotEZ base plot (axes only, no samples) --------------
@@ -237,6 +259,7 @@ plot_biplotEZ <- function(bl_result,
 
     target_z <- matrix(target_st, nrow = 1L) %*%
       bl_result$V[, proj_dims, drop = FALSE]
+    if (!is.null(R_mat)) target_z <- target_z %*% R_mat
 
     graphics::points(x   = target_z[1L, 1L],
                      y   = target_z[1L, 2L],
