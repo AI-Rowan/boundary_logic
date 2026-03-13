@@ -19,11 +19,8 @@ Depends:
 Imports:
     MASS,
     dplyr,
-    ggplot2,
-    reshape2,
     sp,
     rlang,
-    MLmetrics,
     e1071,
     gbm,
     mgcv,

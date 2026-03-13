@@ -34,7 +34,8 @@
 #' @return A list of class `"bl_filter_result"` with components:
 #' \describe{
 #'   \item{`train_data`}{Filtered training data frame.}
-#'   \item{`test_data`}{Test data frame (filtered to training variable ranges).}
+#'   \item{`test_data`}{Test data frame (passed through unchanged; apply range
+    filtering later via `bl_project_points(..., filter_to_train_ranges = TRUE)`).}
 #'   \item{`var_names`}{Feature column names.}
 #'   \item{`num_vars`}{Number of features.}
 #'   \item{`target_class`}{The positive class value (passed through).}
