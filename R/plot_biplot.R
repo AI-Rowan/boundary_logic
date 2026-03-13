@@ -69,6 +69,16 @@
 #'   clockwise. Rotates all plotted elements — grid, training points, contour
 #'   lines, variable axes, and the target point — without rerunning the
 #'   pipeline. Default `0` (no rotation).
+#' @param boundary         A `"bl_boundary"` object from `bl_find_boundary()`,
+#'   or `NULL` (default). When supplied, each observation's nearest boundary
+#'   point (`B_z`) is plotted as a cross in Z-space, and an arrow is drawn
+#'   from the observation to its counterfactual. Observations with no boundary
+#'   found (`B_z = NA`) are silently skipped. If `rotate_deg` is set, the
+#'   boundary coordinates are rotated to match.
+#' @param show_arrows      Logical; if `TRUE` (default), arrows are drawn from
+#'   each observation to its counterfactual when `boundary` is supplied.
+#' @param arrow_col        Character; colour for the boundary crosses and
+#'   arrows. Default `"grey30"`.
 #' @param contour_col      Character; colour for decision boundary contour
 #'   lines. Default `"black"`.
 #' @param contour_lwd      Numeric; line width for contour lines. Default
@@ -78,7 +88,7 @@
 #'
 #' @return Invisibly returns `bl_result`. Called for its side-effect (plot).
 #'
-#' @importFrom graphics lines points text
+#' @importFrom graphics lines points text arrows
 #' @importFrom grDevices col2rgb colorRampPalette rgb
 #'
 #' @examples
@@ -99,6 +109,9 @@
 #' @export
 plot_biplotEZ <- function(bl_result,
                            points            = NULL,
+                           boundary          = NULL,
+                           show_arrows       = TRUE,
+                           arrow_col         = "grey30",
                            target_point      = NULL,
                            target_label      = NULL,
                            no_grid           = FALSE,
@@ -129,6 +142,11 @@ plot_biplotEZ <- function(bl_result,
     stop("'points' must be a 'bl_points' object from bl_project_points().",
          call. = FALSE)
   }
+
+  # ---- Validate boundary (optional) ------------------------------------
+  if (!is.null(boundary) && !inherits(boundary, "bl_boundary"))
+    stop("'boundary' must be a 'bl_boundary' object from bl_find_boundary().",
+         call. = FALSE)
 
   gr          <- bl_result$biplot_grid
   biplot_plot <- bl_result$biplot_obj
@@ -191,6 +209,12 @@ plot_biplotEZ <- function(bl_result,
       cl$y <- pts[, 2L]
       cl
     })
+
+    # Rotate boundary coordinates to match
+    if (!is.null(boundary)) {
+      boundary$Z_obs <- boundary$Z_obs %*% R_mat
+      boundary$B_z   <- boundary$B_z   %*% R_mat
+    }
   }
 
   # ---- Step 1: biplotEZ base plot (axes only, no samples) --------------
@@ -222,6 +246,37 @@ plot_biplotEZ <- function(bl_result,
                      col = points$pred_col,
                      pch = 16L,
                      cex = cex_z)
+  }
+
+  # ---- Step 3b: boundary counterfactual overlay (optional) -------------
+  if (!is.null(boundary)) {
+    Z_obs <- boundary$Z_obs
+    B_z   <- boundary$B_z
+
+    # Only process rows where both obs and boundary are finite
+    valid <- which(
+      is.finite(Z_obs[, 1L]) & is.finite(Z_obs[, 2L]) &
+      is.finite(B_z[, 1L])   & is.finite(B_z[, 2L])
+    )
+
+    if (length(valid) > 0L) {
+      # Counterfactual positions as crosses
+      graphics::points(B_z[valid, 1L], B_z[valid, 2L],
+                       pch = 4L, col = arrow_col, cex = 0.6, lwd = 1.2)
+
+      # Arrows from observation to counterfactual
+      if (isTRUE(show_arrows)) {
+        graphics::arrows(
+          x0     = Z_obs[valid, 1L],
+          y0     = Z_obs[valid, 2L],
+          x1     = B_z[valid, 1L],
+          y1     = B_z[valid, 2L],
+          length = 0.05,
+          col    = arrow_col,
+          lwd    = 0.8
+        )
+      }
+    }
   }
 
   # ---- Step 4: axes redrawn on top (visible over grid and points) ------

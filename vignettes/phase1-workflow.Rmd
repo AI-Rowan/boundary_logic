@@ -210,7 +210,7 @@ skip it if you want to use all training data.
 ```{r step2}
 bl_filt <- bl_filter_outliers(
   bl_data       = bl_dat,
-  hull_fraction = 0.9,   # retain innermost 90% of points
+  hull_fraction = 0.91,   # retain innermost 90% of points
   verbose       = TRUE
 )
 
@@ -416,20 +416,12 @@ bl_grid <- bl_build_grid(
   m               = 100L,   # 100 x 100 grid; use 200 for final analysis
   cutoff          = 0.5,
   b_margin        = NULL,   # auto: 1 / 10^rounding = 0.01
-  calc_hull       = FALSE,
-  calc_ct_in_hull = FALSE   # set TRUE when using CVA — see note below
+  calc_hull       = FALSE
+ 
 )
 
 print(bl_grid)
 ```
-
-> **CVA and phantom contours:** When `method = "CVA"` was used in Step
-> 4, set `calc_ct_in_hull = TRUE`. CVA axes are not orthogonal, so the
-> square Z-space grid back-projects to a folded region in X-space. This
-> can produce a second set of phantom contour lines far outside the
-> training data hull. Setting `calc_ct_in_hull = TRUE` masks all grid
-> cells outside the convex hull before contour extraction, suppressing
-> phantom crossings.
 
 **Grid resolution guidance:**
 
@@ -516,8 +508,7 @@ plot_biplotEZ(
 All visual elements can be tuned:
 
 ``` r
-plot_biplotEZ(
-  result,
+plot_biplotEZ(      result,
   no_grid          = FALSE,        # set TRUE to hide the coloured grid
   no_points        = FALSE,        # set TRUE to hide training points
   no_contour       = FALSE,        # set TRUE to hide the boundary line
@@ -526,8 +517,8 @@ plot_biplotEZ(
   label_dir        = "Hor",        # axis label direction: "Hor" or "Rad"
   tick_label_cex   = 0.5,          # axis tick label size
   ticks_v          = 2L,           # ticks per variable axis
-  label_offset_var = 1L,           # shift label of variable 1 outward
-  label_offset_dist = 0.8,
+  label_offset_var = c(1L,3),      # shift label of variable 1 and 3 outward
+  label_offset_dist = c(0.8,1.2),
   contour_col      = "darkgreen",  # boundary colour
   contour_lwd      = 2.0,          # boundary line width
   contour_lty      = 2L            # dashed boundary

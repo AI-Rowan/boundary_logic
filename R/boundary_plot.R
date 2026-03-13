@@ -1,17 +1,29 @@
 ############################################################
-# plot.bl_boundary() — distance-to-boundary jitter plot
+# plot.bl_boundary() — distance-to-boundary jitter / boxplot
 # bl_robustness()    — scalar total boundary distance
 #
 # Refactored from: scripts/4.1 Global interpretations - Robust and VIP.r
 ############################################################
 
 
-#' Distance-to-boundary jitter plot
+#' Distance-to-boundary plot
 #'
-#' Produces a signed jitter plot showing each observation's standardised
-#' distance to the decision boundary, decomposed by variable. Variables are
-#' sorted ascending by their total absolute distance (smallest = least
-#' important at the bottom).
+#' Produces a signed plot showing each observation's standardised distance to
+#' the decision boundary, decomposed by variable. Variables are sorted
+#' ascending by their total absolute distance (smallest = least important at
+#' the bottom).
+#'
+#' Two chart types are available via the `type` argument:
+#' * `"jitter"` (default) — one point per observation per variable, jittered
+#'   vertically for legibility.
+#' * `"boxplot"` — box-and-whisker summaries per confusion group and variable.
+#'
+#' @section Colour scheme:
+#' Colours match the biplot convention from `bl_project_points()`:
+#' * When true labels are present in the source data: four confusion colours —
+#'   TP (red), TN (blue), FP (purple), FN (orange).
+#' * When no true labels are available: two colours — predicted class 1 (red),
+#'   predicted class 0 (blue).
 #'
 #' @section Distance computation:
 #' The distance vector per observation is computed in biplot Z-space
@@ -25,13 +37,14 @@
 #' positive values indicate the observation is above the boundary in that
 #' variable's direction. The vertical line at x = 0 marks the boundary.
 #'
-#' The y-axis label shows `"VarName : <total>"` where `<total>` is the
-#' sum of absolute standardised distances across all observations — a
+#' The y-axis label shows `"VarName : <total>"` where `<total>` is the sum
+#' of absolute standardised distances across all observations — a
 #' variable-level importance proxy. Use `bl_robustness()` for the scalar
 #' total across all variables.
 #'
-#' @param x   A `"bl_boundary"` object from `bl_find_boundary()`.
-#' @param ... Unused; for S3 compatibility.
+#' @param x    A `"bl_boundary"` object from `bl_find_boundary()`.
+#' @param type Character; `"jitter"` (default) or `"boxplot"`.
+#' @param ...  Unused; for S3 compatibility.
 #'
 #' @return Invisibly returns a named list with:
 #' \describe{
@@ -43,10 +56,13 @@
 #'     distances (one row per obs, one column per variable).}
 #' }
 #'
-#' @importFrom ggplot2 ggplot aes geom_jitter geom_vline labs
-#'   scale_color_manual theme_light theme element_text
+#' @importFrom ggplot2 ggplot aes geom_jitter geom_boxplot geom_vline labs
+#'   scale_color_manual scale_fill_manual theme_light theme element_text
+#'   position_dodge
 #' @export
-plot.bl_boundary <- function(x, ...) {
+plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
+
+  type <- match.arg(type)
 
   bl_result   <- x$bl_result
   var_names   <- bl_result$var_names
@@ -58,7 +74,6 @@ plot.bl_boundary <- function(x, ...) {
   tVr <- tV[proj_dims, , drop = FALSE]   # 2 x p
 
   # ---- Compute signed standardised distance per variable -----------
-  # Direction: obs - boundary (positive = obs is above boundary)
   vec_to_boundary_Z  <- x$Z_obs - x$B_z
   vec_to_boundary    <- vec_to_boundary_Z %*% tVr
   colnames(vec_to_boundary) <- var_names
@@ -72,17 +87,33 @@ plot.bl_boundary <- function(x, ...) {
   sum_of_distance <- colSums(abs(vec_to_boundary_sd), na.rm = TRUE)
 
   # ---- Sort variables by total distance (ascending = bottom to top)
-  ord         <- order(sum_of_distance)
-  var_sorted  <- var_names[ord]
-  sd_sorted   <- sum_of_distance[ord]
+  ord        <- order(sum_of_distance)
+  var_sorted <- var_names[ord]
+  sd_sorted  <- sum_of_distance[ord]
+  y_labels   <- paste0(var_sorted, " : ", round(sd_sorted, 0L))
 
-  # Y-axis labels: "VarName : <rounded total>"
-  y_labels <- paste0(var_sorted, " : ", round(sd_sorted, 0L))
+  # ---- Colour group: 4-colour confusion scheme when labels present --
+  pred_class_int <- as.integer(x$pred_obs >= bl_result$cutoff)
+  has_labels     <- !all(is.na(x$class_obs))
+
+  if (has_labels) {
+    actual  <- x$class_obs
+    grp     <- dplyr::case_when(
+      actual == 1L & pred_class_int == 1L ~ "TP",
+      actual == 0L & pred_class_int == 0L ~ "TN",
+      actual == 0L & pred_class_int == 1L ~ "FP",
+      actual == 1L & pred_class_int == 0L ~ "FN",
+      TRUE                               ~ "Unknown"
+    )
+    col_map     <- c("TP" = "red", "TN" = "blue", "FP" = "purple", "FN" = "orange")
+    legend_name <- "Confusion"
+  } else {
+    grp         <- as.character(pred_class_int)
+    col_map     <- c("0" = "blue", "1" = "red")
+    legend_name <- "Predicted class"
+  }
 
   # ---- Build long-format data frame for ggplot --------------------
-  pred_class <- as.character(as.integer(x$pred_obs >= bl_result$cutoff))
-
-  # Subset and reorder columns by ascending distance
   mat_sorted <- vec_to_boundary_sd[, ord, drop = FALSE]
   colnames(mat_sorted) <- y_labels
 
@@ -91,25 +122,14 @@ plot.bl_boundary <- function(x, ...) {
 
   dfp <- data.frame(
     values   = round(as.numeric(unlist(mat_sorted, use.names = FALSE)), 2L),
-    Variable = factor(
-      rep(y_labels, each = n),
-      levels = y_labels
-    ),
-    class    = rep(pred_class, times = n_var),
+    Variable = factor(rep(y_labels, each = n), levels = y_labels),
+    grp      = rep(grp, times = n_var),
     stringsAsFactors = FALSE
   )
 
-  # ---- Build jitter plot -------------------------------------------
-  p <- ggplot2::ggplot(dfp, ggplot2::aes(x = values)) +
-    ggplot2::geom_jitter(
-      ggplot2::aes(y = Variable, colour = class),
-      size = 1.5, height = 0.25
-    ) +
-    ggplot2::geom_vline(xintercept = 0) +
-    ggplot2::scale_color_manual(
-      name   = "Predicted class",
-      values = c("0" = "deepskyblue", "1" = "#F8766D")
-    ) +
+  # ---- Build plot --------------------------------------------------
+  base_plot <- ggplot2::ggplot(dfp, ggplot2::aes(x = values, y = Variable)) +
+    ggplot2::geom_vline(xintercept = 0, colour = "grey40") +
     ggplot2::labs(
       x     = "Distance to Boundary \u2013 Standardised",
       y     = "Variable : total distance to boundary",
@@ -117,6 +137,24 @@ plot.bl_boundary <- function(x, ...) {
     ) +
     ggplot2::theme_light() +
     ggplot2::theme(legend.position = "bottom")
+
+  if (type == "jitter") {
+    p <- base_plot +
+      ggplot2::geom_jitter(
+        ggplot2::aes(colour = grp),
+        size = 1.5, height = 0.25
+      ) +
+      ggplot2::scale_color_manual(name = legend_name, values = col_map)
+  } else {
+    p <- base_plot +
+      ggplot2::geom_boxplot(
+        ggplot2::aes(fill = grp, colour = grp),
+        position = ggplot2::position_dodge(width = 0.7),
+        alpha = 0.4, outlier.size = 0.8
+      ) +
+      ggplot2::scale_fill_manual(name  = legend_name, values = col_map) +
+      ggplot2::scale_color_manual(name = legend_name, values = col_map)
+  }
 
   print(p)
 

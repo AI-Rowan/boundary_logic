@@ -13,6 +13,7 @@
 ############################################################
 
 # ---- Load the package (development workflow) ---------------------------
+rm()
 devtools::load_all()
 
 
@@ -22,6 +23,11 @@ pima_raw <- read.csv(
   file.path(dirname(rstudioapi::getActiveDocumentContext()$path),
             "pima diabetes.csv")
 )
+
+library(dplyr)
+#str(pima_raw)
+#pima_raw <- pima_raw[pima_raw$Insulin >0 & pima_raw$SkinThickness>0,]
+pima_raw <- pima_raw %>% filter(Insulin >0, SkinThickness>0)
 
 bl_dat <- bl_prepare_data(
   data           = pima_raw,
@@ -35,7 +41,7 @@ print(bl_dat)
 
 
 # ---- Step 2 (optional): Filter outliers --------------------------------
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
+bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.8)
 
 print(bl_filt)
 
@@ -47,8 +53,8 @@ print(bl_filt)
 # rest of the boundary logic pipeline.
 
 gam_formula <- class ~ s(Glucose) + s(BloodPressure) +
-  Pregnancies + SkinThickness + Insulin +
-  BMI + DiabetesPedigreeFunction + Age
+  s(Pregnancies) + SkinThickness + Insulin +
+  s(BMI) + DiabetesPedigreeFunction + s(Age)
 
 custom_gam <- mgcv::gam(
   formula = gam_formula,
@@ -93,8 +99,9 @@ bl_grid <- bl_build_grid(
   train_data      = bl_filt$train_data,
   bl_projection   = bl_proj,
   bl_model        = bl_mod,
-  m               = 200L
-  #calc_ct_in_hull = TRUE
+  m               = 200L,
+  calc_hull = T,   #  removes grid points outside the convex hull polygon
+  outlie = 1
 )
 
 print(bl_grid)
@@ -123,7 +130,7 @@ plot_biplotEZ(result)
 # Confusion colours (TP/TN/FP/FN) are assigned because test_data has a
 # "class" column.
 test_pts <- bl_project_points(result$test_data, result)
-print(test_pts)
+#print(test_pts)
 
 plot_biplotEZ(result, points = test_pts)
 
@@ -139,11 +146,14 @@ print(bl_bnd)
 head(bl_bnd$B_x)
 head(bl_bnd$x_obs)
 
+plot_biplotEZ(result, points = test_pts, boundary = bl_bnd) #, show_arrows = FALSE)
 
-# ---- Step 9: Distance-to-boundary jitter plot -------------------------
-# plot.bl_boundary() produces a signed per-variable jitter plot and
-# prints robustness (total distance) to the console.
+# ---- Step 9: Distance-to-boundary plots ------------------------------
+# Jitter plot (default): one point per observation per variable
 plot(bl_bnd)
+
+# Box-whisker plot: distribution of distances by class per variable
+plot(bl_bnd, type = "boxplot")
 
 # Standalone robustness score (no plot)
 bl_robustness(bl_bnd)
@@ -155,7 +165,7 @@ bl_robustness(bl_bnd)
 # contour region. Accuracy vs the fitted model and vs true labels is
 # reported.
 
-bl_surr <- bl_surrogate(result)
+bl_surr <- bl_surrogate(result, data = result$test_data)
 print(bl_surr)
 
 # Biplot with surrogate region colouring and accuracy output
