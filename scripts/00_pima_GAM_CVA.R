@@ -168,3 +168,125 @@ print(bl_surr)
 
 # Biplot with surrogate region colouring and accuracy output
 plot(bl_surr)
+
+
+############################################################
+# Phase 3: Local interpretation of a single target point
+############################################################
+
+# ---- Step 11: Select a target observation -----------------------------
+# Choose a test data point predicted as diabetic (class 1) to explain
+# what changes would move it across the decision boundary.
+# Inspect predictions to find a suitable candidate:
+head(data.frame(
+  row      = seq_len(nrow(result$test_data)),
+  Glucose  = result$test_data$Glucose,
+  pred     = round(bl_bnd$pred_obs, 3),
+  class    = result$test_data$class
+))
+
+# Select the target by row index (default data = result$test_data).
+# Change the index to any class-1 observation of interest.
+tdp <- which(result$test_data$class == 1)[1]
+
+tgt <- bl_select_target(result, target = tdp)
+print(tgt)
+
+# Highlight the target on the main biplot before proceeding
+plot_biplotEZ(
+  result,
+  points       = test_pts,
+  target_point = unlist(tgt$x_obs),
+  target_label = tdp
+)
+
+
+# ---- Step 12: Set actionability constraints (optional) ----------------
+# Constrain which variable directions are clinically plausible.
+# Omit set_filters() entirely to search with no constraints beyond
+# the training data variable ranges.
+flt <- set_filters(
+  tgt,
+  Glucose  = "decrease",   # Glucose can only be reduced
+  Age      = "fixed"       # Age cannot change
+)
+
+print(flt)
+
+
+# ---- Step 13: Find local counterfactual with biplot rotation ----------
+# Tests up to 10 eigenvector pair combinations (1,2),(1,3),(2,3),...
+# For each pair: rotates the biplot to align the target, builds a local
+# prediction grid, applies train_ranges + actionability constraints,
+# finds the nearest opposing-class boundary point.
+# Hull polygon is NOT applied — rotation invalidates the Z-space hull.
+
+bl_local <- bl_find_boundary_local(
+  bl_result   = result,
+  bl_target   = tgt,
+  set_filters = flt
+)
+
+print(bl_local)
+
+
+# ---- Step 14: Local biplot plot ---------------------------------------
+# Shows the rotated biplot for the best eigenvector pair.
+# Training points: TP=red, TN=blue, FP=purple, FN=orange.
+# Yellow circle = target; grey cross = counterfactual; arrow shows direction.
+plot(bl_local)
+
+
+# ---- Step 15: Shapley contribution plot --------------------------------
+# Decomposes the move from target to counterfactual into per-variable
+# contributions. Variables are classified as:
+#   Supports   (darkblue): moving in this direction helps reach the boundary
+#   Contradicts (grey)   : moving in this direction works against it
+# Y-axis labels show observed value -> required change.
+
+bl_shap <- bl_shapley(bl_local)
+print(bl_shap)
+
+plot(bl_shap)
+
+
+# ---- Step 16: Sparse counterfactual -----------------------------------
+# Automatically zeroes out Contradicts variables (no change from observed).
+# round_to = 0 rounds remaining changes to whole numbers for a sparser,
+# more interpretable solution.
+# solution_valid = TRUE means the sparse CF still crosses the boundary.
+
+bl_sparse <- bl_sparse_cf(bl_shap, round_to = 0)
+print(bl_sparse)
+
+# Biplot showing both full CF (grey cross) and sparse CF:
+#   blue cross = valid (crosses boundary)
+#   red cross  = invalid (does not cross boundary — relax round_to or filters)
+plot(bl_sparse)
+
+
+# ---- Step 17: Re-run without actionability constraints ----------------
+# If no solution was found (bl_local$solution_found == FALSE), remove
+# the filters to confirm a boundary exists before tightening constraints.
+
+# bl_local_unconstrained <- bl_find_boundary_local(result, tgt)
+# plot(bl_local_unconstrained)
+
+
+# ---- Step 18: External data point (not in train/test) -----------------
+# Pass a single-row data frame directly as the target.
+# All feature columns must be present; no class column required.
+
+# new_patient <- data.frame(
+#   Pregnancies            = 2,
+#   Glucose                = 148,
+#   BloodPressure          = 72,
+#   SkinThickness          = 35,
+#   Insulin                = 100,
+#   BMI                    = 33.6,
+#   DiabetesPedigreeFunction = 0.627,
+#   Age                    = 50
+# )
+# tgt_ext   <- bl_select_target(result, target = new_patient)
+# local_ext <- bl_find_boundary_local(result, tgt_ext)
+# plot(local_ext)
