@@ -104,7 +104,11 @@
 #' @param outlie        Numeric in (0, 1]; hull fraction used only when
 #'   `polygon` is `NULL`. Default `0.9`.
 #' @param calc_hull     Logical; if `TRUE`, grid points outside the polygon
-#'   are removed from the returned grid. Default `FALSE`.
+#'   are removed from the returned grid object. This affects only the visual
+#'   prediction surface in the biplot — the coloured background is trimmed to
+#'   the hull shape. It does **not** affect counterfactual search:
+#'   `bl_find_boundary()` always clips contour segments to the hull polygon
+#'   independently. Default `TRUE`.
 #'
 #' @return A list of class `"bl_grid"` with components:
 #' \describe{
@@ -149,7 +153,7 @@ bl_build_grid <- function(train_data,
                           rounding = 2L,
                           polygon  = NULL,
                           outlie   = 1,
-                          calc_hull = FALSE) {
+                          calc_hull = TRUE) {
 
   # ---- Validation -------------------------------------------------------
   stop_if_not_data_frame(train_data, "train_data")

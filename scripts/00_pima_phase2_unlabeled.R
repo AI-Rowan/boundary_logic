@@ -97,8 +97,7 @@ bl_grid <- bl_build_grid(
   train_data    = bl_filt$train_data,
   bl_projection = bl_proj,
   bl_model      = bl_mod,
-  m             = 200L,
-  calc_hull     = TRUE    # clip grid to convex hull (required for CVA)
+  m             = 200L
 )
 
 print(bl_grid)
