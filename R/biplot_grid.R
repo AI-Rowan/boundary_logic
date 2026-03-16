@@ -148,7 +148,7 @@ bl_build_grid <- function(train_data,
                           b_margin = NULL,
                           rounding = 2L,
                           polygon  = NULL,
-                          outlie   = 0.9,
+                          outlie   = 1,
                           calc_hull = FALSE) {
 
   # ---- Validation -------------------------------------------------------
