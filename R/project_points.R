@@ -161,6 +161,88 @@ bl_project_points <- function(data, bl_result,
 
 
 # --------------------------------------------------------------------------
+# bl_predict(): tabular prediction summary
+# --------------------------------------------------------------------------
+
+#' Tabular prediction summary for a dataset
+#'
+#' Scores every row of a data frame through the fitted model and returns a
+#' tidy data frame suitable for inspection and target selection. This replaces
+#' the ad-hoc \code{data.frame()} construction used in example scripts.
+#'
+#' The returned data frame contains:
+#' \itemize{
+#'   \item \code{row} — row index (1-based).
+#'   \item \code{pred_prob} — model predicted probability (rounded to 4 d.p.).
+#'   \item \code{pred_class} — predicted class (0 or 1).
+#'   \item \code{true_class} — true class if a \code{"class"} column is present
+#'     in \code{data}; otherwise omitted.
+#'   \item \code{confusion} — \code{"TP"}, \code{"TN"}, \code{"FP"}, or
+#'     \code{"FN"} if true class is known; otherwise omitted.
+#'   \item One column per feature variable from \code{bl_result$var_names}.
+#' }
+#'
+#' @param bl_result A \code{"bl_result"} object from \code{\link{bl_assemble}}.
+#' @param data Data frame to score. Defaults to \code{bl_result$test_data}.
+#'
+#' @return A data frame with columns \code{row}, \code{pred_prob},
+#'   \code{pred_class}, optionally \code{true_class} and \code{confusion},
+#'   followed by all feature columns.
+#'
+#' @examples
+#' bl_dat  <- bl_prepare_data(datasets::iris, class_col = "Species",
+#'                             target_class = "versicolor")
+#' bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names)
+#' bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names)
+#' bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 50L)
+#' result  <- bl_assemble(bl_dat, bl_model = bl_mod,
+#'                         bl_projection = bl_proj, bl_grid = bl_grid)
+#'
+#' # Inspect test-set predictions
+#' bl_predict(result)
+#'
+#' # Score a custom data frame (no class column)
+#' bl_predict(result, data = result$test_data[, result$var_names])
+#'
+#' @importFrom dplyr case_when
+#' @export
+bl_predict <- function(bl_result, data = NULL) {
+  if (!inherits(bl_result, "bl_result"))
+    stop("'bl_result' must be a 'bl_result' object from bl_assemble().",
+         call. = FALSE)
+  if (is.null(data)) data <- bl_result$test_data
+  if (is.null(data))
+    stop("No 'data' supplied and 'bl_result$test_data' is NULL.", call. = FALSE)
+  stop_if_not_data_frame(data, "data")
+
+  pts       <- bl_project_points(data, bl_result)
+  var_names <- bl_result$var_names
+
+  out <- data.frame(
+    row        = seq_len(nrow(data)),
+    pred_prob  = round(pts$pred_prob, 4L),
+    pred_class = as.integer(pts$pred_class),
+    stringsAsFactors = FALSE
+  )
+
+  if (!is.null(pts$class)) {
+    pc <- as.integer(pts$pred_class)
+    tc <- as.integer(pts$class)
+    out$true_class <- tc
+    out$confusion  <- dplyr::case_when(
+      pc == 1L & tc == 1L ~ "TP",
+      pc == 0L & tc == 0L ~ "TN",
+      pc == 1L & tc == 0L ~ "FP",
+      pc == 0L & tc == 1L ~ "FN",
+      TRUE ~ NA_character_
+    )
+  }
+
+  cbind(out, data[, var_names, drop = FALSE])
+}
+
+
+# --------------------------------------------------------------------------
 # S3 print method
 # --------------------------------------------------------------------------
 

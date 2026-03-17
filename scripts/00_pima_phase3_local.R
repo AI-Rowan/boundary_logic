@@ -52,7 +52,7 @@ print(bl_dat)
 
 
 # ---- Step 2: Filter outliers ------------------------------------------
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.8)
+bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
 print(bl_filt)
 
@@ -129,32 +129,21 @@ plot_biplotEZ(result, points = test_pts)
 # ===========================================================
 
 # ---- Step 7: Inspect test predictions to choose a target --------------
-# Print a summary to identify a suitable class-1 observation (diabetic)
-# whose counterfactual we want to explain.
+# bl_predict() scores every row and returns a tidy data frame with
+# row, pred_prob, pred_class, true_class, confusion, and all features.
+# Use it to identify a suitable class-1 observation (diabetic) to explain.
 
-pred_summary <- data.frame(
-  row       = seq_len(nrow(result$test_data)),
-  Glucose   = result$test_data$Glucose,
-  BMI       = result$test_data$BMI,
-  Age       = result$test_data$Age,
-  pred_prob = round(
-    sapply(seq_len(nrow(result$test_data)), function(i) {
-      bl_select_target(result, target = i)$pred_prob
-    }), 3
-  ),
-  true_class = result$test_data$class
-)
-
+pred_summary <- bl_predict(result)
 print(pred_summary)
 
 # Choose the target index — a class-1 observation with a probability
 # well above 0.5 gives a clear and illustrative counterfactual.
-tdp <- which(result$test_data$class == 1 &
+tdp <- which(pred_summary$true_class == 1 &
                pred_summary$pred_prob >= 0.70)[1]
 
 cat(sprintf("\nSelected target: row %d  |  pred = %.3f  |  true class = %d\n",
             tdp, pred_summary$pred_prob[tdp],
-            result$test_data$class[tdp]))
+            pred_summary$true_class[tdp]))
 
 
 # ---- Step 8: Select the target ----------------------------------------
@@ -181,13 +170,16 @@ plot_biplotEZ(
 # Valid constraint types:
 #   "decrease"  — counterfactual value must be <= observed
 #   "increase"  — counterfactual value must be >= observed
-#   "fixed"     — variable cannot change
+#   "fixed"     — counterfactual search allows +/- 0.5 of the observed
+#                 value. When a sparse CF is generated, fixed variables
+#                 always revert to the original observed value.
 #   c(min, max) — counterfactual must lie within this absolute range
 
 flt <- set_filters(
   tgt,
   Glucose = "decrease",   # reducing Glucose is the clinical lever
-  Age     = "fixed"       # Age is not actionable
+  Age     = "fixed",       # Age is not actionable
+  Pregnancies     = "fixed"       # pregnancies is not actionable
 )
 
 print(flt)
@@ -213,11 +205,22 @@ print(bl_local)
 
 
 # ---- Step 11: Local biplot plot ---------------------------------------
-# Shows the rotated biplot for the best eigenvector pair only.
-# Training points: TP=red, TN=blue, FP=purple, FN=orange.
-# Yellow filled circle = target observation.
-# Grey cross           = nearest boundary (counterfactual).
-# Arrow                = direction of minimum change.
+# Rendered using the biplotEZ pipeline (same style as plot_biplotEZ):
+#   - biplotEZ axis skeleton (variable axes, ticks, labels)
+#   - Prediction grid (blue = class 0, red = class 1)
+#   - Training points: TP=red, TN=blue, FP=purple, FN=orange
+#   - Variable axes redrawn on top
+#   - Decision boundary contour lines
+#   - Yellow filled circle = target observation
+#   - Grey cross + arrow   = nearest boundary (counterfactual)
+#
+# The biplotEZ object is patched with the rotated loading matrix (Vr_rot)
+# and rotated training coordinates (Z_train_rot) for the best pair.
+#
+# Supported parameters (same as plot_biplotEZ):
+#   no_grid, no_points, no_contour, cex_z, label_dir, tick_label_cex,
+#   ticks_v, which, X_names, label_offset_var, label_offset_dist,
+#   show_arrows, arrow_col, contour_col, contour_lwd, contour_lty
 
 plot(bl_local)
 
@@ -243,18 +246,26 @@ plot(bl_shap)
 # Automatically zeroes out Contradicts variables — they revert to their
 # observed values. Only Supports variables take their counterfactual
 # value. round_to = 0 rounds remaining changes to whole numbers.
+# Variables constrained as "fixed" in set_filters() always revert to
+# their observed value in the sparse CF, regardless of Shapley class.
 #
 # solution_valid = TRUE  means the sparse CF still crosses the boundary.
 # solution_valid = FALSE means the rounded/zeroed CF is no longer enough;
 #   try round_to = 1, remove round_to, or relax actionability filters.
 
-bl_sparse <- bl_sparse_cf(bl_shap, round_to = 0)
+bl_sparse <- bl_sparse_cf(bl_shap, round_to = NULL)
+
+# print() shows three prediction values to verify classification changes:
+#   Observed  — model score for the original data point
+#   Full CF   — model score at the boundary counterfactual
+#   Sparse CF — model score for the sparse (zeroed) counterfactual
 print(bl_sparse)
 
-# Local biplot with both the full CF and the sparse CF overlaid.
-#   Grey cross  = full counterfactual (all variables changed)
-#   Blue cross  = sparse CF (valid — crosses boundary)
-#   Red cross   = sparse CF (invalid — does not cross boundary)
+# Local biplot (biplotEZ-style) with both CFs overlaid.
+#   Grey cross   = full counterfactual (all variables changed)
+#   Green cross  = sparse CF (valid — crosses boundary)
+#   Yellow cross = sparse CF (invalid — does not cross boundary)
+# All plot(bl_local) parameters are supported via ...
 plot(bl_sparse)
 
 
@@ -265,13 +276,16 @@ plot(bl_sparse)
 # ===========================================================
 
 # ---- Step 14 (optional): Unconstrained local search -------------------
-bl_local_free <- bl_find_boundary_local(result, tgt)
+bl_local_free <- bl_find_boundary_local(result, 
+                                        tgt)
 print(bl_local_free)
 
 plot(bl_local_free)
 
 bl_shap_free   <- bl_shapley(bl_local_free)
-bl_sparse_free <- bl_sparse_cf(bl_shap_free, round_to = 0)
+print(bl_shap_free)
+bl_sparse_free <- bl_sparse_cf(bl_shap_free, round_to = NULL)
+print(bl_sparse_free)
 
 plot(bl_shap_free)
 plot(bl_sparse_free)

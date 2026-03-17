@@ -319,13 +319,18 @@ print.bl_shapley <- function(x, ...) {
 #' Builds a sparse version of the boundary counterfactual by retaining only
 #' the variables whose Shapley contribution \emph{supports} the prediction
 #' direction. Variables classified as \code{"Contradicts"} or \code{"Unknown"}
-#' revert to their observed values.
+#' revert to their observed values. Additionally, any variable constrained as
+#' \code{"fixed"} in \code{\link{set_filters}} always reverts to its observed
+#' value regardless of its Shapley classification, because the \code{"fixed"}
+#' constraint permits only a \eqn{\pm 0.5} search window and the observed value
+#' is the intended sparse target.
 #'
 #' @param bl_shapley_result A \code{"bl_shapley"} object from
 #'   \code{\link{bl_shapley}}.
-#' @param round_to Integer or \code{NULL}. If not \code{NULL}, rounds the
-#'   supporting variable changes to this many decimal places (e.g.
-#'   \code{round_to = 0} for whole numbers).
+#' @param round_to Positive numeric or \code{NULL}. If not \code{NULL}, rounds
+#'   supporting variable values to the nearest multiple of this value (e.g.
+#'   \code{round_to = 0.5} rounds to the nearest 0.5; \code{round_to = 1}
+#'   rounds to the nearest integer). Default \code{NULL} (no rounding).
 #'
 #' @return A list of class \code{"bl_sparse_result"} with the following fields:
 #'   \describe{
@@ -364,8 +369,20 @@ bl_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
     if (nrow(row_nm) == 0L) next
     if (row_nm$Contribute[1L] == "Supports") {
       new_val <- B_x[[nm]]
-      if (!is.null(round_to)) new_val <- round(new_val, round_to)
+      if (!is.null(round_to)) new_val <- round(new_val / round_to) * round_to
       x_sparse[[nm]] <- new_val
+    }
+  }
+
+  # "fixed"-constrained variables always revert to observed value in sparse CF,
+  # regardless of Shapley classification (set_filters stored in bl_local_result).
+  filters <- bl_local$set_filters
+  if (!is.null(filters) && length(filters$constraints) > 0L) {
+    for (nm in names(filters$constraints)) {
+      v <- filters$constraints[[nm]]
+      if (is.character(v) && v == "fixed") {
+        x_sparse[[nm]] <- x_obs[[nm]]
+      }
     }
   }
 
@@ -403,60 +420,80 @@ bl_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 
 #' Plot a sparse counterfactual result
 #'
-#' Calls \code{plot(\link{bl_find_boundary_local})} to render the full local
-#' biplot for the best eigenvector pair, then overlays the sparse counterfactual
-#' as a second cross marker. A blue cross indicates the sparse CF successfully
-#' flips the predicted class; red indicates it does not.
+#' Renders the rotated local biplot via \code{\link{plot.bl_local_result}}
+#' (which uses the biplotEZ pipeline) and then overlays the sparse
+#' counterfactual as a second cross marker. A blue cross indicates the sparse
+#' CF successfully flips the predicted class; red indicates it does not.
+#' All \code{\link{plot.bl_local_result}} parameters are forwarded through
+#' \code{...}; the local summary is suppressed and replaced by a combined
+#' sparse CF summary.
 #'
-#' @param x   A \code{"bl_sparse_result"} object from \code{\link{bl_sparse_cf}}.
-#' @param ... Additional arguments passed to \code{plot.bl_local_result}.
+#' @param x         A \code{"bl_sparse_result"} object from
+#'   \code{\link{bl_sparse_cf}}.
+#' @param show_arrows Logical; passed to \code{\link{plot.bl_local_result}}
+#'   to control the CF arrow. Default \code{TRUE}.
+#' @param arrow_col Character; colour for the full CF cross and arrow. Default
+#'   \code{"grey30"}.
+#' @param ...       Additional arguments passed to
+#'   \code{\link{plot.bl_local_result}} (e.g. \code{no_grid},
+#'   \code{label_offset_var}, \code{which}).
 #'
 #' @importFrom graphics points legend
 #' @export
-plot.bl_sparse_result <- function(x, ...) {
-  # Render the underlying local biplot
-  plot(x$bl_shapley$bl_local_result, ...)
+plot.bl_sparse_result <- function(x,
+                                  show_arrows = TRUE,
+                                  arrow_col   = "grey30",
+                                  ...) {
+  # Render underlying local biplot; suppress its summary (we print our own)
+  plot(x$bl_shapley$bl_local_result,
+       show_arrows   = show_arrows,
+       arrow_col     = arrow_col,
+       print_summary = FALSE,
+       ...)
 
-  bl_local  <- x$bl_shapley$bl_local_result
-  bl_result <- bl_local$bl_result
-  var_names <- bl_result$var_names
-
+  bl_local    <- x$bl_shapley$bl_local_result
+  bl_result   <- bl_local$bl_result
+  var_names   <- bl_result$var_names
   X_center    <- bl_result$X_center
   X_sd        <- bl_result$X_sd
   standardise <- bl_result$standardise
   Vr_rot      <- bl_local$Vr_rot
 
-  # Standardise sparse CF
+  # Project sparse CF into rotated Z-space
   x_sparse_vec <- as.numeric(x$x_sparse[, var_names])
   sv           <- if (isTRUE(standardise)) X_sd else rep(1, length(var_names))
   x_sparse_st  <- (x_sparse_vec - X_center) / sv
+  z_sparse     <- matrix(x_sparse_st %*% Vr_rot, nrow = 1L)
 
-  # Project into rotated Z-space
-  z_sparse <- matrix(x_sparse_st %*% Vr_rot, nrow = 1L)
+  pt_col <- if (x$solution_valid) "green3" else "yellow2"
 
-  # Choose colour based on validity
-  pt_col <- if (x$solution_valid) "blue3" else "red3"
-
-  # Overlay sparse CF
   graphics::points(z_sparse[, 1L], z_sparse[, 2L],
                    pch = 4L, col = pt_col, cex = 1.4, lwd = 2)
 
-  # Legend
-  legend_cols   <- c("grey30", pt_col)
-  legend_labels <- c(
-    "Full CF",
-    if (x$solution_valid) "Sparse CF (valid)" else "Sparse CF (invalid)"
-  )
   graphics::legend(
     "topright",
-    legend = legend_labels,
-    col    = legend_cols,
+    legend = c("Full CF",
+               if (x$solution_valid) "Sparse CF (valid)" else "Sparse CF (invalid)"),
+    col    = c(arrow_col, pt_col),
     pch    = 4L,
     pt.lwd = c(1.5, 2.0),
     pt.cex = c(1.2, 1.4),
     bty    = "n",
     cex    = 0.8
   )
+
+  # Sparse CF summary
+  bl_target <- bl_local$bl_target
+  row_label <- if (is.na(bl_target$row_id)) "external" else
+                 as.character(bl_target$row_id)
+  cat("\n--- Sparse CF summary ---\n")
+  cat(sprintf("  Target         : %s\n",         row_label))
+  cat(sprintf("  Observed pred  : %.4f  (class %d)\n",
+              x$bl_shapley$pred_prob, x$bl_shapley$pred_class))
+  cat(sprintf("  Full CF pred   : %.4f\n",       x$bl_shapley$pred_boundary))
+  cat(sprintf("  Sparse CF pred : %.4f\n",       x$pred_sparse))
+  cat(sprintf("  Solution valid : %s\n",         x$solution_valid))
+  cat("-------------------------\n")
 
   invisible(x)
 }
@@ -469,8 +506,12 @@ plot.bl_sparse_result <- function(x, ...) {
 #' @export
 print.bl_sparse_result <- function(x, ...) {
   cat("-- bl_sparse_result --\n")
-  cat(sprintf("  Solution valid : %s\n",  x$solution_valid))
-  cat(sprintf("  Sparse pred    : %.4f\n", x$pred_sparse))
+  cat(sprintf("  Solution valid : %s\n", x$solution_valid))
+  cat("\n  Predictions:\n")
+  cat(sprintf("    Observed     : %.4f  (class %d)\n",
+              x$bl_shapley$pred_prob, x$bl_shapley$pred_class))
+  cat(sprintf("    Full CF      : %.4f\n", x$bl_shapley$pred_boundary))
+  cat(sprintf("    Sparse CF    : %.4f\n", x$pred_sparse))
   cat("\n  Variable summary:\n")
   df <- x$shapley_df
   bl_local  <- x$bl_shapley$bl_local_result

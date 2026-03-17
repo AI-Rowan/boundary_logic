@@ -177,17 +177,14 @@ plot(bl_surr)
 # ---- Step 11: Select a target observation -----------------------------
 # Choose a test data point predicted as diabetic (class 1) to explain
 # what changes would move it across the decision boundary.
-# Inspect predictions to find a suitable candidate:
-head(data.frame(
-  row      = seq_len(nrow(result$test_data)),
-  Glucose  = result$test_data$Glucose,
-  pred     = round(bl_bnd$pred_obs, 3),
-  class    = result$test_data$class
-))
+# bl_predict() scores every row and returns a tidy data frame with
+# row, pred_prob, pred_class, true_class, confusion, and all features.
+pred_summary <- bl_predict(result)
+print(pred_summary)
 
 # Select the target by row index (default data = result$test_data).
 # Change the index to any class-1 observation of interest.
-tdp <- which(result$test_data$class == 1)[1]
+tdp <- which(pred_summary$true_class == 1)[1]
 
 tgt <- bl_select_target(result, target = tdp)
 print(tgt)
@@ -205,6 +202,9 @@ plot_biplotEZ(
 # Constrain which variable directions are clinically plausible.
 # Omit set_filters() entirely to search with no constraints beyond
 # the training data variable ranges.
+#
+# "fixed" allows a +/- 0.5 search window during boundary search.
+# In the sparse CF, fixed variables always revert to observed value.
 flt <- set_filters(
   tgt,
   Glucose  = "decrease",   # Glucose can only be reduced
@@ -231,9 +231,11 @@ print(bl_local)
 
 
 # ---- Step 14: Local biplot plot ---------------------------------------
-# Shows the rotated biplot for the best eigenvector pair.
+# Rendered using the biplotEZ pipeline (same style as plot_biplotEZ).
+# The biplotEZ object is patched with rotated coordinates for the best pair.
 # Training points: TP=red, TN=blue, FP=purple, FN=orange.
 # Yellow circle = target; grey cross = counterfactual; arrow shows direction.
+# Supports same parameters as plot_biplotEZ (no_grid, which, label_dir, etc.)
 plot(bl_local)
 
 
@@ -252,16 +254,18 @@ plot(bl_shap)
 
 # ---- Step 16: Sparse counterfactual -----------------------------------
 # Automatically zeroes out Contradicts variables (no change from observed).
+# "fixed" variables always revert to observed value regardless of Shapley class.
 # round_to = 0 rounds remaining changes to whole numbers for a sparser,
 # more interpretable solution.
 # solution_valid = TRUE means the sparse CF still crosses the boundary.
 
-bl_sparse <- bl_sparse_cf(bl_shap, round_to = 0)
+bl_sparse <- bl_sparse_cf(bl_shap, round_to = 0.5)
+
+# print() shows three predictions: Observed / Full CF / Sparse CF
 print(bl_sparse)
 
-# Biplot showing both full CF (grey cross) and sparse CF:
-#   blue cross = valid (crosses boundary)
-#   red cross  = invalid (does not cross boundary — relax round_to or filters)
+# biplotEZ-style local biplot with both CFs overlaid:
+#   grey cross = full CF | green cross = sparse CF (valid) | yellow = invalid
 plot(bl_sparse)
 
 
