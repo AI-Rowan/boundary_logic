@@ -1,8 +1,7 @@
 # Boundary Logic — Function Flow Diagram
 
-Paste the code block below into [https://mermaid.live](https://mermaid.live) to render the diagram.
+Paste the code block below into [https://mermaid.live](https://mermaid.live) to render the diagram:
 
-```mermaid
 flowchart TD
 
     %% ─────────────────────────────────────────
@@ -114,4 +113,4 @@ flowchart TD
     class D1,D2,D3,D4,D5,D6,D7,D8,D9 phase3
     class RAW data
     class EXT external
-```
+

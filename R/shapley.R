@@ -138,7 +138,7 @@
 #' or \code{"Contradicts"} (pushes it away from the boundary).
 #'
 #' @param bl_local_result A \code{"bl_local_result"} object produced by
-#'   \code{\link{bl_find_boundary_local}}.
+#'   \code{\link{bl_find_local_cf}}.
 #' @param exact_max_vars  Integer; use exact computation when the number of
 #'   variables is at most this value. Default \code{14L}.
 #' @param approx_perm     Integer; number of permutations for the approximate
@@ -166,7 +166,7 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
   if (!inherits(bl_local_result, "bl_local_result"))
     stop("'bl_local_result' must be a 'bl_local_result' object.", call. = FALSE)
   if (!bl_local_result$solution_found)
-    stop("No solution found in 'bl_local_result'. Run bl_find_boundary_local() first.",
+    stop("No solution found in 'bl_local_result'. Run bl_find_local_cf() first.",
          call. = FALSE)
 
   bl_result  <- bl_local_result$bl_result
@@ -345,7 +345,7 @@ print.bl_shapley <- function(x, ...) {
 #'   }
 #'
 #' @export
-bl_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
+bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   if (!inherits(bl_shapley_result, "bl_shapley"))
     stop("'bl_shapley_result' must be a 'bl_shapley' object from bl_shapley().",
          call. = FALSE)
@@ -429,7 +429,7 @@ bl_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 #' sparse CF summary.
 #'
 #' @param x         A \code{"bl_sparse_result"} object from
-#'   \code{\link{bl_sparse_cf}}.
+#'   \code{\link{bl_find_sparse_cf}}.
 #' @param show_arrows Logical; passed to \code{\link{plot.bl_local_result}}
 #'   to control the CF arrow. Default \code{TRUE}.
 #' @param arrow_col Character; colour for the full CF cross and arrow. Default

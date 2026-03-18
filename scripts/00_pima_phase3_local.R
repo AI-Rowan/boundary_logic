@@ -106,7 +106,7 @@ print(bl_grid)
 
 
 # ---- Step 6: Assemble result object -----------------------------------
-result <- bl_assemble(
+bl_results <- bl_assemble(
   bl_data          = bl_dat,
   bl_filter_result = bl_filt,
   bl_model         = bl_mod,
@@ -114,14 +114,14 @@ result <- bl_assemble(
   bl_grid          = bl_grid
 )
 
-print(result)
+print(bl_results)
 
 # Reference biplot — training data
-plot_biplotEZ(result)
+plot_biplotEZ(bl_results)
 
 # Reference biplot — test data (four-colour confusion scheme)
-test_pts <- bl_project_points(result$test_data, result)
-plot_biplotEZ(result, points = test_pts)
+test_pts <- bl_project_points(bl_results$test_data, bl_results)
+plot_biplotEZ(bl_results, points = test_pts)
 
 
 # ===========================================================
@@ -133,7 +133,7 @@ plot_biplotEZ(result, points = test_pts)
 # row, pred_prob, pred_class, true_class, confusion, and all features.
 # Use it to identify a suitable class-1 observation (diabetic) to explain.
 
-pred_summary <- bl_predict(result)
+pred_summary <- bl_predict(bl_results)
 print(pred_summary)
 
 # Choose the target index — a class-1 observation with a probability
@@ -149,14 +149,14 @@ cat(sprintf("\nSelected target: row %d  |  pred = %.3f  |  true class = %d\n",
 # ---- Step 8: Select the target ----------------------------------------
 # bl_select_target() wraps the observation into a bl_target object,
 # projecting it into Z-space and scoring it through the model.
-# Default data = result$test_data.
+# Default data = bl_results$test_data.
 
-tgt <- bl_select_target(result, target = tdp)
+tgt <- bl_select_target(bl_results, target = tdp)
 print(tgt)
 
 # Highlight the target on the main biplot
 plot_biplotEZ(
-  result,
+  bl_results,
   points       = test_pts,
   target_point = unlist(tgt$x_obs),
   target_label = tdp
@@ -195,8 +195,8 @@ print(flt)
 #   - Finds the nearest opposing-class boundary point
 # The pair with the overall minimum Z-space distance is selected.
 
-bl_local <- bl_find_boundary_local(
-  bl_result   = result,
+bl_local <- bl_find_local_cf(
+  bl_result   = bl_results,
   bl_target   = tgt,
   set_filters = flt
 )
@@ -205,17 +205,20 @@ print(bl_local)
 
 
 # ---- Step 11: Local biplot plot ---------------------------------------
-# Rendered using the biplotEZ pipeline (same style as plot_biplotEZ):
-#   - biplotEZ axis skeleton (variable axes, ticks, labels)
-#   - Prediction grid (blue = class 0, red = class 1)
-#   - Training points: TP=red, TN=blue, FP=purple, FN=orange
-#   - Variable axes redrawn on top
-#   - Decision boundary contour lines
-#   - Yellow filled circle = target observation
-#   - Grey cross + arrow   = nearest boundary (counterfactual)
-#
+# Rendered using the biplotEZ pipeline (same style as plot_biplotEZ).
 # The biplotEZ object is patched with the rotated loading matrix (Vr_rot)
 # and rotated training coordinates (Z_train_rot) for the best pair.
+#
+# Default (no_points = TRUE): shows only the target + counterfactual.
+#   - Filled circle = target observation (confusion colour or red/blue)
+#   - Grey cross + arrow = nearest boundary (counterfactual)
+#
+# To also show training data:
+#   plot(bl_local, no_points = FALSE)
+#   Training colours: TP=red, TN=blue, FP=purple, FN=orange
+#
+# To show test or holdout data, use the global biplot instead:
+#   plot_biplotEZ(bl_results, points = test_pts)  # test_pts from bl_project_points()
 #
 # Supported parameters (same as plot_biplotEZ):
 #   no_grid, no_points, no_contour, cex_z, label_dir, tick_label_cex,
@@ -253,7 +256,7 @@ plot(bl_shap)
 # solution_valid = FALSE means the rounded/zeroed CF is no longer enough;
 #   try round_to = 1, remove round_to, or relax actionability filters.
 
-bl_sparse <- bl_sparse_cf(bl_shap, round_to = NULL)
+bl_sparse <- bl_find_sparse_cf(bl_shap, round_to = NULL)
 
 # print() shows three prediction values to verify classification changes:
 #   Observed  — model score for the original data point
@@ -261,10 +264,11 @@ bl_sparse <- bl_sparse_cf(bl_shap, round_to = NULL)
 #   Sparse CF — model score for the sparse (zeroed) counterfactual
 print(bl_sparse)
 
-# Local biplot (biplotEZ-style) with both CFs overlaid.
+# Local biplot with both CFs overlaid (training points hidden by default).
 #   Grey cross   = full counterfactual (all variables changed)
 #   Green cross  = sparse CF (valid — crosses boundary)
 #   Yellow cross = sparse CF (invalid — does not cross boundary)
+# To also show training data: plot(bl_sparse, no_points = FALSE)
 # All plot(bl_local) parameters are supported via ...
 plot(bl_sparse)
 
@@ -276,7 +280,7 @@ plot(bl_sparse)
 # ===========================================================
 
 # ---- Step 14 (optional): Unconstrained local search -------------------
-bl_local_free <- bl_find_boundary_local(result, 
+bl_local_free <- bl_find_local_cf(bl_results, 
                                         tgt)
 print(bl_local_free)
 
@@ -284,7 +288,7 @@ plot(bl_local_free)
 
 bl_shap_free   <- bl_shapley(bl_local_free)
 print(bl_shap_free)
-bl_sparse_free <- bl_sparse_cf(bl_shap_free, round_to = NULL)
+bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
 print(bl_sparse_free)
 
 plot(bl_shap_free)
@@ -310,25 +314,25 @@ new_patient <- data.frame(
   Age                      = 50
 )
 
-tgt_ext <- bl_select_target(result, target = new_patient)
+tgt_ext <- bl_select_target(bl_results, target = new_patient)
 print(tgt_ext)
 
 # Highlight on main biplot
 plot_biplotEZ(
-  result,
+  bl_results,
   points       = test_pts,
   target_point = unlist(tgt_ext$x_obs),
   target_label = "new"
 )
 
 # Local search — no actionability constraints for this new patient
-bl_local_ext <- bl_find_boundary_local(result, tgt_ext)
+bl_local_ext <- bl_find_local_cf(bl_results, tgt_ext)
 print(bl_local_ext)
 
 plot(bl_local_ext)
 
 bl_shap_ext   <- bl_shapley(bl_local_ext)
-bl_sparse_ext <- bl_sparse_cf(bl_shap_ext)
+bl_sparse_ext <- bl_find_sparse_cf(bl_shap_ext)
 
 plot(bl_shap_ext)
 plot(bl_sparse_ext)
