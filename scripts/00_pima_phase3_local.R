@@ -44,7 +44,7 @@ bl_dat <- bl_prepare_data(
   data           = pima_raw,
   class_col      = "Outcome",
   target_class   = NULL,       # already 0/1
-  train_fraction = 0.8,
+  train_fraction = 1,
   seed           = 121L
 )
 
@@ -81,37 +81,19 @@ bl_mod <- bl_wrap_model(
 print(bl_mod)
 
 
-# ---- Step 4: CVA projection -------------------------------------------
-bl_proj <- bl_build_projection(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
-  method     = "CVA",
-  proj_dims  = c(1L, 2L),
-  bl_model   = bl_mod,
-  title      = "Pima diabetes — GAM, CVA biplot (Phase 3 local)"
-)
+# ---- Steps 4-6: Build projection, grid, and assemble ------------------
+# bl_build_result() wraps bl_build_projection() + bl_build_grid() +
+# bl_assemble() into a single call.
+#   - Pass bl_filt when outlier filtering was applied; bl_dat otherwise.
+#   - Set method = "PCA" for a variance-based projection.
+#   - Omit bl_mod to get an exploratory biplot without a prediction surface:
+#       bl_proj <- bl_build_result(bl_filt, method = "CVA"); plot(bl_proj)
 
-print(bl_proj)
-
-
-# ---- Step 5: Build prediction grid ------------------------------------
-bl_grid <- bl_build_grid(
-  train_data    = bl_filt$train_data,
-  bl_projection = bl_proj,
-  bl_model      = bl_mod,
-  m             = 200L
-)
-
-print(bl_grid)
-
-
-# ---- Step 6: Assemble result object -----------------------------------
-bl_results <- bl_assemble(
-  bl_data          = bl_dat,
-  bl_filter_result = bl_filt,
-  bl_model         = bl_mod,
-  bl_projection    = bl_proj,
-  bl_grid          = bl_grid
+bl_results <- bl_build_result(
+  bl_data = bl_filt,
+  bl_model = bl_mod,
+  method  = "CVA",
+  title   = "Pima diabetes — GAM, CVA biplot (Phase 3 local)"
 )
 
 print(bl_results)

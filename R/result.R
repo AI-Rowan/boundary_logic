@@ -31,13 +31,15 @@
 #' # Step 5: build prediction grid
 #' bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod)
 #'
-#' # Step 6: assemble
-#' result  <- bl_assemble(bl_dat, bl_filt, bl_mod, bl_proj, bl_grid)
+#' # Step 6: assemble — pass bl_filt if filtering was used, bl_dat otherwise
+#' bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
 #' ```
 #'
-#' @param bl_data           A `"bl_data"` object from `bl_prepare_data()`.
-#' @param bl_filter_result  A `"bl_filter_result"` from `bl_filter_outliers()`,
-#'   or `NULL` if no polygon filtering was applied.
+#' @param bl_data   Either a `"bl_data"` object from `bl_prepare_data()` (when
+#'   no polygon filtering was applied), or a `"bl_filter_result"` object from
+#'   `bl_filter_outliers()` (when filtering was applied). Pass whichever is the
+#'   last step in your data-preparation chain — the function detects the type
+#'   automatically and extracts the correct training and test data.
 #' @param bl_model          A `"bl_model"` from `bl_fit_model()`.
 #' @param bl_projection     A `"bl_projection"` from `bl_build_projection()`.
 #' @param bl_grid           A `"bl_grid"` from `bl_build_grid()`.
@@ -75,17 +77,14 @@
 #'
 #' @export
 bl_assemble <- function(bl_data,
-                        bl_filter_result = NULL,
                         bl_model,
                         bl_projection,
                         bl_grid) {
 
   # ---- Validate inputs --------------------------------------------------
-  if (!inherits(bl_data, "bl_data"))
-    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data().",
-         call. = FALSE)
-  if (!is.null(bl_filter_result) && !inherits(bl_filter_result, "bl_filter_result"))
-    stop("'bl_filter_result' must be a 'bl_filter_result' object or NULL.",
+  if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
+    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data() or ",
+         "a 'bl_filter_result' object from bl_filter_outliers().",
          call. = FALSE)
   if (!inherits(bl_model, "bl_model"))
     stop("'bl_model' must be a 'bl_model' object from bl_fit_model().",
@@ -98,14 +97,9 @@ bl_assemble <- function(bl_data,
          call. = FALSE)
 
   # ---- Resolve filtered vs unfiltered data ------------------------------
-  # train/test data: use filtered data when available
-  if (!is.null(bl_filter_result)) {
-    train_data <- bl_filter_result$train_data
-    test_data  <- bl_filter_result$test_data
-  } else {
-    train_data <- bl_data$train_data
-    test_data  <- bl_data$test_data
-  }
+  # Accept either bl_data or bl_filter_result — both carry train_data / test_data
+  train_data <- bl_data$train_data
+  test_data  <- bl_data$test_data
 
   # train_ranges: always from bl_projection (computed from whatever training
   # data was passed to bl_build_projection, filtered or unfiltered).
@@ -163,6 +157,142 @@ bl_assemble <- function(bl_data,
       created_at    = Sys.time()
     ),
     class = c("bl_result", "list")
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# bl_build_result(): single-call convenience wrapper for Steps 4-6
+# --------------------------------------------------------------------------
+
+#' Build and assemble a full boundary logic result in one step
+#'
+#' Convenience wrapper that combines [bl_build_projection()],
+#' [bl_build_grid()], and [bl_assemble()] into a single call. Accepts the
+#' output of either [bl_prepare_data()] or [bl_filter_outliers()] and
+#' extracts `train_data` and `var_names` automatically.
+#'
+#' When `bl_model` is `NULL` the grid and assembly steps are skipped. A
+#' [`bl_projection`][bl_build_projection()] object is returned instead of a
+#' `bl_result`, and [plot()] on that object renders the biplot without any
+#' prediction surface.
+#'
+#' **Assumption:** the projection matrix V is always built from the
+#' `train_data` slot of the supplied object. Building V from test data or any
+#' other source is not supported here — use [bl_build_projection()] directly
+#' if a non-standard data source is needed.
+#'
+#' For advanced control over any individual step use [bl_build_projection()],
+#' [bl_build_grid()], and [bl_assemble()] directly.
+#'
+#' @section Typical usage (with model):
+#' ```r
+#' # With outlier filtering:
+#' bl_results <- bl_build_result(bl_filt, bl_mod, method = "CVA")
+#'
+#' # Without filtering:
+#' bl_results <- bl_build_result(bl_dat, bl_mod, method = "PCA")
+#' ```
+#'
+#' @section Exploratory biplot (no model yet):
+#' ```r
+#' bl_proj <- bl_build_result(bl_filt, method = "PCA")
+#' plot(bl_proj)   # renders biplot coloured by true class (red/blue)
+#' ```
+#'
+#' @param bl_data       A `"bl_data"` object from [bl_prepare_data()] or a
+#'   `"bl_filter_result"` from [bl_filter_outliers()]. The function extracts
+#'   `train_data` and `var_names` from whichever is supplied.
+#' @param bl_model      A `"bl_model"` object from [bl_fit_model()] or
+#'   [bl_wrap_model()]. When `NULL` (default), only the projection is built
+#'   and a `bl_projection` object is returned.
+#' @param method        `"PCA"` or `"CVA"`. Default `"PCA"`.
+#' @param proj_dims     Integer vector of length 2; eigenvector indices for
+#'   the biplot plane. Default `c(1L, 2L)`.
+#' @param standardise   Logical; standardise features before PCA. Ignored for
+#'   CVA (always `FALSE`). Default `TRUE`.
+#' @param cva_classes   Optional factor of class labels (one per training
+#'   row) for CVA. When `NULL` and `bl_model` is supplied, four-class
+#'   confusion labels (TP/TN/FP/FN) are used. When `NULL` and no model is
+#'   supplied, binary `as.factor(train_data$class)` is used automatically.
+#' @param title         Character; biplot title. Default `""`.
+#' @param m             Integer; grid resolution (m x m). Default `200L`.
+#'   Ignored when `bl_model = NULL`.
+#' @param outlie        Numeric in (0, 1]; convex hull fraction for the
+#'   prediction grid. Default `1`. Ignored when `bl_model = NULL`.
+#' @param calc_hull     Logical; trim the prediction surface to the training
+#'   hull. Visual only — does not affect counterfactual search. Default
+#'   `TRUE`. Ignored when `bl_model = NULL`.
+#'
+#' @return A `"bl_result"` object (when `bl_model` is supplied) or a
+#'   `"bl_projection"` object (when `bl_model = NULL`).
+#'
+#' @seealso [bl_build_projection()], [bl_build_grid()], [bl_assemble()]
+#'
+#' @export
+bl_build_result <- function(bl_data,
+                             bl_model    = NULL,
+                             method      = "PCA",
+                             proj_dims   = c(1L, 2L),
+                             standardise = TRUE,
+                             cva_classes = NULL,
+                             title       = "",
+                             m           = 200L,
+                             outlie      = 1,
+                             calc_hull   = TRUE) {
+
+  # ---- Validate data source ---------------------------------------------
+  if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
+    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data() or ",
+         "a 'bl_filter_result' object from bl_filter_outliers().",
+         call. = FALSE)
+
+  # The projection matrix V is always built from the training data.
+  # bl_build_result() does not support building V from test data — use
+  # bl_build_projection() directly if a non-standard data source is needed.
+  train_data <- bl_data$train_data
+  var_names  <- bl_data$var_names
+
+  # ---- CVA without model: fall back to binary class labels --------------
+  if (method == "CVA" && is.null(bl_model) && is.null(cva_classes)) {
+    if ("class" %in% names(train_data)) {
+      cva_classes <- as.factor(train_data$class)
+    }
+  }
+
+  # ---- Step 4: build projection -----------------------------------------
+  bl_proj <- bl_build_projection(
+    train_data  = train_data,
+    var_names   = var_names,
+    method      = method,
+    standardise = standardise,
+    proj_dims   = proj_dims,
+    bl_model    = bl_model,
+    cva_classes = cva_classes,
+    title       = title
+  )
+
+  # ---- No model: return projection for exploratory plotting -------------
+  if (is.null(bl_model)) {
+    return(bl_proj)
+  }
+
+  # ---- Step 5: build prediction grid ------------------------------------
+  bl_grid <- bl_build_grid(
+    train_data    = train_data,
+    bl_projection = bl_proj,
+    bl_model      = bl_model,
+    m             = m,
+    outlie        = outlie,
+    calc_hull     = calc_hull
+  )
+
+  # ---- Step 6: assemble and return --------------------------------------
+  bl_assemble(
+    bl_data       = bl_data,
+    bl_model      = bl_model,
+    bl_projection = bl_proj,
+    bl_grid       = bl_grid
   )
 }
 
