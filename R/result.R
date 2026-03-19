@@ -101,6 +101,15 @@ bl_assemble <- function(bl_data,
   train_data <- bl_data$train_data
   test_data  <- bl_data$test_data
 
+  # When train_fraction = 1 (all data used for training), test_data is a
+  # 0-row data frame. Fall back to train_data so all downstream functions
+  # (bl_project_points, bl_predict, bl_find_boundary, etc.) work correctly.
+  if (!is.null(test_data) && nrow(test_data) == 0L) {
+    message("No test data found (train_fraction = 1?). ",
+            "bl_result$test_data set to train_data for downstream compatibility.")
+    test_data <- train_data
+  }
+
   # train_ranges: always from bl_projection (computed from whatever training
   # data was passed to bl_build_projection, filtered or unfiltered).
   train_ranges <- bl_projection$train_ranges

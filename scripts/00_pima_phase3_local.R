@@ -1,23 +1,29 @@
 ############################################################
-# Pima diabetes — Phase 3: Local counterfactual interpretation
+# Pima diabetes — Phases 1, 2 & 3: Global and local interpretation
 #
 # Dataset : scripts/pima diabetes.csv
 #           768 observations, 8 numeric features, binary outcome
 # Model   : GAM with spline terms (mgcv::gam)
 # Biplot  : CVA
 #
-# Purpose : Demonstrates the Phase 3 local interpretation workflow
-#           for a single target observation:
-#             1. Select a target data point
-#             2. Optionally constrain actionable variable directions
-#             3. Find the nearest decision boundary via biplot rotation
-#                (up to 10 eigenvector pairs tested)
-#             4. Shapley plot: per-variable contribution to the move
-#             5. Sparse counterfactual: only Supports variables changed
-#             6. Visualise the final result on the rotated local biplot
+# Purpose : Demonstrates the full boundary logic workflow:
 #
-#           Also shows how to pass an external (new) data point that is
-#           not in the training or test set.
+#           Phase 1 (Steps 1-6): data prep, model fitting, biplot
+#           Phase 2 (Steps 7-9): global interpretations
+#             7. Find nearest boundary point for each observation
+#             8. Distance-to-boundary plot (jitter + boxplot)
+#                  — also prints robustness score and per-variable totals
+#             9. Surrogate model
+#           Phase 3 (Steps 10-18): local interpretation of one target
+#            10. Inspect predictions — choose a target
+#            11. Select target
+#            12. Set actionability constraints
+#            13. Find local counterfactual via biplot rotation
+#            14. Local biplot plot
+#            15. Shapley contribution plot
+#            16. Sparse counterfactual
+#            17. (Optional) Unconstrained local search
+#            18. External data point
 #
 # Run interactively: Ctrl+Enter line by line
 ############################################################
@@ -29,7 +35,7 @@ library(dplyr)
 
 
 # ===========================================================
-# PHASE 1 — Build the pipeline (same setup as 00_pima_GAM_CVA.R)
+# PHASE 1 — Build the pipeline
 # ===========================================================
 
 # ---- Step 1: Prepare data ---------------------------------------------
@@ -38,13 +44,13 @@ pima_raw <- read.csv(
             "pima diabetes.csv")
 )
 
-pima_raw <- pima_raw %>% filter(Insulin > 0, SkinThickness > 0)
+pima_raw <- pima_raw %>% filter(Insulin > 0, SkinThickness > 0) %>% mutate(Age = 90 - Age)
 
 bl_dat <- bl_prepare_data(
   data           = pima_raw,
   class_col      = "Outcome",
   target_class   = NULL,       # already 0/1
-  train_fraction = 1,
+  train_fraction = 0.8,
   seed           = 121L
 )
 
@@ -54,19 +60,21 @@ print(bl_dat)
 # ---- Step 2: Filter outliers ------------------------------------------
 bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
-print(bl_filt)
+#print(bl_filt)
 
 
 # ---- Step 3: Fit GAM and wrap -----------------------------------------
 gam_formula <- class ~ s(Glucose) + s(BloodPressure) +
-  s(Pregnancies) + SkinThickness + Insulin +
-  s(BMI) + DiabetesPedigreeFunction + s(Age)
+  s(Pregnancies) + s(SkinThickness) + Insulin +
+  s(BMI) + DiabetesPedigreeFunction + Age
 
 custom_gam <- mgcv::gam(
   formula = gam_formula,
   data    = bl_filt$train_data,
   family  = binomial(link = "logit")
 )
+
+summary(custom_gam)
 
 bl_mod <- bl_wrap_model(
   model      = custom_gam,
@@ -88,38 +96,113 @@ print(bl_mod)
 #   - Set method = "PCA" for a variance-based projection.
 #   - Omit bl_mod to get an exploratory biplot without a prediction surface:
 #       bl_proj <- bl_build_result(bl_filt, method = "CVA"); plot(bl_proj)
+#
+# Note: train_fraction = 1 means all data is used for training (no holdout
+# test set). bl_results$test_data is automatically set to train_data so
+# that bl_predict(), bl_project_points(), and bl_find_boundary() all work.
 
 bl_results <- bl_build_result(
-  bl_data = bl_filt,
+  bl_data  = bl_filt,
   bl_model = bl_mod,
-  method  = "CVA",
-  title   = "Pima diabetes — GAM, CVA biplot (Phase 3 local)"
+  method   = "CVA",
+  title    = "Pima diabetes — GAM, CVA biplot"
 )
 
 print(bl_results)
 
-# Reference biplot — training data
+# Reference biplot — training data (confusion colours)
 plot_biplotEZ(bl_results)
 
-# Reference biplot — test data (four-colour confusion scheme)
+# Project all observations and overlay on the biplot
 test_pts <- bl_project_points(bl_results$test_data, bl_results)
 plot_biplotEZ(bl_results, points = test_pts)
+
+
+# ===========================================================
+# PHASE 2 — Global interpretations (population level)
+# ===========================================================
+
+# ---- Step 7: Find nearest boundary point for every observation --------
+# bl_find_boundary() searches the decision boundary contour for each row
+# of data and back-projects the nearest boundary point to X-space.
+#
+# Default data = bl_results$test_data (= train_data when train_fraction = 1).
+# To run on a custom subset use the tdp argument:
+#   bl_find_boundary(bl_results, tdp = 1:50)
+#
+# Key outputs:
+#   B_z    — Z-space boundary coordinate per observation
+#   B_x    — X-space counterfactual per observation
+#   dist_z — Euclidean distance to boundary in Z-space
+#   dist_x — Standardised distance to boundary in X-space
+
+bl_bnd <- bl_find_boundary(bl_results)
+print(bl_bnd)
+
+# Biplot with per-observation boundary arrows overlaid.
+# Each arrow runs from the observation to its nearest boundary point.
+plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+
+
+# ---- Step 8: Distance-to-boundary plot --------------------------------
+# Decomposes each observation's distance to the boundary into a signed,
+# standardised contribution per variable. Variables are sorted from least
+# to most important (bottom to top).
+#
+# Y-axis: "variable : total absolute standardised distance" (importance proxy)
+# X-axis: signed standardised distance — positive = observation is above
+#         the boundary in that variable's direction.
+#
+# Colour scheme (when true labels are present):
+#   TP = red, TN = blue, FP = purple, FN = orange
+#
+# Two chart types:
+#   plot(bl_bnd)                   — jitter (default; one point per obs)
+#   plot(bl_bnd, type = "boxplot") — box-and-whisker by confusion group
+
+plot(bl_bnd)
+plot(bl_bnd, type = "boxplot")
+# Both calls also print the overall robustness scalar and per-variable totals
+# to the console. Use bl_robustness(bl_bnd) to access these values
+# programmatically (e.g. to compare robustness across models).
+
+
+# ---- Step 9: Surrogate model -----------------------------------------
+# Assigns each observation a class based solely on its position in Z-space
+# relative to the hull-clipped surrogate contour lines. This provides a
+# purely spatial approximation of the classifier confined to the training hull.
+#
+# Default data = bl_results$train_data.
+# Observations that project outside the training hull receive surrogate_pred = NA.
+#
+# Accuracy reported against:
+#   accuracy_vs_model  — agreement with the fitted model's predictions
+#   accuracy_vs_labels — accuracy vs true class labels (if available)
+#
+# plot() shows the prediction grid clipped to the hull, with observations
+# coloured by their surrogate-assigned class (red = 1, blue = 0).
+
+bl_surr <- bl_surrogate(bl_results)
+print(bl_surr)
+plot(bl_surr)
 
 
 # ===========================================================
 # PHASE 3 — Local interpretation of a single target point
 # ===========================================================
 
-# ---- Step 7: Inspect test predictions to choose a target --------------
+# ---- Step 10: Inspect predictions to choose a target ------------------
 # bl_predict() scores every row and returns a tidy data frame with
 # row, pred_prob, pred_class, true_class, confusion, and all features.
-# Use it to identify a suitable class-1 observation (diabetic) to explain.
+# Default data = bl_results$test_data.
+# To score training data explicitly:
+#   bl_predict(bl_results, data = bl_results$train_data)
 
 pred_summary <- bl_predict(bl_results)
 print(pred_summary)
 
-# Choose the target index — a class-1 observation with a probability
-# well above 0.5 gives a clear and illustrative counterfactual.
+# Choose a class-1 observation with a probability well above 0.5 —
+# this gives a clear, illustrative counterfactual.
 tdp <- which(pred_summary$true_class == 1 &
                pred_summary$pred_prob >= 0.70)[1]
 
@@ -128,7 +211,7 @@ cat(sprintf("\nSelected target: row %d  |  pred = %.3f  |  true class = %d\n",
             pred_summary$true_class[tdp]))
 
 
-# ---- Step 8: Select the target ----------------------------------------
+# ---- Step 11: Select the target ---------------------------------------
 # bl_select_target() wraps the observation into a bl_target object,
 # projecting it into Z-space and scoring it through the model.
 # Default data = bl_results$test_data.
@@ -145,7 +228,7 @@ plot_biplotEZ(
 )
 
 
-# ---- Step 9: Set actionability constraints ----------------------------
+# ---- Step 12: Set actionability constraints ---------------------------
 # Specify which variable directions are clinically plausible for this
 # patient. Omit set_filters() entirely if no constraints are needed.
 #
@@ -159,15 +242,15 @@ plot_biplotEZ(
 
 flt <- set_filters(
   tgt,
-  Glucose = "decrease",   # reducing Glucose is the clinical lever
-  Age     = "fixed",       # Age is not actionable
-  Pregnancies     = "fixed"       # pregnancies is not actionable
+  Glucose     = "decrease",  # reducing Glucose is the clinical lever
+  Age         = "fixed",     # Age is not actionable
+  Pregnancies = "fixed"      # Pregnancies is not actionable
 )
 
 print(flt)
 
 
-# ---- Step 10: Find local counterfactual via biplot rotation -----------
+# ---- Step 13: Find local counterfactual via biplot rotation ----------
 # For each eigenvector pair (1,2), (1,3), (2,3), (1,4), ...:
 #   - Rotates the biplot so the target lies on the projection plane
 #   - Builds a local prediction grid in the rotated Z-space
@@ -186,7 +269,7 @@ bl_local <- bl_find_local_cf(
 print(bl_local)
 
 
-# ---- Step 11: Local biplot plot ---------------------------------------
+# ---- Step 14: Local biplot plot ---------------------------------------
 # Rendered using the biplotEZ pipeline (same style as plot_biplotEZ).
 # The biplotEZ object is patched with the rotated loading matrix (Vr_rot)
 # and rotated training coordinates (Z_train_rot) for the best pair.
@@ -199,9 +282,6 @@ print(bl_local)
 #   plot(bl_local, no_points = FALSE)
 #   Training colours: TP=red, TN=blue, FP=purple, FN=orange
 #
-# To show test or holdout data, use the global biplot instead:
-#   plot_biplotEZ(bl_results, points = test_pts)  # test_pts from bl_project_points()
-#
 # Supported parameters (same as plot_biplotEZ):
 #   no_grid, no_points, no_contour, cex_z, label_dir, tick_label_cex,
 #   ticks_v, which, X_names, label_offset_var, label_offset_dist,
@@ -210,7 +290,7 @@ print(bl_local)
 plot(bl_local)
 
 
-# ---- Step 12: Shapley contribution plot --------------------------------
+# ---- Step 15: Shapley contribution plot --------------------------------
 # Decomposes the path from target to counterfactual into per-variable
 # contributions using the exact Shapley formula (p <= 14 variables).
 #
@@ -227,15 +307,18 @@ print(bl_shap)
 plot(bl_shap)
 
 
-# ---- Step 13: Sparse counterfactual -----------------------------------
+# ---- Step 16: Sparse counterfactual -----------------------------------
 # Automatically zeroes out Contradicts variables — they revert to their
-# observed values. Only Supports variables take their counterfactual
-# value. round_to = 0 rounds remaining changes to whole numbers.
-# Variables constrained as "fixed" in set_filters() always revert to
-# their observed value in the sparse CF, regardless of Shapley class.
+# observed values. Only Supports variables take their counterfactual value.
+# Variables constrained as "fixed" in set_filters() always revert to their
+# observed value in the sparse CF, regardless of Shapley class.
+#
+# round_to = NULL  keeps exact CF values
+# round_to = 0.5   rounds to the nearest 0.5 (recommended default)
+# round_to = 1     rounds to nearest whole number
 #
 # solution_valid = TRUE  means the sparse CF still crosses the boundary.
-# solution_valid = FALSE means the rounded/zeroed CF is no longer enough;
+# solution_valid = FALSE means the zeroed/rounded CF is not enough;
 #   try round_to = 1, remove round_to, or relax actionability filters.
 
 bl_sparse <- bl_find_sparse_cf(bl_shap, round_to = NULL)
@@ -261,9 +344,8 @@ plot(bl_sparse)
 # bl_local$solution_found == FALSE to confirm a boundary exists.
 # ===========================================================
 
-# ---- Step 14 (optional): Unconstrained local search -------------------
-bl_local_free <- bl_find_local_cf(bl_results, 
-                                        tgt)
+# ---- Step 17 (optional): Unconstrained local search ------------------
+bl_local_free <- bl_find_local_cf(bl_results, tgt)
 print(bl_local_free)
 
 plot(bl_local_free)
@@ -284,7 +366,7 @@ plot(bl_sparse_free)
 # No class column is required.
 # ===========================================================
 
-# ---- Step 15: External patient ----------------------------------------
+# ---- Step 18: External patient ----------------------------------------
 new_patient <- data.frame(
   Pregnancies              = 2,
   Glucose                  = 148,
