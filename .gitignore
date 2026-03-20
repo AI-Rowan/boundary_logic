@@ -2,8 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
-.docx
-.txt
+*.docx
+*.txt
 
 # Optional: ignore outputs if you don't want generated files tracked
 outputs/
