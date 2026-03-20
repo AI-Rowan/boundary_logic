@@ -51,6 +51,7 @@
 #'   Default `0.5`.
 #' @param label_dir        Character; biplotEZ axis label direction.
 #'   `"Hor"` (horizontal, default) or `"Rad"` (radial).
+#' @param label_cex        Numeric; variable name (axis label) size. Default `1`.
 #' @param tick_label_cex   Numeric; axis tick label size. Default `0.6`.
 #' @param ticks_v          Integer; number of ticks per variable axis.
 #'   Default `1L`.
@@ -120,6 +121,7 @@ plot_biplotEZ <- function(bl_result,
                            new_title         = NA,
                            cex_z             = 0.5,
                            label_dir         = "Hor",
+                           label_cex         = 1,
                            tick_label_cex    = 0.6,
                            ticks_v           = 1L,
                            which             = NULL,
@@ -223,6 +225,7 @@ plot_biplotEZ <- function(bl_result,
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey",
                    label.dir      = label_dir,
+                   label.cex      = label_cex,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
@@ -284,6 +287,7 @@ plot_biplotEZ <- function(bl_result,
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
+                   label.cex      = label_cex,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,

@@ -220,7 +220,7 @@ bl_predict <- function(bl_result, data = NULL) {
 
   out <- data.frame(
     row        = seq_len(nrow(data)),
-    pred_prob  = round(pts$pred_prob, 4L),
+    pred_prob  = round(pts$pred_prob, 3L),
     pred_class = as.integer(pts$pred_class),
     stringsAsFactors = FALSE
   )

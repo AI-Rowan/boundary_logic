@@ -55,7 +55,7 @@ bl_fit_model <- function(train_data,
                          var_names,
                          model_type    = "GLM",
                          cutoff        = 0.5,
-                         rounding      = 2L,
+                         rounding      = 3L,
                          model_params  = list()) {
 
   # ---- Validation -------------------------------------------------------
@@ -195,7 +195,7 @@ bl_wrap_model <- function(model,
                            predict_fn  = NULL,
                            train_data  = NULL,
                            cutoff      = 0.5,
-                           rounding    = 2L) {
+                           rounding    = 3L) {
 
   stop_if_not_character(var_names, "var_names")
   stop_if_not_scalar_numeric(cutoff, "cutoff")

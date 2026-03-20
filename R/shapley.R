@@ -217,7 +217,7 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
   df$varnames   <- factor(df$varnames, levels = df$varnames)
   df$varnames_p <- paste0(
     df$varnames, ": ",
-    round(df$pred_data, 2), " -> ", round(df$data_to_boundary, 2)
+    round(df$pred_data, 3), " -> ", round(df$data_to_boundary, 3)
   )
   df$varnames_p <- factor(df$varnames_p, levels = df$varnames_p)
 

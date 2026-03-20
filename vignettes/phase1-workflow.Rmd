@@ -1,9 +1,9 @@
 ---
-title: "Phase 1: Setting Up a Boundary Logic Analysis"
+title: "Phases 1–3: Boundary Logic Analysis Workflow"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteEncoding{UTF-8}
-  %\VignetteIndexEntry{Phase 1: Setting Up a Boundary Logic Analysis}
+  %\VignetteIndexEntry{Phases 1–3: Boundary Logic Analysis Workflow}
   %\VignetteEngine{knitr::rmarkdown}
 editor_options:
   markdown:
@@ -22,23 +22,27 @@ knitr::opts_chunk$set(
 ## Overview
 
 **boundarylogic** provides a biplot-based post hoc explanation framework
-for binary classification models. The workflow has two phases:
+for binary classification models. The workflow has three phases:
 
--   **Phase 1 (this vignette):** Prepare data, fit a model, project to a
-    2D biplot space, build a prediction grid that approximates the
-    model's decision boundary, and visualise the result.
--   **Phase 2 (forthcoming):** Use the Phase 1 result to perform local
-    and global model interpretability analyses — counterfactual search,
-    Shapley attribution, and variable importance.
+-   **Phase 1:** Prepare data, fit a model, project to a 2D biplot
+    space, build a prediction grid that approximates the decision
+    boundary, and visualise the result.
+-   **Phase 2:** Global interpretations — find counterfactuals for a set
+    of observations, quantify variable importance, and fit a surrogate
+    model to explain biplot regions.
+-   **Phase 3:** Local interpretation of a single observation — find the
+    nearest counterfactual via biplot rotation, decompose the move using
+    Shapley values, and produce a sparse counterfactual that changes as
+    few variables as possible.
 
 All Phase 1 artifacts are stored in a single `bl_result` object that
-acts as the reproducible anchor for Phase 2.
+acts as the reproducible anchor for Phases 2 and 3.
 
 ------------------------------------------------------------------------
 
 ## Project structure and file layout
 
-```         
+```
 boundary_logic/               ← R project root (open .Rproj in RStudio)
 │
 ├── R/                        ← Package source (do not edit directly)
@@ -53,7 +57,12 @@ boundary_logic/               ← R project root (open .Rproj in RStudio)
 │   ├── projection.R          ← bl_build_projection()
 │   ├── biplot_grid.R         ← bl_build_grid()
 │   ├── plot_biplot.R         ← plot_biplotEZ()
-│   └── result.R              ← bl_assemble(), print, summary
+│   ├── result.R              ← bl_build_result(), bl_assemble(), print, summary
+│   ├── boundary.R            ← bl_find_boundary(), bl_robustness()
+│   ├── surrogate.R           ← bl_surrogate()
+│   ├── project_points.R      ← bl_project_points(), bl_predict()
+│   ├── local_cf.R            ← bl_select_target(), set_filters(), bl_find_local_cf()
+│   └── shapley.R             ← bl_shapley(), bl_find_sparse_cf()
 │
 ├── tests/
 │   ├── testthat.R            ← Test runner entry point
@@ -101,10 +110,10 @@ makes all exported functions available immediately — including
 
 ## Phase 1 workflow
 
-Phase 1 has seven steps. At each step there is a **standard route** and
+Phase 1 has six steps. At each step there is a **standard route** and
 one or more **alternative routes** depending on your starting point.
 
-```         
+```
  DATA ENTRY
  ┌─────────────────────────────────────────────────────────┐
  │ Option A  bl_prepare_data()   raw data frame → bl_data  │
@@ -122,13 +131,12 @@ one or more **alternative routes** depending on your starting point.
  │ Option B  bl_wrap_model()   your own model / custom predict function │
  └──────────────────────────────────────────────────────────────────────┘
                           ↓
-              bl_build_projection() (step 4)
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │ QUICK ROUTE  bl_build_result()   Steps 4–6 combined                  │
+ │ DETAILED     bl_build_projection() → bl_build_grid() → bl_assemble() │
+ └──────────────────────────────────────────────────────────────────────┘
                           ↓
-                  bl_build_grid() (step 5)
-                          ↓
-                   bl_assemble()  →  bl_result (step 6)
-                          ↓
-                  plot_biplotEZ() (step 7)
+                  plot_biplotEZ()
 ```
 
 ------------------------------------------------------------------------
@@ -210,7 +218,7 @@ skip it if you want to use all training data.
 ```{r step2}
 bl_filt <- bl_filter_outliers(
   bl_data       = bl_dat,
-  hull_fraction = 0.91,   # retain innermost 90% of points
+  hull_fraction = 0.91,
   verbose       = TRUE
 )
 
@@ -342,21 +350,85 @@ bl_mod <- bl_wrap_model(
 ```
 
 The returned `bl_model` object is fully compatible with
-`bl_build_grid()` and `bl_assemble()`.
+`bl_build_result()` and `bl_assemble()`.
 
 ------------------------------------------------------------------------
 
-### Step 4 — Build the projection
+### Steps 4–6 — Build and assemble
 
-`bl_build_projection()` computes the loading matrix V (and its inverse
-tV) that maps observations from the p-dimensional feature space to the
-2D biplot Z-space.
+#### Quick route: `bl_build_result()`
 
-```{r step4}
+`bl_build_result()` combines the projection, grid, and assembly steps
+into a single call. Pass the output of `bl_filter_outliers()` (or
+`bl_prepare_data()` if no filtering was applied) and the fitted model;
+the function handles everything else.
+
+> **Note:** `bl_build_result()` always builds the projection matrix V
+> from the training data of the supplied object. If you need to build V
+> from a non-standard data source, use the individual functions
+> described in the *Detailed route* section below.
+
+```{r steps4-6}
+bl_results <- bl_build_result(
+  bl_data  = bl_filt,     # pass bl_dat here if Step 2 was skipped
+  bl_model = bl_mod,
+  method   = "PCA",       # or "CVA" — see note below
+  m        = 100L         # grid resolution; use 200L for final analysis
+)
+
+print(bl_results)
+```
+
+Use `summary()` for a more detailed view including the confusion matrix
+and contour statistics:
+
+```{r steps4-6-summary}
+summary(bl_results)
+```
+
+**PCA vs CVA:**
+
+-   **PCA** — separates observations by overall variance. Use this as
+    the default starting point.
+-   **CVA** — maximises between-class separation relative to
+    within-class spread. Supply `bl_model` to use four-class confusion
+    labels (TP/TN/FP/FN) automatically:
+
+``` r
+# CVA — confusion labels derived from bl_mod automatically
+bl_results <- bl_build_result(
+  bl_data  = bl_filt,
+  bl_model = bl_mod,
+  method   = "CVA"
+)
+```
+
+**Exploratory biplot (no model yet):**
+
+Omit `bl_model` to get a quick biplot of the data before fitting.
+`bl_build_result()` returns a `bl_projection` object that can be
+plotted directly:
+
+``` r
+bl_proj_explore <- bl_build_result(bl_filt, method = "PCA")
+plot(bl_proj_explore)   # coloured by true class (red = class 1, blue = class 0)
+```
+
+#### Detailed route: individual functions
+
+For full control over each step, call the three functions separately.
+This is useful when you want to inspect intermediate outputs or tune
+grid settings precisely.
+
+**Step 4 — `bl_build_projection()`** computes the loading matrix V (and
+its inverse tV) that maps observations from the p-dimensional feature
+space to the 2D biplot Z-space.
+
+``` r
 bl_proj <- bl_build_projection(
   train_data  = bl_filt$train_data,
   var_names   = bl_filt$var_names,
-  method      = "PCA",   # or "CVA"
+  method      = "PCA",
   standardise = TRUE,
   proj_dims   = c(1L, 2L)
 )
@@ -364,60 +436,16 @@ bl_proj <- bl_build_projection(
 print(bl_proj)
 ```
 
-**PCA vs CVA:**
-
--   **PCA** — works for any data; separates observations by overall
-    variance. Use this as the default starting point.
--   **CVA** — maximises between-class separation relative to
-    within-class spread. CVA always forces `standardise = FALSE`
-    internally. CVA technically requires at least 3 class levels; by
-    supplying `bl_model`, the four confusion categories (TP, TN, FP, FN)
-    are used as labels (4 levels), which satisfies this requirement.
+**Step 5 — `bl_build_grid()`** creates an m × m regular grid in
+Z-space, back-projects each point to X-space, scores every grid point
+through the model, and extracts decision boundary contour lines.
 
 ``` r
-# CVA — supply bl_mod so confusion labels (TP/TN/FP/FN) are used automatically
-bl_proj_cva <- bl_build_projection(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
-  method     = "CVA",
-  proj_dims  = c(1L, 2L),
-  bl_model   = bl_mod          # derives TP/TN/FP/FN class labels internally
-)
-
-# Alternative when no model is available: pass binary class directly (2 levels)
-bl_proj_cva2 <- bl_build_projection(
-  train_data  = bl_filt$train_data,
-  var_names   = bl_filt$var_names,
-  method      = "CVA",
-  proj_dims   = c(1L, 2L),
-  cva_classes = as.factor(bl_filt$train_data$class)   # 2 levels only
-)
-```
-
-**What to check:**
-
--   `V matrix` — should be p × p (4 × 4 for iris).
--   `Standardise` — for CVA this will say `FALSE (forced by CVA)`.
-
-------------------------------------------------------------------------
-
-### Step 5 — Build the prediction grid
-
-`bl_build_grid()` creates an m × m regular grid of points in the
-Z-space, back-projects each point to X-space, scores each grid point
-through the fitted model, and extracts contour lines that bracket the
-decision boundary.
-
-```{r step5}
 bl_grid <- bl_build_grid(
-  train_data      = bl_filt$train_data,
-  bl_projection   = bl_proj,
-  bl_model        = bl_mod,
-  m               = 100L,   # 100 x 100 grid; use 200 for final analysis
-  cutoff          = 0.5,
-  b_margin        = NULL,   # auto: 1 / 10^rounding = 0.01
-  calc_hull       = FALSE
- 
+  train_data    = bl_filt$train_data,
+  bl_projection = bl_proj,
+  bl_model      = bl_mod,
+  m             = 100L    # use 200L for final analysis
 )
 
 print(bl_grid)
@@ -438,36 +466,23 @@ print(bl_grid)
 -   `Contour lines` — should be ≥ 1; if 0, the model may predict a
     single class across the entire biplot plane.
 
-------------------------------------------------------------------------
+**Step 6 — `bl_assemble()`** collects all Phase 1 outputs into a single
+`bl_result` object.
 
-### Step 6 — Assemble the result
-
-`bl_assemble()` collects all Phase 1 outputs into a single `bl_result`
-object. This is the object you save and pass to Phase 2 functions and to
-`plot_biplotEZ()`.
-
-```{r step6}
-result <- bl_assemble(
-  bl_data          = bl_dat,
-  bl_filter_result = bl_filt,   # pass NULL if Step 2 was skipped
-  bl_model         = bl_mod,
-  bl_projection    = bl_proj,
-  bl_grid          = bl_grid
+``` r
+bl_results <- bl_assemble(
+  bl_data       = bl_filt,   # pass bl_dat if Step 2 was skipped
+  bl_model      = bl_mod,
+  bl_projection = bl_proj,
+  bl_grid       = bl_grid
 )
 
-print(result)
-```
-
-Use `summary()` for a more detailed view including the confusion matrix
-and contour statistics:
-
-```{r step6-summary}
-summary(result)
+print(bl_results)
 ```
 
 ------------------------------------------------------------------------
 
-### Step 7 — Visualise: `plot_biplotEZ()`
+### Visualise: `plot_biplotEZ()`
 
 `plot_biplotEZ()` takes the assembled `bl_result` and draws a full
 biplot visualisation showing:
@@ -481,7 +496,18 @@ biplot visualisation showing:
 -   **Decision boundary contour lines.**
 
 ```{r step7}
-plot_biplotEZ(result)
+plot_biplotEZ(bl_results)
+```
+
+#### Plotting test data
+
+`bl_project_points()` projects any data frame into the Z-space of
+`bl_results`. Pass the result to `plot_biplotEZ()` via the `points`
+argument to overlay the test set on the biplot:
+
+```{r step7-test}
+test_pts <- bl_project_points(bl_results$test_data, bl_results)
+plot_biplotEZ(bl_results, points = test_pts)
 ```
 
 #### Highlighting a target observation
@@ -493,13 +519,12 @@ Supply `target_label` to display a number or identifier inside the
 marker:
 
 ``` r
-# A single observation from the test set
-target <- unlist(result$test_data[1, result$var_names])
+target <- unlist(bl_results$test_data[1, bl_results$var_names])
 
 plot_biplotEZ(
-  result,
+  bl_results,
   target_point = target,
-  target_label = 1          # displayed inside the yellow marker
+  target_label = 1
 )
 ```
 
@@ -508,26 +533,297 @@ plot_biplotEZ(
 All visual elements can be tuned:
 
 ``` r
-plot_biplotEZ(      result,
-  no_grid          = FALSE,        # set TRUE to hide the coloured grid
-  no_points        = FALSE,        # set TRUE to hide training points
-  no_contour       = FALSE,        # set TRUE to hide the boundary line
-  new_title        = "My GLM Boundary",
-  cex_z            = 0.8,          # larger training points
-  label_dir        = "Hor",        # axis label direction: "Hor" or "Rad"
-  tick_label_cex   = 0.5,          # axis tick label size
-  ticks_v          = 2L,           # ticks per variable axis
-  label_offset_var = c(1L,3),      # shift label of variable 1 and 3 outward
-  label_offset_dist = c(0.8,1.2),
-  contour_col      = "darkgreen",  # boundary colour
-  contour_lwd      = 2.0,          # boundary line width
-  contour_lty      = 2L            # dashed boundary
+plot_biplotEZ(
+  bl_results,
+  no_grid           = FALSE,        # set TRUE to hide the coloured grid
+  no_points         = FALSE,        # set TRUE to hide training points
+  no_contour        = FALSE,        # set TRUE to hide the boundary line
+  new_title         = "My GLM Boundary",
+  cex_z             = 0.8,
+  label_dir         = "Hor",        # "Hor" or "Rad"
+  tick_label_cex    = 0.5,
+  ticks_v           = 2L,
+  label_offset_var  = c(1L, 3L),
+  label_offset_dist = c(0.8, 1.2),
+  contour_col       = "darkgreen",
+  contour_lwd       = 2.0,
+  contour_lty       = 2L
 )
 ```
 
 ------------------------------------------------------------------------
 
-## Separate workflow: bring your own data and model
+## Phase 2: Global interpretation
+
+Phase 2 uses the `bl_result` object from Phase 1 to perform
+interpretability analyses across a set of observations. All Phase 2
+functions take `bl_results` as their first argument.
+
+------------------------------------------------------------------------
+
+### Global counterfactual search: `bl_find_boundary()`
+
+`bl_find_boundary()` finds the nearest decision boundary point for each
+observation in a dataset. For each row it searches the pre-computed
+boundary contour in Z-space, inverse-projects the closest boundary point
+back to X-space, and returns the change required in each variable to
+cross the boundary.
+
+The search always constrains counterfactuals to the training data range
+(`train_ranges`) — observations outside the training feature envelope
+are not considered feasible counterfactuals.
+
+``` r
+# Find boundary for all test observations
+bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data)
+print(bl_bnd)
+
+# Overlay counterfactuals on the biplot
+plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+```
+
+The `data` argument accepts any labelled data frame with the same
+feature columns as the training data. To search training observations
+instead:
+
+``` r
+bl_bnd_train <- bl_find_boundary(bl_results, data = bl_results$train_data)
+```
+
+`plot.bl_boundary()` shows per-variable distances between each
+observation and its counterfactual:
+
+``` r
+plot(bl_bnd)               # jitter plot (default)
+plot(bl_bnd, type = "box") # boxplot
+```
+
+------------------------------------------------------------------------
+
+### Variable importance: `bl_robustness()`
+
+`bl_robustness()` quantifies how much each variable contributes to the
+distance between an observation and its counterfactual. Variables with
+larger contributions are more important for crossing the boundary.
+
+``` r
+bl_rob <- bl_robustness(bl_bnd)
+print(bl_rob)
+```
+
+------------------------------------------------------------------------
+
+### Surrogate model: `bl_surrogate()`
+
+`bl_surrogate()` assigns each training observation to a biplot region
+(based on its position relative to the decision boundary contours) and
+fits a simple rule-based surrogate model that predicts class from region
+membership. This gives an interpretable, region-level explanation of how
+the classifier partitions the feature space.
+
+Observations that fall outside the training convex hull receive
+`surrogate_pred = NA` and are excluded from the surrogate accuracy
+calculation.
+
+``` r
+bl_sur <- bl_surrogate(bl_results)
+print(bl_sur)
+
+# Visualise the surrogate regions
+plot(bl_sur)
+```
+
+------------------------------------------------------------------------
+
+## Phase 3: Local interpretation
+
+Phase 3 explains a single target observation by finding the nearest
+decision boundary through rotation of the biplot plane, decomposing the
+required variable changes using Shapley values, and producing a sparse
+counterfactual.
+
+------------------------------------------------------------------------
+
+### Inspect predictions: `bl_predict()`
+
+`bl_predict()` scores every row of a dataset and returns a tidy data
+frame with `row`, `pred_prob`, `pred_class`, `true_class`, `confusion`,
+and all feature columns. Use it to identify a suitable target
+observation.
+
+``` r
+pred_summary <- bl_predict(bl_results)
+print(pred_summary)
+
+# Select a class-1 observation with a probability well above 0.5
+tdp <- which(pred_summary$true_class == 1 &
+               pred_summary$pred_prob >= 0.60)[1]
+
+cat(sprintf("Target: row %d  |  pred = %.3f  |  true class = %d\n",
+            tdp, pred_summary$pred_prob[tdp],
+            pred_summary$true_class[tdp]))
+```
+
+------------------------------------------------------------------------
+
+### Select a target: `bl_select_target()`
+
+`bl_select_target()` wraps an observation into a `bl_target` object,
+projects it to Z-space, and scores it through the model. The default
+data source is `bl_results$test_data`; pass a row index or a single-row
+data frame as `target`.
+
+``` r
+# From test data by row index
+tgt <- bl_select_target(bl_results, target = tdp)
+print(tgt)
+
+# Highlight on the biplot
+plot_biplotEZ(
+  bl_results,
+  points       = test_pts,
+  target_point = unlist(tgt$x_obs),
+  target_label = tdp
+)
+
+# External observation (not in train/test)
+new_obs <- data.frame(
+  Sepal.Length = 5.8, Sepal.Width = 2.7,
+  Petal.Length = 4.1, Petal.Width = 1.0
+)
+tgt_ext <- bl_select_target(bl_results, target = new_obs)
+print(tgt_ext)
+```
+
+------------------------------------------------------------------------
+
+### Set actionability filters (optional): `set_filters()`
+
+`set_filters()` constrains the counterfactual search to clinically or
+practically plausible variable directions. This step is optional — omit
+it if no constraints are needed.
+
+Valid constraint types:
+
+-   `"decrease"` — counterfactual value must be ≤ observed.
+-   `"increase"` — counterfactual value must be ≥ observed.
+-   `"fixed"` — search allows ±0.5 of the observed value; always
+    reverts to the original observed value in the sparse counterfactual.
+-   `c(min, max)` — counterfactual must lie within this absolute range.
+
+``` r
+flt <- set_filters(
+  tgt,
+  Petal.Length = "decrease",   # only consider reductions
+  Sepal.Length = "fixed"       # treat as non-actionable
+)
+
+print(flt)
+```
+
+------------------------------------------------------------------------
+
+### Find local counterfactual: `bl_find_local_cf()`
+
+`bl_find_local_cf()` searches for the nearest decision boundary point
+relative to the target observation by testing up to `max_pairs`
+eigenvector pairs. For each pair it:
+
+1.  Rotates the biplot so the target lies on the projection plane.
+2.  Builds a local prediction grid in the rotated Z-space.
+3.  Applies `train_ranges` (feasibility) and `set_filters`
+    (actionability, if supplied).
+4.  Finds the nearest opposing-class boundary point.
+
+The pair with the overall minimum Z-space distance is selected.
+
+> **Note:** the Z-space convex hull polygon is not applied during the
+> local search — rotation invalidates the original polygon coordinates.
+> Only `train_ranges` and `set_filters` constrain the search.
+
+``` r
+bl_local <- bl_find_local_cf(
+  bl_result   = bl_results,
+  bl_target   = tgt,
+  set_filters = flt    # omit for unconstrained search
+)
+
+print(bl_local)
+
+# Local biplot: target (filled circle) + counterfactual (grey cross)
+# Default: training points hidden. Pass no_points = FALSE to show them.
+plot(bl_local)
+plot(bl_local, no_points = FALSE)   # also show training data
+```
+
+------------------------------------------------------------------------
+
+### Shapley attribution: `bl_shapley()`
+
+`bl_shapley()` decomposes the path from the target to the
+counterfactual into per-variable contributions using the exact Shapley
+formula (for p ≤ 14 variables).
+
+Each variable is classified as:
+
+-   **Supports** (dark blue) — moving in this direction helps cross the
+    boundary.
+-   **Contradicts** (grey) — moving in this direction works against
+    crossing the boundary.
+
+The Y-axis labels show `variable: observed → counterfactual value`.
+
+``` r
+bl_shap <- bl_shapley(bl_local)
+print(bl_shap)
+
+plot(bl_shap)
+```
+
+------------------------------------------------------------------------
+
+### Sparse counterfactual: `bl_find_sparse_cf()`
+
+`bl_find_sparse_cf()` creates a parsimonious counterfactual by:
+
+1.  Reverting all **Contradicts** variables to their observed values.
+2.  Reverting all variables marked `"fixed"` in `set_filters()` to
+    their observed values.
+3.  Optionally rounding **Supports** variable changes to a specified
+    resolution (`round_to`).
+4.  Re-scoring the result through the model.
+
+`solution_valid = TRUE` means the sparse counterfactual still crosses
+the decision boundary. If `FALSE`, try relaxing actionability filters or
+increasing `round_to`.
+
+``` r
+bl_sparse <- bl_find_sparse_cf(bl_shap, round_to = NULL)
+
+# print() shows three prediction values to verify the class flip:
+#   Observed — model score for the original data point
+#   Full CF  — model score at the full counterfactual
+#   Sparse CF — model score for the sparse (zeroed) counterfactual
+print(bl_sparse)
+
+# Local biplot with both CFs overlaid:
+#   Grey cross   = full counterfactual (all variables changed)
+#   Green cross  = sparse CF (valid — crosses boundary)
+#   Yellow cross = sparse CF (invalid — does not cross boundary)
+# To also show training data: plot(bl_sparse, no_points = FALSE)
+plot(bl_sparse)
+```
+
+`round_to` is resolution-based (rounds to the nearest multiple):
+
+``` r
+bl_find_sparse_cf(bl_shap, round_to = 0.5)   # nearest 0.5
+bl_find_sparse_cf(bl_shap, round_to = 1)      # nearest integer
+```
+
+------------------------------------------------------------------------
+
+## Alternative workflow: bring your own data and model
 
 The following example shows the complete alternative workflow for a user
 who already has pre-split, pre-coded data and wants to fit their own
@@ -543,15 +839,14 @@ bl_dat <- bl_wrap_data(
   target_class = "versicolor"
 )
 
-# Step 2: filter outliers (no model fitting at this stage)
+# Step 2: filter outliers
 bl_filt <- bl_filter_outliers(
   bl_data       = bl_dat,
   hull_fraction = 0.9,
   verbose       = TRUE
 )
-# Output: Hull fraction: 0.90 | Retained: 108 (90.0%) | Removed: 12 (10.0%)
 
-# Step 3a: fit your own model on the filtered training data
+# Step 3: fit your own model on the filtered training data
 my_svm <- e1071::svm(
   class ~ .,
   data        = bl_filt$train_data,
@@ -562,7 +857,7 @@ my_svm <- e1071::svm(
   gamma       = 0.5
 )
 
-# Step 3b: wrap it as a bl_model (include train_data for accuracy/Gini)
+# Wrap it as a bl_model
 bl_mod <- bl_wrap_model(
   model      = my_svm,
   model_type = "SVM",
@@ -571,20 +866,11 @@ bl_mod <- bl_wrap_model(
 )
 print(bl_mod)
 
-# Steps 4–6: identical to the standard workflow
-bl_proj <- bl_build_projection(bl_filt$train_data, bl_filt$var_names,
-                                method = "PCA")
+# Steps 4–6: single call
+bl_results <- bl_build_result(bl_filt, bl_mod, method = "PCA")
 
-bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod, m = 100L)
-
-result  <- bl_assemble(bl_dat,
-                       bl_filter_result = bl_filt,
-                       bl_model         = bl_mod,
-                       bl_projection    = bl_proj,
-                       bl_grid          = bl_grid)
-
-# Step 7: visualise
-plot_biplotEZ(result, new_title = "Custom SVM Boundary")
+# Visualise
+plot_biplotEZ(bl_results, new_title = "Custom SVM Boundary")
 ```
 
 ------------------------------------------------------------------------
@@ -592,36 +878,27 @@ plot_biplotEZ(result, new_title = "Custom SVM Boundary")
 ## Running without the outlier filter
 
 If you prefer not to use `bl_filter_outliers()`, skip Step 2 and pass
-`bl_data$train_data` directly to Steps 3–5:
+`bl_dat` directly to `bl_build_result()`:
 
 ``` r
-bl_dat  <- bl_prepare_data(iris, class_col = "Species",
-                            target_class = "versicolor")
+bl_dat <- bl_prepare_data(iris, class_col = "Species",
+                           target_class = "versicolor")
 
-bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
-                        model_type = "GLM")
+bl_mod <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
+                       model_type = "GLM")
 
-bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names,
-                               method = "PCA")
+bl_results <- bl_build_result(bl_dat, bl_mod, method = "PCA")
 
-bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 100L)
-
-result  <- bl_assemble(bl_dat,
-                       bl_filter_result = NULL,   # no filter applied
-                       bl_model         = bl_mod,
-                       bl_projection    = bl_proj,
-                       bl_grid          = bl_grid)
-
-plot_biplotEZ(result)
+plot_biplotEZ(bl_results)
 ```
 
 ------------------------------------------------------------------------
 
 ## Running the unit tests
 
-The package ships with 54 unit tests across 7 test files. Run them all
-at once from the RStudio **Build** pane → **Test** button, or from the
-Console:
+The package ships with unit tests across multiple test files. Run them
+all at once from the RStudio **Build** pane → **Test** button, or from
+the Console:
 
 ``` r
 devtools::test()
@@ -639,54 +916,42 @@ testthat::test_file("tests/testthat/test-predict_utils.R")
 testthat::test_file("tests/testthat/test-feasibility_utils.R")
 ```
 
-**Expected output:**
-
-```         
-[ FAIL 0 | WARN 0 | SKIP 0 | PASS 54 ]
-```
-
 ------------------------------------------------------------------------
 
 ## Verifying the result manually
 
-After assembling, you can inspect any component of the `bl_result`
+After assembling, you can inspect any component of `bl_results`
 directly:
 
 ``` r
 # Projection matrices
-dim(result$V)          # should be 4 x 4 for iris
-dim(result$tV)         # should be 4 x 4
-
-# Training data in Z-space (2D)
-head(result$biplot_grid$Z_train)
+dim(bl_results$V)          # should be 4 x 4 for iris
+dim(bl_results$tV)         # should be 4 x 4
 
 # Decision boundary contour lines
-length(result$biplot_grid$ct)    # number of contour segments
-result$biplot_grid$ct[[1]]       # first contour: $level, $x, $y
+length(bl_results$biplot_grid$ct)    # number of contour segments
+bl_results$biplot_grid$ct[[1]]       # first contour: $level, $x, $y
 
 # Model accuracy and Gini
-result$accuracy
-result$gini
-
-# Prediction colours per training point (TP=red, TN=blue, FP=purple, FN=orange)
-table(result$biplot_grid$pred_col)
+bl_results$accuracy
+bl_results$gini
 ```
 
 ### Quick sanity checks
 
 ``` r
 # 1. V and tV are inverse of each other (should be close to identity)
-round(result$V %*% result$tV, 10)
+round(bl_results$V %*% bl_results$tV, 10)
 
 # 2. Grid probabilities span both classes
-range(result$biplot_grid$grid_prob)
+range(bl_results$biplot_grid$grid_prob)
 
 # 3. At least one contour line found (boundary exists)
-stopifnot(length(result$biplot_grid$ct) > 0)
+stopifnot(length(bl_results$biplot_grid$ct) > 0)
 
 # 4. Training rows match expectation
-nrow(result$train_data)   # filtered rows (if filter applied)
-nrow(result$test_data)
+nrow(bl_results$train_data)
+nrow(bl_results$test_data)
 ```
 
 ------------------------------------------------------------------------
@@ -698,29 +963,48 @@ session without rerunning Phase 1:
 
 ``` r
 # Save
-saveRDS(result, file = "outputs/bl_result_glm_pca.rds")
+saveRDS(bl_results, file = "outputs/bl_result_glm_pca.rds")
 
 # Reload in a new session
-result <- readRDS("outputs/bl_result_glm_pca.rds")
-print(result)
+bl_results <- readRDS("outputs/bl_result_glm_pca.rds")
+print(bl_results)
 ```
 
 ------------------------------------------------------------------------
 
-## Summary of Phase 1 functions
+## Summary of functions by phase
 
-| Step | Function                | Route       | Input                                      | Output class       |
-|------|-------------------------|-------------|--------------------------------------------|--------------------|
-| 1    | `bl_prepare_data()`     | Standard    | Raw data frame                             | `bl_data`          |
-| 1    | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames                  | `bl_data`          |
-| 2    | `bl_filter_outliers()`  | Optional    | `bl_data`                                  | `bl_filter_result` |
-| 3    | `bl_fit_model()`        | Standard    | Training data frame                        | `bl_model`         |
-| 3    | `bl_wrap_model()`       | Alternative | Any fitted model object                    | `bl_model`         |
-| 4    | `bl_build_projection()` | —           | Training data frame                        | `bl_projection`    |
-| 5    | `bl_build_grid()`       | —           | Training data, `bl_projection`, `bl_model` | `bl_grid`          |
-| 6    | `bl_assemble()`         | —           | All of the above                           | `bl_result`        |
-| 7    | `plot_biplotEZ()`       | —           | `bl_result`                                | (plot, invisible)  |
+### Phase 1
 
-Phase 2 functions (counterfactual search, local interpretation, global
-interpretation, and Shapley attribution) consume the `bl_result` object
-and are described in separate vignettes.
+| Step   | Function                | Route       | Input                              | Output             |
+|--------|-------------------------|-------------|------------------------------------|--------------------|
+| 1      | `bl_prepare_data()`     | Standard    | Raw data frame                     | `bl_data`          |
+| 1      | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames          | `bl_data`          |
+| 2      | `bl_filter_outliers()`  | Optional    | `bl_data`                          | `bl_filter_result` |
+| 3      | `bl_fit_model()`        | Standard    | Training data frame                | `bl_model`         |
+| 3      | `bl_wrap_model()`       | Alternative | Any fitted model object            | `bl_model`         |
+| 4–6    | `bl_build_result()`     | Quick       | `bl_data`/`bl_filter_result` + `bl_model` | `bl_result` |
+| 4      | `bl_build_projection()` | Detailed    | Training data frame                | `bl_projection`    |
+| 5      | `bl_build_grid()`       | Detailed    | Training data, `bl_projection`, `bl_model` | `bl_grid` |
+| 6      | `bl_assemble()`         | Detailed    | `bl_data`/`bl_filter_result` + all above | `bl_result` |
+| —      | `plot_biplotEZ()`       | —           | `bl_result`                        | (plot)             |
+
+### Phase 2
+
+| Function              | Input                        | Output          |
+|-----------------------|------------------------------|-----------------|
+| `bl_project_points()` | Data frame + `bl_result`     | `bl_points`     |
+| `bl_predict()`        | `bl_result`                  | Data frame      |
+| `bl_find_boundary()`  | `bl_result` + data frame     | `bl_boundary`   |
+| `bl_robustness()`     | `bl_boundary`                | Named vector    |
+| `bl_surrogate()`      | `bl_result`                  | `bl_surrogate`  |
+
+### Phase 3
+
+| Function              | Input                         | Output            |
+|-----------------------|-------------------------------|-------------------|
+| `bl_select_target()`  | `bl_result` + row index or df | `bl_target`       |
+| `set_filters()`       | `bl_target` + named args      | `bl_filters`      |
+| `bl_find_local_cf()`  | `bl_result` + `bl_target`     | `bl_local_result` |
+| `bl_shapley()`        | `bl_local_result`             | `bl_shapley`      |
+| `bl_find_sparse_cf()` | `bl_shapley`                  | `bl_sparse_result`|

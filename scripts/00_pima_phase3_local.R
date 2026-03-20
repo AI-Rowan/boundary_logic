@@ -15,8 +15,8 @@
 #                  — also prints robustness score and per-variable totals
 #             9. Surrogate model
 #           Phase 3 (Steps 10-18): local interpretation of one target
-#            10. Inspect predictions — choose a target
-#            11. Select target
+#            10. Inspect predictions and select target
+#            11. (removed — merged into Step 10)
 #            12. Set actionability constraints
 #            13. Find local counterfactual via biplot rotation
 #            14. Local biplot plot
@@ -191,31 +191,19 @@ plot(bl_surr)
 # PHASE 3 — Local interpretation of a single target point
 # ===========================================================
 
-# ---- Step 10: Inspect predictions to choose a target ------------------
+# ---- Step 10: Inspect predictions and select target -------------------
 # bl_predict() scores every row and returns a tidy data frame with
 # row, pred_prob, pred_class, true_class, confusion, and all features.
 # Default data = bl_results$test_data.
-# To score training data explicitly:
-#   bl_predict(bl_results, data = bl_results$train_data)
+# Review pred_summary to choose the row you want to explain locally,
+# then assign it to tdp. bl_select_target() wraps that observation into
+# a bl_target object, projecting it into Z-space and scoring it through
+# the model.
 
 pred_summary <- bl_predict(bl_results)
 print(pred_summary)
 
-# Choose a class-1 observation with a probability well above 0.5 —
-# this gives a clear, illustrative counterfactual.
-tdp <- which(pred_summary$true_class == 1 &
-               pred_summary$pred_prob >= 0.70)[1]
-
-cat(sprintf("\nSelected target: row %d  |  pred = %.3f  |  true class = %d\n",
-            tdp, pred_summary$pred_prob[tdp],
-            pred_summary$true_class[tdp]))
-
-
-# ---- Step 11: Select the target ---------------------------------------
-# bl_select_target() wraps the observation into a bl_target object,
-# projecting it into Z-space and scoring it through the model.
-# Default data = bl_results$test_data.
-
+tdp <- 1
 tgt <- bl_select_target(bl_results, target = tdp)
 print(tgt)
 
@@ -301,10 +289,10 @@ plot(bl_local)
 # Y-axis labels: "variable: observed_value -> required_change"
 # X-axis: Shapley value = contribution to the probability shift
 
-bl_shap <- bl_shapley(bl_local)
-print(bl_shap)
+bl_shapley_values <- bl_shapley(bl_local)
+print(bl_shapley_values)
 
-plot(bl_shap)
+plot(bl_shapley_values)
 
 
 # ---- Step 16: Sparse counterfactual -----------------------------------
@@ -321,7 +309,7 @@ plot(bl_shap)
 # solution_valid = FALSE means the zeroed/rounded CF is not enough;
 #   try round_to = 1, remove round_to, or relax actionability filters.
 
-bl_sparse <- bl_find_sparse_cf(bl_shap, round_to = NULL)
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
 
 # print() shows three prediction values to verify classification changes:
 #   Observed  — model score for the original data point

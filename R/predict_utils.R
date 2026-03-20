@@ -62,14 +62,14 @@
 #'   types; a raw `gbm` object for `"GBM"`; a list with `model` and
 #'   `predict_fn` for `"custom"`.
 #' @param model_type   Character scalar identifying the model family.
-#' @param rounding     Integer; floor-based rounding decimal places. Default `2`.
+#' @param rounding     Integer; floor-based rounding decimal places. Default `3`.
 #' @param new_data     Data frame of observations to score.
 #'
 #' @importFrom xgboost xgb.DMatrix
 #' @return Numeric vector of predicted probabilities, length `nrow(new_data)`,
 #'   rounded via `floor(x * 10^rounding) / 10^rounding`.
 #' @keywords internal
-.pred_function <- function(model_use, model_type, rounding = 2L, new_data) {
+.pred_function <- function(model_use, model_type, rounding = 3L, new_data) {
 
   floor_round <- function(x) floor(x * (10^rounding)) / (10^rounding)
 
