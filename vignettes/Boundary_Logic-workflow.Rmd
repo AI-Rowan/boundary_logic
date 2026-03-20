@@ -42,7 +42,7 @@ acts as the reproducible anchor for Phases 2 and 3.
 
 ## Project structure and file layout
 
-```
+```         
 boundary_logic/               ← R project root (open .Rproj in RStudio)
 │
 ├── R/                        ← Package source (do not edit directly)
@@ -113,7 +113,7 @@ makes all exported functions available immediately — including
 Phase 1 has six steps. At each step there is a **standard route** and
 one or more **alternative routes** depending on your starting point.
 
-```
+```         
  DATA ENTRY
  ┌─────────────────────────────────────────────────────────┐
  │ Option A  bl_prepare_data()   raw data frame → bl_data  │
@@ -408,22 +408,22 @@ bl_results <- bl_build_result(
 The `rounding` parameter controls only the width of the band used to
 extract decision boundary contour lines from the prediction grid:
 
-| `rounding` | `b_margin` | Contour levels       |
-|------------|------------|----------------------|
-| `2L`       | `0.01`     | `0.49` / `0.51`      |
-| `3L`       | `0.001`    | `0.499` / `0.501`    |
+| `rounding` | `b_margin` | Contour levels    |
+|------------|------------|-------------------|
+| `2L`       | `0.01`     | `0.49` / `0.51`   |
+| `3L`       | `0.001`    | `0.499` / `0.501` |
 
 A wider band (`rounding = 2L`) produces smoother, more continuous
-contours and is more robust when the model's decision surface is gradual.
-A narrower band (`rounding = 3L`) traces the boundary more precisely.
-All model predictions are always rounded to 3 decimal places regardless
-of this setting.
+contours and is more robust when the model's decision surface is
+gradual. A narrower band (`rounding = 3L`) traces the boundary more
+precisely. All model predictions are always rounded to 3 decimal places
+regardless of this setting.
 
 **Exploratory biplot (no model yet):**
 
 Omit `bl_model` to get a quick biplot of the data before fitting.
-`bl_build_result()` returns a `bl_projection` object that can be
-plotted directly:
+`bl_build_result()` returns a `bl_projection` object that can be plotted
+directly:
 
 ``` r
 bl_proj_explore <- bl_build_result(bl_filt, method = "PCA")
@@ -452,9 +452,9 @@ bl_proj <- bl_build_projection(
 print(bl_proj)
 ```
 
-**Step 5 — `bl_build_grid()`** creates an m × m regular grid in
-Z-space, back-projects each point to X-space, scores every grid point
-through the model, and extracts decision boundary contour lines.
+**Step 5 — `bl_build_grid()`** creates an m × m regular grid in Z-space,
+back-projects each point to X-space, scores every grid point through the
+model, and extracts decision boundary contour lines.
 
 ``` r
 bl_grid <- bl_build_grid(
@@ -590,7 +590,7 @@ The search always constrains counterfactuals to the training data range
 (`train_ranges`) — observations outside the training feature envelope
 are not considered feasible counterfactuals.
 
-``` r
+```{r phase2-boundary}
 # Find boundary for all test observations
 bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data)
 print(bl_bnd)
@@ -610,7 +610,7 @@ bl_bnd_train <- bl_find_boundary(bl_results, data = bl_results$train_data)
 `plot.bl_boundary()` shows per-variable distances between each
 observation and its counterfactual:
 
-``` r
+```{r phase2-boundary-plot}
 plot(bl_bnd)               # jitter plot (default)
 plot(bl_bnd, type = "box") # boxplot
 ```
@@ -628,7 +628,7 @@ larger contributions are more important for crossing the boundary.
 > separately only when you need to access the values programmatically —
 > for example, to compare robustness across models.
 
-``` r
+```{r phase2-robustness}
 bl_rob <- bl_robustness(bl_bnd)
 print(bl_rob)
 ```
@@ -647,7 +647,7 @@ Observations that fall outside the training convex hull receive
 `surrogate_pred = NA` and are excluded from the surrogate accuracy
 calculation.
 
-``` r
+```{r phase2-surrogate}
 bl_sur <- bl_surrogate(bl_results)
 print(bl_sur)
 
@@ -678,7 +678,7 @@ object, projects it to Z-space, and scores it through the model. The
 default data source is `bl_results$test_data`; pass a row index or a
 single-row data frame as `target`.
 
-``` r
+```{r phase3-select}
 pred_summary <- bl_predict(bl_results)
 print(pred_summary)
 
@@ -700,7 +700,7 @@ plot_biplotEZ(
 **External observation (not in train/test):** pass a single-row data
 frame directly as `target`. No class column is needed.
 
-``` r
+```{r phase3-external}
 new_obs <- data.frame(
   Sepal.Length = 5.8, Sepal.Width = 2.7,
   Petal.Length = 4.1, Petal.Width = 1.0
@@ -721,11 +721,11 @@ Valid constraint types:
 
 -   `"decrease"` — counterfactual value must be ≤ observed.
 -   `"increase"` — counterfactual value must be ≥ observed.
--   `"fixed"` — search allows ±0.5 of the observed value; always
-    reverts to the original observed value in the sparse counterfactual.
+-   `"fixed"` — search allows ±0.5 of the observed value; always reverts
+    to the original observed value in the sparse counterfactual.
 -   `c(min, max)` — counterfactual must lie within this absolute range.
 
-``` r
+```{r phase3-filters}
 flt <- set_filters(
   tgt,
   Petal.Length = "decrease",   # only consider reductions
@@ -755,7 +755,7 @@ The pair with the overall minimum Z-space distance is selected.
 > local search — rotation invalidates the original polygon coordinates.
 > Only `train_ranges` and `set_filters` constrain the search.
 
-``` r
+```{r phase3-local-cf}
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results,
   bl_target   = tgt,
@@ -774,9 +774,9 @@ plot(bl_local, no_points = FALSE)   # also show training data
 
 ### Shapley attribution: `bl_shapley()`
 
-`bl_shapley()` decomposes the path from the target to the
-counterfactual into per-variable contributions using the exact Shapley
-formula (for p ≤ 14 variables).
+`bl_shapley()` decomposes the path from the target to the counterfactual
+into per-variable contributions using the exact Shapley formula (for p ≤
+14 variables).
 
 Each variable is classified as:
 
@@ -789,7 +789,7 @@ The Y-axis labels show `variable: observed_value → required_change`,
 both rounded to 3 decimal places to match the Shapley contribution bar
 labels.
 
-``` r
+```{r phase3-shapley}
 bl_shapley_values <- bl_shapley(bl_local)
 print(bl_shapley_values)
 
@@ -803,8 +803,8 @@ plot(bl_shapley_values)
 `bl_find_sparse_cf()` creates a parsimonious counterfactual by:
 
 1.  Reverting all **Contradicts** variables to their observed values.
-2.  Reverting all variables marked `"fixed"` in `set_filters()` to
-    their observed values.
+2.  Reverting all variables marked `"fixed"` in `set_filters()` to their
+    observed values.
 3.  Optionally rounding **Supports** variable changes to a specified
     resolution (`round_to`).
 4.  Re-scoring the result through the model.
@@ -813,7 +813,7 @@ plot(bl_shapley_values)
 the decision boundary. If `FALSE`, try relaxing actionability filters or
 increasing `round_to`.
 
-``` r
+```{r phase3-sparse}
 bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
 
 # print() shows three prediction values to verify the class flip:
@@ -993,35 +993,35 @@ print(bl_results)
 
 ### Phase 1
 
-| Step   | Function                | Route       | Input                              | Output             |
-|--------|-------------------------|-------------|------------------------------------|--------------------|
-| 1      | `bl_prepare_data()`     | Standard    | Raw data frame                     | `bl_data`          |
-| 1      | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames          | `bl_data`          |
-| 2      | `bl_filter_outliers()`  | Optional    | `bl_data`                          | `bl_filter_result` |
-| 3      | `bl_fit_model()`        | Standard    | Training data frame                | `bl_model`         |
-| 3      | `bl_wrap_model()`       | Alternative | Any fitted model object            | `bl_model`         |
-| 4–6    | `bl_build_result()`     | Quick       | `bl_data`/`bl_filter_result` + `bl_model` | `bl_result` |
-| 4      | `bl_build_projection()` | Detailed    | Training data frame                | `bl_projection`    |
-| 5      | `bl_build_grid()`       | Detailed    | Training data, `bl_projection`, `bl_model` | `bl_grid` |
-| 6      | `bl_assemble()`         | Detailed    | `bl_data`/`bl_filter_result` + all above | `bl_result` |
-| —      | `plot_biplotEZ()`       | —           | `bl_result`                        | (plot)             |
+| Step | Function                | Route       | Input                                      | Output             |
+|------|-------------------------|-------------|--------------------------------------------|--------------------|
+| 1    | `bl_prepare_data()`     | Standard    | Raw data frame                             | `bl_data`          |
+| 1    | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames                  | `bl_data`          |
+| 2    | `bl_filter_outliers()`  | Optional    | `bl_data`                                  | `bl_filter_result` |
+| 3    | `bl_fit_model()`        | Standard    | Training data frame                        | `bl_model`         |
+| 3    | `bl_wrap_model()`       | Alternative | Any fitted model object                    | `bl_model`         |
+| 4–6  | `bl_build_result()`     | Quick       | `bl_data`/`bl_filter_result` + `bl_model`  | `bl_result`        |
+| 4    | `bl_build_projection()` | Detailed    | Training data frame                        | `bl_projection`    |
+| 5    | `bl_build_grid()`       | Detailed    | Training data, `bl_projection`, `bl_model` | `bl_grid`          |
+| 6    | `bl_assemble()`         | Detailed    | `bl_data`/`bl_filter_result` + all above   | `bl_result`        |
+| —    | `plot_biplotEZ()`       | —           | `bl_result`                                | (plot)             |
 
 ### Phase 2
 
-| Function              | Input                        | Output          |
-|-----------------------|------------------------------|-----------------|
-| `bl_project_points()` | Data frame + `bl_result`     | `bl_points`     |
-| `bl_predict()`        | `bl_result`                  | Data frame      |
-| `bl_find_boundary()`  | `bl_result` + data frame     | `bl_boundary`   |
-| `bl_robustness()`     | `bl_boundary`                | Named vector    |
-| `bl_surrogate()`      | `bl_result`                  | `bl_surrogate`  |
+| Function              | Input                    | Output         |
+|-----------------------|--------------------------|----------------|
+| `bl_project_points()` | Data frame + `bl_result` | `bl_points`    |
+| `bl_predict()`        | `bl_result`              | Data frame     |
+| `bl_find_boundary()`  | `bl_result` + data frame | `bl_boundary`  |
+| `bl_robustness()`     | `bl_boundary`            | Named vector   |
+| `bl_surrogate()`      | `bl_result`              | `bl_surrogate` |
 
 ### Phase 3
 
-| Function              | Input                         | Output            |
-|-----------------------|-------------------------------|-------------------|
-| `bl_select_target()`  | `bl_result` + row index or df | `bl_target`       |
-| `set_filters()`       | `bl_target` + named args      | `bl_filters`      |
-| `bl_find_local_cf()`  | `bl_result` + `bl_target`     | `bl_local_result` |
-| `bl_shapley()`        | `bl_local_result`             | `bl_shapley`      |
-| `bl_find_sparse_cf()` | `bl_shapley`                  | `bl_sparse_result`|
+| Function              | Input                         | Output             |
+|-----------------------|-------------------------------|--------------------|
+| `bl_select_target()`  | `bl_result` + row index or df | `bl_target`        |
+| `set_filters()`       | `bl_target` + named args      | `bl_filters`       |
+| `bl_find_local_cf()`  | `bl_result` + `bl_target`     | `bl_local_result`  |
+| `bl_shapley()`        | `bl_local_result`             | `bl_shapley`       |
+| `bl_find_sparse_cf()` | `bl_shapley`                  | `bl_sparse_result` |
