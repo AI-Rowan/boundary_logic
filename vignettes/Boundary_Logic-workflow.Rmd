@@ -682,9 +682,10 @@ single-row data frame as `target`.
 pred_summary <- bl_predict(bl_results)
 print(pred_summary)
 
-# Assign the row you want to explain — inspect pred_summary first,
-# then set tdp to the row index of your chosen observation.
-tdp <- 1
+# Inspect pred_summary to choose a row. For a clear counterfactual,
+# pick a class-1 observation with a predicted probability well above 0.5.
+# Here we select the first predicted class-1 row automatically.
+tdp <- which(pred_summary$pred_class == 1)[1]
 tgt <- bl_select_target(bl_results, target = tdp)
 print(tgt)
 
@@ -726,6 +727,10 @@ Valid constraint types:
 -   `c(min, max)` — counterfactual must lie within this absolute range.
 
 ```{r phase3-filters}
+# Filters are illustrated here but not applied in the local search below,
+# because the constraints that are clinically meaningful depend on the
+# specific dataset and target. In interactive use, pass flt to
+# bl_find_local_cf() via the set_filters argument.
 flt <- set_filters(
   tgt,
   Petal.Length = "decrease",   # only consider reductions
@@ -756,10 +761,12 @@ The pair with the overall minimum Z-space distance is selected.
 > Only `train_ranges` and `set_filters` constrain the search.
 
 ```{r phase3-local-cf}
+# Unconstrained search — finds the nearest boundary point across all
+# eigenvector pairs. Pass set_filters = flt to add actionability
+# constraints in interactive use.
 bl_local <- bl_find_local_cf(
-  bl_result   = bl_results,
-  bl_target   = tgt,
-  set_filters = flt    # omit for unconstrained search
+  bl_result = bl_results,
+  bl_target = tgt
 )
 
 print(bl_local)
