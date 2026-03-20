@@ -55,7 +55,6 @@ bl_fit_model <- function(train_data,
                          var_names,
                          model_type    = "GLM",
                          cutoff        = 0.5,
-                         rounding      = 3L,
                          model_params  = list()) {
 
   # ---- Validation -------------------------------------------------------
@@ -64,7 +63,6 @@ bl_fit_model <- function(train_data,
   if (!"class" %in% names(train_data))
     stop("'train_data' must contain a column named 'class'.", call. = FALSE)
   stop_if_not_scalar_numeric(cutoff, "cutoff")
-  stop_if_not_positive_integer(rounding, "rounding")
 
   valid_types <- c("GLM", "GAM", "GBM", "LDA", "SVM", "NNET", "RForrest", "XGB")
   if (!model_type %in% valid_types)
@@ -79,7 +77,6 @@ bl_fit_model <- function(train_data,
   pred_prob <- .pred_function(
     model_use  = fit_result$model,
     model_type = model_type,
-    rounding   = rounding,
     new_data   = train_data[, var_names, drop = FALSE]
   )
   pred_class <- as.numeric(pred_prob >= cutoff)
@@ -95,7 +92,6 @@ bl_fit_model <- function(train_data,
       model_type = model_type,
       var_names  = var_names,
       cutoff     = cutoff,
-      rounding   = rounding,
       accuracy   = accuracy,
       gini       = gini
     ),
@@ -194,12 +190,10 @@ bl_wrap_model <- function(model,
                            var_names,
                            predict_fn  = NULL,
                            train_data  = NULL,
-                           cutoff      = 0.5,
-                           rounding    = 3L) {
+                           cutoff      = 0.5) {
 
   stop_if_not_character(var_names, "var_names")
   stop_if_not_scalar_numeric(cutoff, "cutoff")
-  stop_if_not_positive_integer(rounding, "rounding")
 
   valid_types <- c("GLM", "GAM", "GBM", "LDA", "SVM", "NNET",
                    "RForrest", "XGB", "custom")
@@ -232,7 +226,6 @@ bl_wrap_model <- function(model,
     pred_prob  <- .pred_function(
       model_use  = model_use,
       model_type = model_type,
-      rounding   = rounding,
       new_data   = train_data[, var_names, drop = FALSE]
     )
     pred_class <- as.numeric(pred_prob >= cutoff)
@@ -250,7 +243,6 @@ bl_wrap_model <- function(model,
       model_type = model_type,
       var_names  = var_names,
       cutoff     = cutoff,
-      rounding   = rounding,
       accuracy   = accuracy,
       gini       = gini
     ),

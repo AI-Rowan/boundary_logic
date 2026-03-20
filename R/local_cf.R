@@ -142,7 +142,6 @@ bl_select_target <- function(bl_result, target, data = NULL) {
   proj_dims   <- bl_result$proj_dims
   V           <- bl_result$V
   cutoff      <- bl_result$cutoff
-  rounding    <- bl_result$rounding
 
   # Resolve x_obs and row_id
   if (is.data.frame(target)) {
@@ -178,7 +177,6 @@ bl_select_target <- function(bl_result, target, data = NULL) {
   pred_prob  <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = rounding,
     new_data   = x_obs
   )[[1L]]
   pred_class <- as.integer(pred_prob >= cutoff)
@@ -421,7 +419,6 @@ bl_find_local_cf <- function(bl_result, bl_target,
       grid_prob[i0:j0] <- .pred_function(
         model_use  = bl_result$model,
         model_type = bl_result$model_type,
-        rounding   = rounding,
         new_data   = Xgrid[i0:j0, , drop = FALSE]
       )
     }
@@ -478,7 +475,6 @@ bl_find_local_cf <- function(bl_result, bl_target,
       p_bnd   <- .pred_function(
         model_use  = bl_result$model,
         model_type = bl_result$model_type,
-        rounding   = rounding,
         new_data   = Bx_keep
       )
       ok <- if (lev < cutoff) (p_bnd < cutoff) else (p_bnd >= cutoff)
@@ -516,7 +512,6 @@ bl_find_local_cf <- function(bl_result, bl_target,
       B_pred <- .pred_function(
         model_use  = bl_result$model,
         model_type = bl_result$model_type,
-        rounding   = rounding,
         new_data   = B_x
       )
 
@@ -698,7 +693,6 @@ plot.bl_local_result <- function(x,
   num_vars   <- bl_result$num_vars
   proj_dims  <- bl_result$proj_dims
   cutoff     <- bl_result$cutoff
-  rounding   <- bl_result$rounding
 
   # Defaults for axis arguments (mirrors plot_biplotEZ)
   if (is.null(which))   which   <- seq_len(num_vars)
@@ -717,7 +711,6 @@ plot.bl_local_result <- function(x,
   train_pred       <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = rounding,
     new_data   = train_df[, var_names, drop = FALSE]
   )
   train_pred_class <- as.integer(train_pred >= cutoff)

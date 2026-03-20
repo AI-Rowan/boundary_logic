@@ -137,7 +137,7 @@ bl_assemble <- function(bl_data,
       model         = bl_model$model,
       model_type    = bl_model$model_type,
       cutoff        = bl_model$cutoff,
-      rounding      = bl_model$rounding,
+      rounding      = bl_grid$rounding,
 
       # Projection
       V             = bl_projection$V,
@@ -232,6 +232,11 @@ bl_assemble <- function(bl_data,
 #' @param calc_hull     Logical; trim the prediction surface to the training
 #'   hull. Visual only — does not affect counterfactual search. Default
 #'   `TRUE`. Ignored when `bl_model = NULL`.
+#' @param rounding      Integer; controls the decision boundary contour band
+#'   width only — `b_margin = 1 / (10^rounding)`. Default `3L` gives contours
+#'   at `cutoff ± 0.001`. All prediction scores are always floor-rounded to
+#'   3 decimal places regardless of this setting.
+#'   Ignored when `bl_model = NULL`.
 #'
 #' @return A `"bl_result"` object (when `bl_model` is supplied) or a
 #'   `"bl_projection"` object (when `bl_model = NULL`).
@@ -248,7 +253,8 @@ bl_build_result <- function(bl_data,
                              title       = "",
                              m           = 200L,
                              outlie      = 1,
-                             calc_hull   = TRUE) {
+                             calc_hull   = TRUE,
+                             rounding    = 3L) {
 
   # ---- Validate data source ---------------------------------------------
   if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
@@ -293,7 +299,8 @@ bl_build_result <- function(bl_data,
     bl_model      = bl_model,
     m             = m,
     outlie        = outlie,
-    calc_hull     = calc_hull
+    calc_hull     = calc_hull,
+    rounding      = rounding
   )
 
   # ---- Step 6: assemble and return --------------------------------------
@@ -344,7 +351,6 @@ summary.bl_result <- function(object, ...) {
   pred_prob <- .pred_function(
     model_use  = x$model,
     model_type = x$model_type,
-    rounding   = x$rounding,
     new_data   = x$train_data[, x$var_names, drop = FALSE]
   )
   pred_class <- as.numeric(pred_prob >= x$cutoff)

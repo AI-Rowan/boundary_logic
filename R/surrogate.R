@@ -98,7 +98,6 @@ bl_surrogate <- function(bl_result, data = NULL) {
   model_pred_prob <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = bl_result$rounding,
     new_data   = data[, var_names, drop = FALSE]
   )
   model_pred <- as.integer(model_pred_prob >= cutoff)

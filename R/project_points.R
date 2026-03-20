@@ -81,7 +81,6 @@ bl_project_points <- function(data, bl_result,
   X_sd        <- bl_result$X_sd
   standardise <- bl_result$standardise
   cutoff      <- bl_result$cutoff
-  rounding    <- bl_result$rounding
 
   # ---- Optional filter to training variable ranges -----------------------
   if (isTRUE(filter_to_train_ranges)) {
@@ -116,7 +115,6 @@ bl_project_points <- function(data, bl_result,
   pred_prob  <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = rounding,
     new_data   = data[, var_names, drop = FALSE]
   )
   pred_class <- as.numeric(pred_prob >= cutoff)

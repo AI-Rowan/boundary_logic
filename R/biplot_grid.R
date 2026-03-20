@@ -96,8 +96,10 @@
 #' @param b_margin      Numeric; half-width of the band around `cutoff` used
 #'   to extract contour lines. Default `NULL`, which resolves to
 #'   `1 / (10^rounding)`.
-#' @param rounding      Integer; floor-based rounding precision for grid
-#'   scores. Default `2`.
+#' @param rounding      Integer; controls the contour band width only —
+#'   `b_margin = 1 / (10^rounding)`. Default `3L` gives contours at
+#'   `cutoff ± 0.001`. All prediction scores are always floor-rounded to
+#'   3 decimal places regardless of this setting.
 #' @param polygon       An `sp::SpatialPolygons` object to use as the hull
 #'   boundary. If `NULL` (default), a new polygon is computed from
 #'   `train_data` using `aplpack::plothulls()` with `fraction = outlie`.
@@ -150,7 +152,7 @@ bl_build_grid <- function(train_data,
                           m        = 200L,
                           cutoff   = 0.5,
                           b_margin = NULL,
-                          rounding = 2L,
+                          rounding = 3L,
                           polygon  = NULL,
                           outlie   = 1,
                           calc_hull = TRUE) {
@@ -229,7 +231,6 @@ bl_build_grid <- function(train_data,
     grid_prob[i0:j0] <- .pred_function(
       model_use  = bl_model$model,
       model_type = bl_model$model_type,
-      rounding   = rounding,
       new_data   = Xgrid[i0:j0, , drop = FALSE]
     )
   }
@@ -287,7 +288,8 @@ bl_build_grid <- function(train_data,
       ct            = ct,
       ct_surrogate  = ct_surrogate,
       xseq          = xseq,
-      yseq          = yseq
+      yseq          = yseq,
+      rounding      = rounding
     ),
     class = "bl_grid"
   )

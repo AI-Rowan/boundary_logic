@@ -149,7 +149,6 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   X_sd         <- bl_result$X_sd
   standardise  <- bl_result$standardise
   cutoff       <- bl_result$cutoff
-  rounding     <- bl_result$rounding
   var_names    <- bl_result$var_names
   polygon      <- bl_result$polygon
   train_ranges <- bl_result$train_ranges
@@ -183,7 +182,6 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   pred_obs       <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = rounding,
     new_data   = data_sub[, var_names, drop = FALSE]
   )
   pred_class_obs <- as.integer(pred_obs >= cutoff)
@@ -290,7 +288,6 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
     p_bnd <- .pred_function(
       model_use  = bl_result$model,
       model_type = bl_result$model_type,
-      rounding   = rounding,
       new_data   = Bx_keep
     )
     ok <- if (z_boundary_type[i] < cutoff) (p_bnd < cutoff) else (p_bnd >= cutoff)
@@ -396,7 +393,6 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
     .pred_function(
       model_use  = bl_result$model,
       model_type = bl_result$model_type,
-      rounding   = rounding,
       new_data   = B_x
     ),
     error = function(e) rep(NA_real_, n)

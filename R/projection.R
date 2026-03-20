@@ -141,7 +141,6 @@ bl_build_projection <- function(train_data,
         pred_prob  <- .pred_function(
           model_use  = bl_model$model,
           model_type = bl_model$model_type,
-          rounding   = bl_model$rounding,
           new_data   = train_data[, var_names, drop = FALSE]
         )
         pred_class <- as.numeric(pred_prob >= bl_model$cutoff)

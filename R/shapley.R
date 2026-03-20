@@ -38,11 +38,10 @@
 #' @param end        Numeric vector length p (counterfactual).
 #' @param model      Fitted model object.
 #' @param model_type Character string identifying the model type.
-#' @param rounding   Integer; rounding precision for predictions.
 #' @param var_names  Character vector of variable names length p.
 #' @return Named numeric vector of Shapley values length p.
 #' @noRd
-.shapley_exact_one <- function(start, end, model, model_type, rounding, var_names) {
+.shapley_exact_one <- function(start, end, model, model_type, var_names) {
   p    <- length(start)
   fact <- factorial(0:p)
   wfun <- function(k) (fact[k + 1L] * fact[p - k]) / fact[p + 1L]
@@ -59,7 +58,7 @@
     }
     X_S <- .build_rows_from_masks(start, end, masks_S, var_names)
     f_S <- .pred_function(model_use = model, model_type = model_type,
-                          rounding = rounding, new_data = X_S)
+                          new_data = X_S)
     pairs <- list(); idx_S <- list(); idx_i <- list(); cnt <- 1L
     for (rowS in seq_len(nrow(masks_S))) {
       mask_row <- masks_S[rowS, ]
@@ -76,7 +75,7 @@
     masks_Si <- do.call(rbind, pairs)
     X_Si     <- .build_rows_from_masks(start, end, masks_Si, var_names)
     f_Si     <- .pred_function(model_use = model, model_type = model_type,
-                               rounding = rounding, new_data = X_Si)
+                               new_data = X_Si)
     wk <- wfun(k)
     for (mm in seq_len(nrow(masks_Si))) {
       inc               <- f_Si[mm] - f_S[idx_S[[mm]]]
@@ -96,13 +95,12 @@
 #' @param end        Numeric vector length p (counterfactual).
 #' @param model      Fitted model object.
 #' @param model_type Character string identifying the model type.
-#' @param rounding   Integer; rounding precision for predictions.
 #' @param var_names  Character vector of variable names length p.
 #' @param M          Integer; number of permutations. Default \code{2048L}.
 #' @param seed       Random seed. Default \code{1L}.
 #' @return Named numeric vector of approximate Shapley values length p.
 #' @noRd
-.shapley_perm_one <- function(start, end, model, model_type, rounding, var_names,
+.shapley_perm_one <- function(start, end, model, model_type, var_names,
                               M = 2048L, seed = 1L) {
   set.seed(seed)
   p        <- length(start)
@@ -114,7 +112,7 @@
     masks  <- apply(masks, 2L, cumsum)
     X_path <- .build_rows_from_masks(start, end, masks, var_names)
     vals   <- .pred_function(model_use = model, model_type = model_type,
-                             rounding = rounding, new_data = X_path)
+                             new_data = X_path)
     d             <- diff(vals)
     shap_sum[ord] <- shap_sum[ord] + d
   }
@@ -179,10 +177,10 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 
   if (p <= exact_max_vars) {
     shap <- .shapley_exact_one(start, end, bl_result$model, bl_result$model_type,
-                               bl_result$rounding, var_names)
+                               var_names)
   } else {
     shap <- .shapley_perm_one(start, end, bl_result$model, bl_result$model_type,
-                              bl_result$rounding, var_names,
+                              var_names,
                               M = as.integer(approx_perm), seed = seed)
   }
   names(shap) <- var_names
@@ -392,7 +390,6 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   pred_sparse <- .pred_function(
     model_use  = bl_result$model,
     model_type = bl_result$model_type,
-    rounding   = bl_result$rounding,
     new_data   = x_sparse_df
   )
 
