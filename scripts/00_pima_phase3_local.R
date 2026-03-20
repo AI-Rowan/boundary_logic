@@ -97,6 +97,11 @@ print(bl_mod)
 #   - Omit bl_mod to get an exploratory biplot without a prediction surface:
 #       bl_proj <- bl_build_result(bl_filt, method = "CVA"); plot(bl_proj)
 #
+# rounding controls only the decision boundary contour band width:
+#   rounding = 2  ->  band = cutoff ± 0.01  (contours at 0.49 / 0.51)
+#   rounding = 3  ->  band = cutoff ± 0.001 (contours at 0.499 / 0.501)
+# All model predictions are always rounded to 3 decimal places regardless.
+#
 # Note: train_fraction = 1 means all data is used for training (no holdout
 # test set). bl_results$test_data is automatically set to train_data so
 # that bl_predict(), bl_project_points(), and bl_find_boundary() all work.
@@ -105,7 +110,8 @@ bl_results <- bl_build_result(
   bl_data  = bl_filt,
   bl_model = bl_mod,
   method   = "CVA",
-  title    = "Pima diabetes — GAM, CVA biplot"
+  title    = "Pima diabetes — GAM, CVA biplot",
+  rounding = 2L   # contour band = cutoff ± 0.001
 )
 
 print(bl_results)

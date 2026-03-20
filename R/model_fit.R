@@ -20,8 +20,6 @@
 #'   Default `"GLM"`.
 #' @param cutoff       Numeric decision threshold for computing accuracy.
 #'   Default `0.5`.
-#' @param rounding     Integer; floor-based rounding precision for predicted
-#'   probabilities. Default `2`.
 #' @param model_params Named list of hyperparameter overrides. Unrecognised
 #'   keys are silently ignored. Parameter names follow **parsnip** conventions
 #'   for all types except `"GBM"` (which uses the gbm package directly).
@@ -37,7 +35,6 @@
 #'   \item{`model_type`}{Character; the model family used.}
 #'   \item{`var_names`}{Character vector of feature names.}
 #'   \item{`cutoff`}{The decision threshold.}
-#'   \item{`rounding`}{The rounding precision.}
 #'   \item{`accuracy`}{Numeric; classification accuracy on `train_data`.}
 #'   \item{`gini`}{Numeric; Gini coefficient on `train_data`.}
 #' }
@@ -162,7 +159,6 @@ print.bl_model <- function(x, ...) {
 #'   **Note**: only `cutoff = 0.5` gives valid results in the current
 #'   methodology. Other values are accepted for exploration but should be
 #'   treated with caution.
-#' @param rounding     Integer; floor-based rounding precision. Default `2`.
 #'
 #' @return A list of class `"bl_model"` compatible with `bl_build_grid()`
 #'   and `bl_assemble()`.
