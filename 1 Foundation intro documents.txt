@@ -1,206 +1,607 @@
-Below is a draft instruction manual that serves as the foundation document for the new project. It is written as an internal project guide for future LLM coding agents. 
-Instruction Manual for the Decision-Boundary Biplot R Package Project
-1. Project overview
+Instruction Manual for the Boundary Logic R Package Project
+============================================================
+Version 2 — Updated to reflect the implemented package (March 2026)
+
+This document serves as the foundation reference for the Boundary Logic project.
+It is written as an internal project guide for future LLM coding agents and
+collaborators. Version 1 was a specification; this version documents what has
+actually been built and the architectural decisions made during implementation.
+
+
+========================================================
+1. Project Overview
+========================================================
+
 1.1 Project name
+-----------------
+Package name: boundarylogic
+Repository:   AI-Rowan/boundary_logic (GitHub)
 Working title: Boundary Logic
-Alternative package names may later be considered, but this document assumes the package will provide a reusable R implementation of the user’s biplot-based interpretability methodology.
-1.2 Purpose of the project
-This project exists to convert an existing research-oriented R codebase into a structured, documented, and installable R package that allows other users to apply a biplot-based method for:
-•	visualising high-dimensional data in a low-dimensional space;
-•	approximating model decision boundaries in that space;
-•	identifying and plotting counterfactuals;
-•	interpreting which variable changes are associated with movement across a decision boundary; and
-•	supporting both local and global model interpretability analyses.
-The package is intended to operationalise a research contribution from the PhD, namely a post hoc explanation framework that combines:
-•	biplot methods,
-•	decision-boundary approximation, and
-•	inverse projection from reduced space back to original feature space.
-•	counterfactual reasoning,
-The long-term aim is for the package to be sufficiently robust, documented, and modular that:
-1.	researchers can reproduce the proposed methodology;
-2.	practitioners can apply it to their own fitted classification models;
-3.	users can generate visual explanations and counterfactual guidance without needing to understand the full internal mathematics; and
-4.	future extensions can support additional models, projection methods, and explanation diagnostics.
-2. Background and conceptual objective
+
+1.2 Purpose
+-----------
+The package operationalises a post hoc interpretability framework developed
+during a PhD. It converts a research-oriented R codebase into a structured,
+documented, and installable R package that allows users to:
+
+  - visualise high-dimensional data in a low-dimensional biplot space;
+  - approximate model decision boundaries in that space using a prediction grid;
+  - identify the nearest counterfactual for any observation;
+  - interpret which variable changes are required to cross a decision boundary;
+  - support both local (single observation) and global (population-level)
+    model interpretability analyses.
+
+1.3 Current status
+------------------
+The package is fully implemented across three phases:
+
+  Phase 1: Data preparation, model fitting, biplot construction (COMPLETE)
+  Phase 2: Global interpretations — population-level counterfactual analysis,
+           variable importance, surrogate model (COMPLETE)
+  Phase 3: Local interpretation — single-observation counterfactual via biplot
+           rotation, Shapley attribution, sparse counterfactual (COMPLETE)
+
+The package is installable via devtools::install_github() or devtools::load_all().
+Two vignettes cover the complete workflow using iris (Phase 1-3) and the Pima
+Indians Diabetes dataset (Phases 1-3 with clinical context).
+
+
+========================================================
+2. Background and Conceptual Objective
+========================================================
+
 2.1 Research problem addressed
-Modern machine-learning models often provide strong predictive performance but poor interpretability. Existing interpretability methods may be:
-•	computationally expensive,
-•	restricted to local or global explanations only,
-•	difficult to visualise,
-•	model-specific rather than model-agnostic, or
-•	insufficiently actionable for stakeholders.
-The methodology underlying this project seeks to address that gap by constructing a reduced two-dimensional representation of the data and model behaviour, then using that representation to approximate model decision boundaries and identify feasible counterfactual movements.
+-------------------------------
+Modern machine-learning models often provide strong predictive performance but
+poor interpretability. Existing interpretability methods may be:
+
+  - computationally expensive,
+  - restricted to local or global explanations only,
+  - difficult to visualise,
+  - model-specific rather than model-agnostic, or
+  - insufficiently actionable for stakeholders.
+
+This methodology addresses that gap by constructing a reduced two-dimensional
+biplot representation of the data and model behaviour, then using that
+representation to approximate decision boundaries and identify feasible
+counterfactual movements.
+
 2.2 Core methodological idea
-The central idea is that a biplot-like low-dimensional representation can preserve enough of the original geometric structure of the data to allow:
-•	approximation of model decision boundaries in the reduced space, and
-•	identification of the nearest counterfactual point or boundary-crossing direction.
-This turns an otherwise opaque model into a framework that supports both explanation and action:
-•	Why was this prediction made?
-•	What would need to change for the prediction to change?
+------------------------------
+The central idea is that a PCA or CVA biplot can preserve enough of the original
+geometric structure of the data to allow:
 
-3. Current codebase: inferred structure and purpose
-3.1 Broad structure of the current code
-The current code include the following functional components:
-A. Data preprocessing
-Functions that:
-•	Fit a machine learning model from a set of generic functions, including GLM, SVM, GAM and GBM to a training dataset
-•	accept new data - either the training or test dataset
-•	standardise or centre the data where required;
-•	prepare data for PCA or CVA projection;
-•	align the feature structure between training data, projection objects, and new observations.
-B. Projection and biplot construction
-Functions that:
-•	create transformation matrices such as Vmat and tVmat;
-•	construct PCA- or CVA-based biplot coordinates
-•	Rotate the matrix to ensure a target data point is on the approximated decision surface
-•	project observations from original feature space into a reduced two-dimensional space;
-•	support specialised behaviour under CVA, where standardisation may be constrained or disabled.
-•	Visualise the data and the variables
-C. Inverse projection and Decision-boundary approximation
-Functions that:
-•	map points from the reduced biplot space back into approximate original-variable values;
-•	evaluate model outputs over a grid in the reduced space;
-•	determine where predicted class membership changes;
-•	approximate the model’s decision boundary in two dimensions - as the location where the predicted class membership changes.
-This is the mechanism that allows the package to visually represent boundary structure and prediction regions even when the original model is fitted in a higher-dimensional feature space.
-D. Counterfactual identification
-Functions that:
-•	find the nearest counterfactual using the two-dimensional decision boundary;
-•	calculate movement required along the biplot plane;
-•	transform that movement back into variable-level feature changes;
-•	Create projections with different combinations of principal or canonical variables to find the nearest counterfactual in different dimension approximations;
-•	Limit the change in variable values allowed for individual data points to ensure the changes are actionable, feasible and plausible.
-E. Variable contribution / importance analysis and Robustness analysis
-Function that
-•	calculating average distance to the nearest counterfactual along each variable axis over all the test data points;
-•	ranking variables by how strongly they contribute to changing prediction outcomes;
-•	evaluate the overall distance from observations to the decision boundary;
-•	summarise model robustness globally or by subgroup.
-F. Create surrogate model
-Function that approximates the model predictions using the location of the data points in the regions generated by the biplot
-G. Variable contribution / importance analysis and Robustness analysis
-Function that calculates the contribution of each variable to the prediction outcome using Shapley values to allocate the change from the data point to the counterfactual value.
+  - approximation of model decision boundaries in the reduced 2D space, and
+  - identification of the nearest counterfactual point or boundary-crossing
+    direction via inverse projection back to original feature space.
 
-4. Intended package objective
-The package should provide a coherent user-facing workflow with the following logic:
-1.	Fit or supply a predictive classification model.
-2.	Supply the original training or a test dataset used to fit or explain the model.
-3.	Build a reduced-space representation using PCA/CVA biplot logic.
-4.	Estimate decision boundaries in reduced space.
-5.	Plot the data, boundaries, and counterfactual structure.
-6.	Query specific observations.
-7.	Recover variable-level explanations through inverse projection.
-8.	Summarise local and global interpretability measures.
-In package terms, the library should convert a collection of research scripts into:
-•	reusable objects,
-•	consistent function naming,
-•	documented inputs and outputs,
-•	reproducible examples, and
-•	vignettes for end users.
+This turns an otherwise opaque model into a framework that supports both
+explanation and action:
+  - Why was this prediction made?
+  - What would need to change for the prediction to change?
 
-5. Design principles for the package
-The package should be developed according to the following principles.
-5.1 Research fidelity
-The implementation must preserve the mathematical intent of the PhD method. Convenience features should not alter the methodological core without clear versioning and documentation.
-5.2 Modularity
-Projection, inverse projection, boundary estimation, counterfactual search, and plotting should be separable modules.
-5.3 Reproducibility
-Every major output should be reproducible from a clearly defined input object and parameter set.
-5.4 Transparency
-Outputs should retain enough metadata that users can inspect:
-•	centring/scaling values,
-•	projection matrices,
-•	model metadata,
-•	grid settings,
-•	boundary estimation assumptions,
-•	counterfactual search settings.
-5.5 Extensibility
-The code should be written so new projection methods, model backends, and explanation summaries can be added later without redesigning the whole package.
-5.6 Package usability
-The package should be intuitive for statisticians and applied data scientists. Complex mathematics should be hidden behind well-documented functions, but not obscured.
-6. What should be preserved from the current code
-The following elements appear central and should be preserved carefully during refactoring:
-1.	The mathematical logic of the projection and inverse projection.
-2.	The distinction between PCA and CVA pathways.
-3.	The ability to standardise or not standardise depending on method and use case.
-4.	The object components such as transformation matrices and centring/scaling values.
-5.	The connection between projected space and original variable interpretation.
-6.	The decision-boundary approximation workflow.
-7.	The counterfactual identification logic.
+2.3 Key insight: 2D boundary is an approximation
+--------------------------------------------------
+The decision boundary in two dimensions is an approximation of a boundary that
+exists in the full p-dimensional feature space. This is a fundamental
+methodological trade-off: the 2D representation makes the boundary visually
+interpretable and computationally tractable, but it cannot capture all the
+curvature of a high-dimensional model. Users must not assume the 2D boundary
+is exact. This should be communicated clearly in documentation and vignettes.
 
-7. What should change in the new package project
-The current codebase likely contains research-style scripts, exploratory code, and function interdependencies that are acceptable for thesis work but not ideal for a public package. The new project should therefore introduce the following changes.
-7.1 Remove hidden dependencies
-Functions should not rely on objects existing in the global environment.
-7.2 Standardise input and output contracts
-Every function should have:
-•	well-defined arguments,
-•	clear return values,
-•	documented classes,
-•	meaningful error messages.
-7.3 Avoid script-style execution flow
-The package should expose reusable functions rather than long procedural scripts.
-7.4 Improve naming consistency
-Function and object names should follow a coherent package naming convention, ideally with a common prefix.
-8 Introduce unit tests
-Make use of unit tests to cover:
-•	projection correctness
-•	inverse projection consistency
-•	counterfactual and boundary extraction validity
-•	Correct adjustment for rotation of data point
-•	Correct selection of actionable, feasible and plausible counterfactual
-•	error handling
 
-9. Guidance for LLM coding agents working on this project
-This section is intended specifically for future LLM agents.
-9.1 Primary task
-Refactor and extend the existing R research code into a production-quality R package without altering the underlying mathematical methodology unless explicitly instructed.
-9.2 Do not do the following
-•	Do not simplify the methodology merely to make the code shorter.
-•	Do not replace custom mathematical logic with generic package shortcuts unless the outputs are proven equivalent.
-•	Do not silently change default scaling, centring, or projection conventions.
-•	Do not remove metadata that may be needed for inverse projection or interpretation.
-•	Do not entangle plotting code with computation code.
-9.3 Always do the following
-•	Preserve mathematical fidelity.
-•	Add roxygen2 documentation to all exported functions.
-•	Keep functions small and modular.
-•	Write unit tests for new features.
-•	Use explicit validation checks.
-•	Make assumptions transparent in comments and documentation.
-•	Prefer deterministic behaviour where possible.
-•	Document approximation steps clearly, especially for boundary estimation and inverse projection.
-9.4 Coding standards
-•	Use idiomatic R.
-•	Prefer clear function names over compact ones.
-•	Minimise side effects.
-•	Use S3 classes where useful.
-•	Use testthat for testing.
-•	Use roxygen2 for documentation.
-•	Keep package dependencies limited and justified.
-9.5 Documentation priorities
-LLM agents should prioritise:
-1.	package README;
-2.	getting-started vignette;
-3.	mathematical-method vignette;
-4.	function help files;
-5.	reproducible examples using a simple dataset.
+========================================================
+3. Three-Phase Workflow Architecture
+========================================================
 
-10. Known technical risks and design cautions
-11.1 Reduced-space approximation risk
-The decision boundary in two dimensions is an approximation of a higher-dimensional model. Users must not be allowed to assume it is exact without qualification.
-11.3 Dependence on preprocessing conventions
-If centring/scaling is inconsistent across functions, the whole framework can become invalid.
-11.4 Over-coupling to one model type
-The package should avoid becoming dependent on only one classifier implementation.
-11.5 Research code complexity
-Some parts of the current code may have evolved iteratively and may mix experimentation with final logic. Refactoring must distinguish core methodology from historical artefacts.
-12. Definition of success
-This project will be successful if, at minimum:
-•	the code is installable as an R package;
-•	the main workflow can be executed by a new user from documented examples;
-•	projection, inverse projection, boundary estimation, and counterfactual functions are stable and tested;
-•	the package accurately reflects the PhD methodology;
-•	the package is structured well enough that LLM agents can safely extend it.
-At a higher level, success means that the package becomes the reference implementation of your biplot-based interpretable machine-learning method.
+The package is organised around a three-phase workflow. All Phase 1 outputs are
+stored in a single bl_result object that acts as the reproducible anchor for
+Phases 2 and 3.
 
+Phase 1: Build the pipeline
+  Step 1: Prepare data            bl_prepare_data() or bl_wrap_data()
+  Step 2: Filter outliers         bl_filter_outliers()            [optional]
+  Step 3: Fit or wrap model       bl_fit_model() or bl_wrap_model()
+  Steps 4-6: Build and assemble   bl_build_result()               [quick route]
+             or individually:     bl_build_projection() +
+                                  bl_build_grid() +
+                                  bl_assemble()
+  Visualise:                      plot_biplotEZ()
+
+Phase 2: Global interpretations (population level)
+  Step 7: Nearest boundary point  bl_find_boundary()
+  Step 8: Distance-to-boundary    plot(bl_boundary)
+  Step 9: Surrogate model         bl_surrogate()
+
+Phase 3: Local interpretation (single observation)
+  Step 10: Select target          bl_predict() + bl_select_target()
+  Step 12: Actionability filters  set_filters()                   [optional]
+  Step 13: Local counterfactual   bl_find_local_cf()
+  Step 14: Local biplot           plot(bl_local_result)
+  Step 15: Shapley attribution    bl_shapley()
+  Step 16: Sparse counterfactual  bl_find_sparse_cf()
+  Step 17: Unconstrained search   bl_find_local_cf() without set_filters
+  Step 18: External observation   bl_select_target() with a new data frame
+
+Note: Step 11 was merged into Step 10 in the final implementation.
+
+
+========================================================
+4. Functional Modules and Implemented Functions
+========================================================
+
+A. Data Preprocessing (R/data_prepare.R, R/outlier_filter.R)
+--------------------------------------------------------------
+bl_prepare_data(data, class_col, target_class, train_fraction, seed)
+  - Converts raw data frame to binary 0/1 classification format
+  - Creates reproducible train/test split
+  - Returns: bl_data object
+
+bl_wrap_data(train_data, test_data, target_class)
+  - Registers pre-split, pre-coded data as a bl_data object
+  - For users whose data is already prepared externally
+  - Returns: bl_data object
+
+bl_filter_outliers(bl_data, hull_fraction, verbose)
+  - Projects training data to a lightweight 2-PC space
+  - Removes observations outside a convex hull enclosing hull_fraction of data
+  - Returns: bl_filter_result object (same structure as bl_data)
+
+B. Model Fitting and Wrapping (R/model_fit.R, R/model_utils.R)
+---------------------------------------------------------------
+bl_fit_model(train_data, var_names, model_type, cutoff, model_params)
+  - Fits one of eight supported classifier types:
+    GLM (logistic regression), GAM, GBM, LDA, SVM, NNET, RForrest, XGB
+  - All types except GBM use the parsnip/tidymodels backend
+  - Returns: bl_model object
+
+bl_wrap_model(model, model_type, var_names, predict_fn, train_data, cutoff)
+  - Registers an externally fitted model as a bl_model
+  - model_type = "custom": supply predict_fn = function(model, new_data)
+    returning a numeric probability vector
+  - Returns: bl_model object
+
+Supported model types: "GLM", "GAM", "GBM", "LDA", "SVM", "NNET",
+"RForrest", "XGB", "custom"
+
+Key design decision: cutoff = 0.5 is the only methodologically valid value.
+Other values are accepted but will not produce correct boundary estimates.
+
+C. Projection and Biplot Construction (R/projection.R, R/biplot_grid.R)
+------------------------------------------------------------------------
+bl_build_projection(train_data, var_names, method, standardise, proj_dims)
+  - Computes loading matrix V and its inverse tV
+  - method: "PCA" (variance-based) or "CVA" (between-class separation)
+  - Returns: bl_projection object
+
+bl_build_grid(train_data, bl_projection, bl_model, m, cutoff, rounding,
+              b_margin, polygon, outlie, calc_hull)
+  - Creates an m x m prediction grid in Z-space
+  - Back-projects each grid point to X-space and scores through the model
+  - Extracts decision boundary contour lines
+  - rounding: controls contour band width ONLY (b_margin = 1/10^rounding)
+    - rounding = 2L: contour levels at 0.49/0.51 (wider band, smoother)
+    - rounding = 3L: contour levels at 0.499/0.501 (narrower, more precise)
+  - All model predictions are always floor-rounded to 3 d.p. regardless
+  - Returns: bl_grid object
+
+bl_build_result(bl_data, bl_model, method, title, m, rounding, ...)
+  - Combines bl_build_projection + bl_build_grid + bl_assemble in one call
+  - Preferred interface for most users
+  - Returns: bl_result object
+
+bl_assemble(bl_data, bl_model, bl_projection, bl_grid)
+  - Collects all Phase 1 outputs into a single bl_result object
+  - Returns: bl_result object
+
+Key design decision — polygon sourcing:
+  The convex hull polygon in bl_result always comes from bl_grid, NOT from
+  bl_filter_result. The filter polygon is PCA-space only; the grid polygon
+  is in the final Z-space (PCA or CVA).
+
+Key design decision — rounding separation:
+  rounding only determines the contour band width used to extract decision
+  boundary contours from the grid. It does NOT affect how model predictions
+  are stored or displayed. Predictions are always rounded to 3 decimal places
+  via floor(x * 1000) / 1000 inside .pred_function(). This separation was
+  an important architectural decision made during method_developments.
+
+D. Counterfactual Identification (R/boundary.R, R/local_cf.R)
+--------------------------------------------------------------
+bl_find_boundary(bl_result, data, tdp)
+  - Global search: finds nearest boundary point for each observation
+  - Constrains counterfactuals to train_ranges (training feature envelope)
+  - Returns: bl_boundary object
+
+bl_select_target(bl_result, target, data)
+  - Wraps a single observation as a bl_target for local analysis
+  - target: row index (integer) or single-row data frame (external observation)
+  - Returns: bl_target object
+
+set_filters(bl_target, ...)
+  - Encodes actionability constraints for the local counterfactual search
+  - Valid types: "decrease", "increase", "fixed", c(min, max)
+  - "fixed": search allows ±0.5 of observed; always reverts in sparse CF
+  - Returns: bl_filters object
+
+bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, verbose)
+  - Local search: finds nearest boundary via biplot rotation
+  - Tests up to max_pairs eigenvector pairs: (1,2),(1,3),(2,3),(1,4),...
+  - For each pair: rotates biplot, builds local grid, applies constraints,
+    finds nearest opposing-class boundary point
+  - Returns: bl_local_result object
+
+Key design decision — local CF hull rule:
+  The Z-space convex hull polygon is NOT applied in bl_find_local_cf().
+  Rotation invalidates the original polygon coordinates. Only train_ranges
+  and set_filters constrain the local search. This is intentional.
+
+E. Variable Contribution and Robustness Analysis (R/boundary.R)
+---------------------------------------------------------------
+bl_robustness(bl_boundary)
+  - Quantifies per-variable contribution to distance-to-boundary
+  - Returns: named vector of per-variable totals + overall scalar
+  - Note: plot(bl_boundary) already prints this to the console; call
+    bl_robustness() separately only for programmatic access
+
+F. Surrogate Model (R/surrogate.R)
+------------------------------------
+bl_surrogate(bl_result, data)
+  - Assigns observations to biplot regions based on surrogate contour lines
+  - Computes accuracy vs model predictions and vs true labels
+  - Observations outside the training hull receive surrogate_pred = NA
+  - Returns: bl_surrogate object
+
+G. Shapley Attribution (R/shapley.R)
+--------------------------------------
+bl_shapley(bl_local_result)
+  - Decomposes target-to-counterfactual path using exact Shapley formula
+    (for p <= 14 variables; permutation approximation otherwise)
+  - Classifies each variable as Supports (darkblue) or Contradicts (grey)
+  - Y-axis labels: "variable: observed_value -> required_change" (3 d.p.)
+  - Returns: bl_shapley object
+
+bl_find_sparse_cf(bl_shapley, round_to)
+  - Reverts all Contradicts variables to observed values
+  - Reverts all "fixed" variables to observed values
+  - Optionally rounds Supports variables to nearest multiple (round_to)
+  - round_to = NULL: keep exact CF values
+  - round_to = 0.5:  round to nearest 0.5 (recommended for clinical data)
+  - round_to = 1:    round to nearest integer
+  - solution_valid = TRUE: sparse CF still crosses the boundary
+  - Returns: bl_sparse_result object
+
+H. Plotting and Projection (R/plot_biplot.R, R/project_points.R)
+-----------------------------------------------------------------
+plot_biplotEZ(bl_result, points, boundary, target_point, target_label,
+              no_grid, no_points, no_contour, new_title, cex_z, label_cex,
+              tick_label_cex, label_dir, ticks_v, label_offset_var,
+              label_offset_dist, show_arrows, arrow_col, contour_col,
+              contour_lwd, contour_lty)
+  - Main biplot visualisation function
+  - Shows: coloured prediction grid, training points (confusion colours),
+    variable axes, decision boundary contour
+  - points: overlay from bl_project_points()
+  - boundary: overlay from bl_find_boundary()
+  - Confusion colours: TP=red, TN=blue, FP=purple, FN=orange
+
+bl_project_points(data, bl_result, filter_to_polygon)
+  - Projects any data frame into the Z-space of bl_result
+  - Scores each point through the model (red=class1, blue=class0)
+  - Returns: bl_points object for use in plot_biplotEZ()
+
+bl_predict(bl_result, data)
+  - Scores every observation and returns a tidy data frame
+  - Columns: row, pred_prob (3 d.p.), pred_class, true_class, confusion,
+    plus all feature columns
+  - Returns: data frame
+
+S3 plot methods:
+  plot(bl_result)        — calls plot_biplotEZ(bl_result)
+  plot(bl_boundary)      — jitter (default) or boxplot distance plot
+  plot(bl_surrogate)     — hull-clipped grid + surrogate-coloured points
+  plot(bl_local_result)  — local biplot (rotated plane, no_points=TRUE default)
+  plot(bl_shapley)       — horizontal bar chart, Supports/Contradicts coloured
+  plot(bl_sparse_result) — local biplot with full CF + sparse CF overlaid
+
+
+========================================================
+5. Key S3 Object Classes
+========================================================
+
+bl_data           Output of bl_prepare_data() / bl_wrap_data()
+bl_filter_result  Output of bl_filter_outliers() — same fields as bl_data
+bl_model          Output of bl_fit_model() / bl_wrap_model()
+bl_projection     Output of bl_build_projection()
+bl_grid           Output of bl_build_grid()
+bl_result         Output of bl_assemble() / bl_build_result()
+                  Central object used by all Phase 2 and Phase 3 functions
+bl_points         Output of bl_project_points()
+bl_boundary       Output of bl_find_boundary()
+bl_surrogate      Output of bl_surrogate()
+bl_target         Output of bl_select_target()
+bl_filters        Output of set_filters()
+bl_local_result   Output of bl_find_local_cf()
+bl_shapley        Output of bl_shapley()
+bl_sparse_result  Output of bl_find_sparse_cf()
+
+The bl_result object contains:
+  train_data, test_data, var_names, target_class
+  model (the fitted model object), model_type, cutoff, accuracy, gini
+  V (loading matrix), tV (inverse), center, scale, method
+  biplot_grid (the bl_grid object)
+  biplot_obj (the biplotEZ object for plotting)
+  train_ranges (feature envelope for feasibility checking)
+  polygon (convex hull in Z-space, from bl_grid)
+  rounding (stored for bl_find_local_cf() to compute its local b_margin)
+
+Note on train_fraction = 1:
+  When train_fraction = 1, all data is used for training and test_data has
+  0 rows. bl_assemble() handles this by setting test_data = train_data
+  internally. bl_predict(), bl_project_points(), and bl_find_boundary()
+  then operate on train_data. Document this behaviour in scripts.
+
+
+========================================================
+6. Design Principles (Preserved from Version 1)
+========================================================
+
+6.1 Research fidelity
+  The implementation must preserve the mathematical intent of the PhD method.
+  Convenience features must not alter the methodological core without explicit
+  instruction and clear versioning.
+
+6.2 Modularity
+  Projection, inverse projection, boundary estimation, counterfactual search,
+  and plotting are separate modules. Plotting code must not be entangled with
+  computation code.
+
+6.3 Reproducibility
+  Every major output is reproducible from a clearly defined input object and
+  parameter set. The bl_result object stores everything needed.
+
+6.4 Transparency
+  All outputs retain metadata: centring/scaling values, projection matrices,
+  model metadata, grid settings, boundary estimation assumptions, rounding
+  settings, and counterfactual search constraints.
+
+6.5 Extensibility
+  New projection methods, model backends, and explanation summaries can be
+  added without redesigning the whole package.
+
+
+========================================================
+7. Coding Standards and Conventions
+========================================================
+
+7.1 Language and style
+  - Idiomatic R; S3 classes throughout
+  - roxygen2 documentation on all exported functions
+  - testthat for unit tests
+  - No global environment dependencies
+
+7.2 Function naming
+  - All public functions: bl_* prefix (e.g., bl_fit_model, bl_find_boundary)
+  - Internal helpers: .* prefix (e.g., .pred_function, .fit_model)
+  - Exception: set_filters() and plot_biplotEZ() by design
+
+7.3 Validation
+  - Input validation at function entry using internal helpers:
+    stop_if_not_data_frame(), stop_if_not_character(),
+    stop_if_not_scalar_numeric()
+  - Meaningful error messages, always with call. = FALSE
+
+7.4 Prediction handling
+  - All model predictions go through .pred_function() in R/predict_utils.R
+  - .pred_function() dispatches by model_type and applies floor rounding
+    to 3 d.p.: floor(x * 1000) / 1000
+  - rounding is NOT passed to .pred_function() — it only controls b_margin
+
+7.5 Script variable naming conventions
+  - Assembled pipeline result: always bl_results (not result or bl_result)
+  - Shapley object: bl_shapley_values (not bl_shap, to avoid confusion
+    with the Python SHAP library)
+
+7.6 What not to show in examples or vignettes
+  - outlie parameter in bl_build_grid(): internal visual tuning, do not expose
+  - calc_hull parameter in bl_build_grid(): visual-only, do not expose
+  - bl_robustness() as a sequential step after plot(bl_bnd): redundant —
+    plot(bl_bnd) already prints the scalar and per-variable totals
+
+
+========================================================
+8. Package File Structure
+========================================================
+
+boundary_logic/
+│
+├── R/
+│   ├── utils.R                ← Input validators, calc_gini()
+│   ├── predict_utils.R        ← Internal .pred_function() dispatcher
+│   ├── feasibility_utils.R    ← Variable range helpers (train_ranges)
+│   ├── hull_utils.R           ← Convex hull polygon helpers
+│   ├── model_utils.R          ← Internal .fit_model()
+│   ├── data_prepare.R         ← bl_prepare_data(), bl_wrap_data()
+│   ├── model_fit.R            ← bl_fit_model(), bl_wrap_model()
+│   ├── outlier_filter.R       ← bl_filter_outliers()
+│   ├── projection.R           ← bl_build_projection()
+│   ├── biplot_grid.R          ← bl_build_grid()
+│   ├── plot_biplot.R          ← plot_biplotEZ()
+│   ├── result.R               ← bl_build_result(), bl_assemble()
+│   ├── boundary.R             ← bl_find_boundary(), bl_robustness()
+│   ├── boundary_plot.R        ← plot.bl_boundary()
+│   ├── surrogate.R            ← bl_surrogate()
+│   ├── project_points.R       ← bl_project_points(), bl_predict()
+│   ├── local_cf.R             ← bl_select_target(), set_filters(),
+│   │                              bl_find_local_cf()
+│   └── shapley.R              ← bl_shapley(), bl_find_sparse_cf()
+│
+├── tests/testthat/
+│   ├── helper.R               ← Shared test fixtures
+│   ├── test-data_prepare.R
+│   ├── test-model_fit.R
+│   ├── test-projection.R
+│   ├── test-biplot_grid.R
+│   ├── test-result.R
+│   ├── test-predict_utils.R
+│   └── test-feasibility_utils.R
+│
+├── vignettes/
+│   ├── Boundary_Logic-workflow.Rmd          ← Iris dataset, Phases 1-3
+│   └── Boundary_Logic_Pima_diabetes_workflow.Rmd ← Pima dataset, Phases 1-3
+│
+├── inst/extdata/
+│   └── pima_diabetes.csv      ← Bundled dataset for vignette
+│
+├── scripts/
+│   ├── 00_pima_Boundary_Logic.R  ← Full interactive workflow (Pima)
+│   └── 00_pima_SHAP.R            ← Pima SHAP analysis script
+│
+├── docs/
+│   ├── flow_diagram.md           ← Mermaid function/data flow diagram
+│   └── implementation_summary.md ← Technical implementation summary
+│
+├── DESCRIPTION
+├── NAMESPACE
+└── README.md
+
+
+========================================================
+9. Git Branch Structure
+========================================================
+
+main               — Current stable package code; public-facing
+method_developments — Active development branch
+original_PhD_code  — Preserved original PhD research scripts (read-only)
+
+Workflow: develop on method_developments, merge to main when stable.
+Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
+
+
+========================================================
+10. Known Technical Risks and Design Cautions
+========================================================
+
+10.1 Reduced-space approximation
+  The decision boundary in 2D is an approximation. The package must communicate
+  this to users in documentation and vignettes. Never imply exact equivalence
+  with the full model boundary.
+
+10.2 Preprocessing consistency
+  If centring/scaling is inconsistent across functions, the whole inverse
+  projection framework becomes invalid. All centring and scaling parameters
+  are stored in bl_projection and propagated through bl_result.
+
+10.3 CVA-specific constraints
+  CVA requires at least two classes. The bl_build_projection() function
+  handles the 2-class CVA case specifically; do not break this pathway.
+  CVA within-class scatter must use the full maths (Wmat_inv), not a
+  simple matrix inverse.
+
+10.4 Local CF rotation invalidates the hull polygon
+  When bl_find_local_cf() rotates the biplot plane to a new eigenvector
+  pair, the original Z-space convex hull polygon coordinates are no longer
+  valid. Only train_ranges and set_filters constrain the local search.
+  Do not apply the hull polygon in the local search.
+
+10.5 Model type coupling
+  The package should not become dependent on one classifier. New model
+  types should be addable by extending .fit_model() and .pred_function()
+  without touching other code.
+
+10.6 XGB model wrapping
+  For XGB, bl_model$model must be a list of the form
+  list(model = <xgb.Booster>, features = <character vector>).
+  This is the internal format produced by bl_fit_model() and expected by
+  .pred_function().
+
+10.7 Eigenvector pair limit
+  bl_find_local_cf() tests pairs in order: (1,2),(1,3),(2,3),(1,4),...
+  Maximum tested pairs: max_pairs (default 10). For datasets where many
+  pairs are needed, increase max_pairs. Do not test more than
+  choose(ncol(V), 2) pairs.
+
+
+========================================================
+11. Guidance for LLM Coding Agents
+========================================================
+
+11.1 Primary task
+  Extend the implemented package with new features, fix bugs, write tests,
+  and improve documentation — without altering the underlying mathematical
+  methodology unless explicitly instructed.
+
+11.2 Do NOT do the following
+  - Simplify the methodology to make the code shorter
+  - Replace custom mathematical logic with generic shortcuts unless outputs
+    are proven equivalent
+  - Silently change default scaling, centring, or projection conventions
+  - Remove metadata needed for inverse projection or interpretation
+  - Entangle plotting code with computation code
+  - Pass rounding to .pred_function() — it does not belong there
+  - Apply the Z-space hull polygon inside bl_find_local_cf()
+  - Show outlie, calc_hull, or bl_robustness() as sequential steps in examples
+
+11.3 Always do the following
+  - Preserve mathematical fidelity
+  - Add roxygen2 documentation to all exported functions
+  - Keep functions small and modular
+  - Write unit tests for new features
+  - Use explicit validation with meaningful error messages (call. = FALSE)
+  - Name the assembled result bl_results in scripts
+  - Name the Shapley object bl_shapley_values in scripts
+  - Confirm behaviour against both iris and Pima datasets when making
+    changes to core functions
+
+11.4 Before making any change to a core function
+  1. Read the function's roxygen2 header and understand its contract
+  2. Check which other functions call it (grep for function name)
+  3. Check if bl_result stores a value that flows from this function
+  4. Run the existing tests: devtools::test()
+  5. Make a minimal change; do not refactor surrounding code
+
+11.5 When adding a new model type
+  1. Add the type string to valid_types in bl_fit_model() and bl_wrap_model()
+  2. Add a fitting branch in .fit_model() (R/model_utils.R)
+  3. Add a prediction branch in .pred_function() (R/predict_utils.R)
+  4. Test with a simple binary dataset (iris two-class)
+  5. Document in the supported model types table in bl_fit_model() roxygen
+
+11.6 Documentation priorities
+  1. Function help files (roxygen2) — highest priority
+  2. Package README
+  3. Getting-started vignette (iris, Phases 1-3)
+  4. Pima diabetes vignette (clinical context, Phases 1-3)
+  5. Mathematical method vignette — not yet written; future priority
+
+
+========================================================
+12. Deferred / Future Work
+========================================================
+
+- Mathematical method vignette: derives the biplot projection, inverse
+  projection, and counterfactual geometry from first principles
+- Mahalanobis distance-to-boundary: alternative to Euclidean distance
+  for distance-to-boundary reporting (see memory/future_mahalanobis_distance.md)
+- Unit tests for Phase 3 functions (bl_select_target, set_filters,
+  bl_find_local_cf, bl_shapley, bl_find_sparse_cf)
+- Unit tests for bl_build_result() and bl_assemble()
+- CRAN submission preparation: check(), vignette build, README badges
+
+
+========================================================
+13. Definition of Success
+========================================================
+
+Minimum viable:
+  - The package is installable via devtools::install_github()
+  - The main workflow can be executed by a new user from the vignettes
+  - Phase 1, 2, and 3 functions are stable and tested
+  - The package accurately reflects the PhD methodology
+  - The package is structured so LLM agents can safely extend it
+
+Higher-level:
+  - The package becomes the reference implementation of the biplot-based
+    interpretable machine-learning method described in the PhD
+  - Researchers can reproduce all thesis results using the package
+  - The package is accepted to CRAN
