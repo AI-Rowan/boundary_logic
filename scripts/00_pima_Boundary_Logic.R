@@ -44,7 +44,7 @@ pima_raw <- read.csv(
             "pima diabetes.csv")
 )
 
-pima_raw <- pima_raw %>% filter(Insulin > 0, SkinThickness > 0) %>% mutate(Age = 90 - Age)
+pima_raw <- pima_raw %>% filter(Insulin > 0, SkinThickness > 0)
 
 bl_dat <- bl_prepare_data(
   data           = pima_raw,

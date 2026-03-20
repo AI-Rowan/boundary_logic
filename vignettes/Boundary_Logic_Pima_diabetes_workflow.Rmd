@@ -1,0 +1,577 @@
+---
+title: "Boundary Logic with Real Clinical Data: The Pima Diabetes Dataset"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Boundary Logic with Real Clinical Data: The Pima Diabetes Dataset}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Overview
+
+This vignette walks through the complete three-phase Boundary Logic
+workflow using the **Pima Indians Diabetes** dataset — a real-world
+clinical dataset with 768 observations, 8 numeric predictors, and a
+binary outcome (diabetic / non-diabetic).
+
+The Pima dataset demonstrates features that do not arise in the simple
+iris example:
+
+-   **Non-linear decision surface** — handled here with a Generalised
+    Additive Model (GAM) using spline terms, wrapped via
+    `bl_wrap_model()`.
+-   **Clinically motivated actionability constraints** — some variables
+    (Glucose) can be influenced by treatment, while others (Age,
+    Pregnancies) cannot.
+-   **External patient analysis** — predicting and explaining the
+    outcome for a new patient not in the training set.
+
+The workflow follows three phases:
+
+-   **Phase 1:** Data preparation, model fitting, CVA biplot
+    construction.
+-   **Phase 2:** Global interpretation — distance to boundary,
+    per-variable importance, surrogate model.
+-   **Phase 3:** Local interpretation of a single patient — local
+    counterfactual, Shapley attribution, sparse counterfactual.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{r load-pkg}
+library(boundarylogic)
+library(dplyr)
+```
+
+------------------------------------------------------------------------
+
+## Phase 1: Build the pipeline
+
+### Step 1 — Prepare data
+
+The dataset has 8 numeric features and a binary `Outcome` column (1 =
+diabetic, 0 = non-diabetic). Before fitting the model, one data quality
+step is applied:
+
+-   **Filter implausible zero values** — `Insulin` and `SkinThickness`
+    cannot physiologically be zero; those rows are removed.
+
+`bl_prepare_data()` converts the `Outcome` column to `class` (it is
+already 0/1 so `target_class = NULL`) and creates a reproducible 80/20
+train/test split.
+
+```{r step1}
+pima_csv <- system.file("extdata", "pima_diabetes.csv",
+                        package = "boundarylogic")
+
+pima_raw <- read.csv(pima_csv)
+
+pima_raw <- pima_raw %>%
+  filter(Insulin > 0, SkinThickness > 0)
+
+bl_dat <- bl_prepare_data(
+  data           = pima_raw,
+  class_col      = "Outcome",
+  target_class   = NULL,       # already 0/1
+  train_fraction = 0.8,
+  seed           = 121L
+)
+
+print(bl_dat)
+```
+
+**What to check:**
+
+-   `Features` — the eight clinical measurement columns.
+-   `Train rows / Test rows` — approximately 80/20 of the filtered
+    dataset.
+-   `Class balance` — check that both classes are represented in the
+    training set.
+
+```{r step1-check}
+table(bl_dat$train_data$class)
+```
+
+------------------------------------------------------------------------
+
+### Step 2 — Filter outliers (optional)
+
+`bl_filter_outliers()` removes training observations that fall outside
+the convex hull enclosing the specified fraction of the data. With
+`hull_fraction = 0.9`, the outermost 10 % of training points are
+removed before model fitting.
+
+```{r step2}
+bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
+print(bl_filt)
+```
+
+------------------------------------------------------------------------
+
+### Step 3 — Fit a GAM and wrap it
+
+The Pima outcome is non-linear with respect to most predictors. A
+Generalised Additive Model (GAM) with spline terms is a good choice
+here: it is flexible enough to capture the non-linear decision surface
+while remaining interpretable.
+
+`mgcv::gam()` is fitted directly (giving full control over the formula
+and spline settings). The fitted object is then registered as a
+`bl_model` via `bl_wrap_model()` with a custom `predict_fn`.
+
+```{r step3}
+gam_formula <- class ~ s(Glucose) + s(BloodPressure) +
+  s(Pregnancies) + s(SkinThickness) + Insulin +
+  s(BMI) + DiabetesPedigreeFunction + Age
+
+custom_gam <- mgcv::gam(
+  formula = gam_formula,
+  data    = bl_filt$train_data,
+  family  = binomial(link = "logit")
+)
+
+bl_mod <- bl_wrap_model(
+  model      = custom_gam,
+  model_type = "custom",
+  var_names  = bl_filt$var_names,
+  predict_fn = function(m, new_data) {
+    as.numeric(mgcv::predict.gam(m, newdata = new_data, type = "response"))
+  },
+  train_data = bl_filt$train_data
+)
+
+print(bl_mod)
+```
+
+**Why `model_type = "custom"`?**\
+`mgcv::gam()` is not one of the built-in parsnip-backed types. Supplying
+`predict_fn` tells the package exactly how to call `predict()` on the
+model object. The function signature must be
+`function(model, new_data)` returning a numeric probability vector.
+
+------------------------------------------------------------------------
+
+### Steps 4–6 — Build and assemble
+
+`bl_build_result()` combines the projection (Step 4), prediction grid
+(Step 5), and assembly (Step 6) into a single call.
+
+**CVA projection** is used here. CVA (Canonical Variate Analysis)
+maximises between-class separation relative to within-class spread,
+which makes the decision boundary clearly visible in the 2D biplot plane
+for datasets with a well-separated binary outcome.
+
+`rounding = 2L` sets a wider contour band (`cutoff ± 0.01`, i.e.
+contour levels at 0.49 / 0.51), which works well for smooth, gradual
+decision surfaces like those produced by a GAM:
+
+| `rounding` | `b_margin` | Contour levels    |
+|------------|------------|-------------------|
+| `2L`       | `0.01`     | `0.49` / `0.51`   |
+| `3L`       | `0.001`    | `0.499` / `0.501` |
+
+```{r steps4-6}
+bl_results <- bl_build_result(
+  bl_data  = bl_filt,
+  bl_model = bl_mod,
+  method   = "CVA",
+  title    = "Pima diabetes — GAM, CVA biplot",
+  rounding = 2L
+)
+
+print(bl_results)
+```
+
+```{r steps4-6-summary}
+summary(bl_results)
+```
+
+------------------------------------------------------------------------
+
+### Visualise: `plot_biplotEZ()`
+
+The biplot shows the CVA prediction surface (blue = non-diabetic, red =
+diabetic probability regions), training observations coloured by
+confusion category, and the decision boundary contour:
+
+```{r biplot-train}
+plot_biplotEZ(bl_results)
+```
+
+Overlay the test observations:
+
+```{r biplot-test}
+test_pts <- bl_project_points(bl_results$test_data, bl_results)
+plot_biplotEZ(bl_results, points = test_pts)
+```
+
+------------------------------------------------------------------------
+
+## Phase 2: Global interpretation
+
+Phase 2 uses the `bl_results` object to interpret the model at the
+population level: finding the nearest boundary point for every
+observation, measuring variable-level distances, and fitting a surrogate
+model.
+
+------------------------------------------------------------------------
+
+### Step 7 — Find nearest boundary point: `bl_find_boundary()`
+
+`bl_find_boundary()` searches the decision boundary contour for each
+observation and back-projects the nearest boundary point to X-space. The
+result summarises how far each observation is from the decision boundary
+and which variables drive that distance.
+
+The search is constrained to `train_ranges` — counterfactuals must lie
+within the range of the training feature envelope.
+
+```{r step7-boundary}
+bl_bnd <- bl_find_boundary(bl_results)
+print(bl_bnd)
+```
+
+Overlay the boundary arrows on the biplot (each arrow runs from an
+observation to its nearest boundary point):
+
+```{r step7-biplot}
+plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+```
+
+------------------------------------------------------------------------
+
+### Step 8 — Distance-to-boundary plot
+
+`plot(bl_bnd)` decomposes each observation's distance to the boundary
+into a signed, standardised contribution per variable. Variables are
+sorted from least to most important (bottom to top).
+
+-   **Y-axis:** `variable : total absolute standardised distance`
+    (importance proxy).
+-   **X-axis:** signed standardised distance — positive means the
+    observation is above the boundary in that variable's direction.
+-   **Colours:** TP = red, TN = blue, FP = purple, FN = orange.
+-   The overall **robustness scalar** and **per-variable totals** are
+    printed to the console.
+
+```{r step8-jitter}
+plot(bl_bnd)
+```
+
+```{r step8-boxplot}
+plot(bl_bnd, type = "boxplot")
+```
+
+> **Note:** `plot(bl_bnd)` already prints the overall robustness scalar
+> and per-variable totals to the console. Call `bl_robustness(bl_bnd)`
+> separately only when you need to access the values programmatically —
+> for example, to compare robustness across models.
+
+------------------------------------------------------------------------
+
+### Step 9 — Surrogate model: `bl_surrogate()`
+
+`bl_surrogate()` assigns each training observation a class based solely
+on its position in Z-space relative to the hull-clipped surrogate
+contour lines. This provides a purely spatial approximation of the
+classifier confined to the training hull. Observations that project
+outside the training hull receive `surrogate_pred = NA`.
+
+Two accuracy measures are reported:
+
+-   `accuracy_vs_model` — agreement with the fitted GAM's predictions.
+-   `accuracy_vs_labels` — accuracy against true class labels.
+
+```{r step9-surrogate}
+bl_surr <- bl_surrogate(bl_results)
+print(bl_surr)
+plot(bl_surr)
+```
+
+------------------------------------------------------------------------
+
+## Phase 3: Local interpretation
+
+Phase 3 explains a single patient observation by finding the nearest
+counterfactual via biplot rotation, decomposing the required changes
+using Shapley values, and producing a sparse counterfactual.
+
+------------------------------------------------------------------------
+
+### Step 10 — Inspect predictions and select a target
+
+`bl_predict()` scores every test observation and returns a tidy data
+frame. Inspect it to choose the patient you want to explain, then wrap
+that row in a `bl_target` object using `bl_select_target()`.
+
+```{r step10-select}
+pred_summary <- bl_predict(bl_results)
+print(pred_summary)
+
+# Select the first predicted diabetic patient (class 1) for local explanation.
+# With seed = 121L this is row 1 of test_data; the dynamic selection below
+# ensures the vignette knits correctly regardless of the data split.
+tdp <- which(pred_summary$pred_class == 1)[1]
+tgt <- bl_select_target(bl_results, target = tdp)
+print(tgt)
+
+# Highlight the target on the main biplot
+plot_biplotEZ(
+  bl_results,
+  points       = test_pts,
+  target_point = unlist(tgt$x_obs),
+  target_label = tdp
+)
+```
+
+------------------------------------------------------------------------
+
+### Step 12 — Set actionability constraints: `set_filters()`
+
+In a clinical context, not all variables can be changed for a given
+patient. `set_filters()` encodes these constraints:
+
+-   **`"decrease"`** — the counterfactual value must be ≤ observed
+    (e.g., lowering Glucose via diet/medication is a realistic
+    intervention).
+-   **`"fixed"`** — the variable is not actionable; the search allows
+    ±0.5 of the observed value, and the sparse counterfactual always
+    reverts to the original observed value.
+-   **`"increase"`** — the counterfactual value must be ≥ observed.
+-   **`c(min, max)`** — counterfactual must lie within this absolute
+    range.
+
+For this patient, `Glucose` is the primary clinical lever (can be
+reduced), while `Age` and `Pregnancies` are biological facts that cannot
+be changed:
+
+```{r step12-filters}
+flt <- set_filters(
+  tgt,
+  Glucose     = "decrease",   # reducing Glucose is the clinical lever
+  Age         = "fixed",      # Age is not actionable
+  Pregnancies = "fixed"       # Pregnancies is not actionable
+)
+
+print(flt)
+```
+
+------------------------------------------------------------------------
+
+### Step 13 — Find local counterfactual: `bl_find_local_cf()`
+
+`bl_find_local_cf()` searches for the nearest decision boundary point
+relative to the target patient by testing multiple eigenvector pairs. For
+each pair it:
+
+1.  Rotates the biplot so the target lies on the projection plane.
+2.  Builds a local prediction grid in the rotated Z-space.
+3.  Applies `train_ranges` (feasibility) and the actionability filters
+    from Step 12.
+4.  Finds the nearest opposing-class boundary point.
+
+The pair with the overall minimum Z-space distance is selected.
+
+> **Note:** The Z-space convex hull polygon is not applied during the
+> local search — rotation invalidates the original polygon coordinates.
+> Only `train_ranges` and `set_filters` constrain the search.
+
+```{r step13-local-cf}
+bl_local <- bl_find_local_cf(
+  bl_result   = bl_results,
+  bl_target   = tgt,
+  set_filters = flt
+)
+
+print(bl_local)
+```
+
+------------------------------------------------------------------------
+
+### Step 14 — Local biplot
+
+`plot(bl_local)` renders the biplot in the rotated eigenvector plane
+that minimises the distance to the boundary. By default, training
+observations are hidden — only the target (filled circle) and
+counterfactual (grey cross with arrow) are shown.
+
+```{r step14-local-biplot}
+plot(bl_local)
+```
+
+To also show training observations:
+
+```{r step14-with-training}
+plot(bl_local, no_points = FALSE)
+```
+
+------------------------------------------------------------------------
+
+### Step 15 — Shapley attribution: `bl_shapley()`
+
+`bl_shapley()` decomposes the path from the target to the
+counterfactual into per-variable contributions using the exact Shapley
+formula. Each variable is classified as:
+
+-   **Supports** (dark blue) — moving in this direction helps cross the
+    boundary (reduces the diabetic probability toward 0.5).
+-   **Contradicts** (grey) — moving in this direction works against
+    crossing the boundary.
+
+Y-axis labels show `variable: observed_value → required_change`, both
+rounded to 3 decimal places.
+
+```{r step15-shapley}
+bl_shapley_values <- bl_shapley(bl_local)
+print(bl_shapley_values)
+
+plot(bl_shapley_values)
+```
+
+------------------------------------------------------------------------
+
+### Step 16 — Sparse counterfactual: `bl_find_sparse_cf()`
+
+`bl_find_sparse_cf()` creates a parsimonious counterfactual by reverting
+all **Contradicts** variables to their observed values, and reverting all
+variables marked `"fixed"` in `set_filters()`. Only the **Supports**
+variables take their counterfactual values.
+
+`solution_valid = TRUE` confirms the sparse counterfactual still crosses
+the decision boundary (predicted probability changes from class 1 to
+class 0).
+
+```{r step16-sparse}
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
+
+# print() shows three predictions to verify the class flip:
+#   Observed  — model score for the original patient
+#   Full CF   — model score at the full counterfactual
+#   Sparse CF — model score for the sparse (zeroed) counterfactual
+print(bl_sparse)
+
+# Grey cross   = full counterfactual (all variables changed)
+# Green cross  = sparse CF (valid — crosses boundary)
+# Yellow cross = sparse CF (invalid — does not cross boundary)
+plot(bl_sparse)
+```
+
+------------------------------------------------------------------------
+
+## Step 17 (Alternative): Unconstrained local search
+
+Running `bl_find_local_cf()` without actionability constraints is useful
+as a baseline — it shows the geometrically nearest boundary point
+regardless of clinical plausibility. If the constrained search in Step
+13 returned `solution_found = FALSE`, the unconstrained search confirms
+whether a boundary point exists at all.
+
+```{r step17-unconstrained}
+bl_local_free   <- bl_find_local_cf(bl_results, tgt)
+print(bl_local_free)
+
+plot(bl_local_free)
+
+bl_shap_free   <- bl_shapley(bl_local_free)
+bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
+
+plot(bl_shap_free)
+plot(bl_sparse_free)
+```
+
+------------------------------------------------------------------------
+
+## Step 18: External patient
+
+Phase 3 is not limited to observations in the train/test set. Pass a
+single-row data frame as the `target` argument to `bl_select_target()`
+to analyse a new patient who was not part of the original data.
+
+The feature values below correspond to Patient 1 from the original Pima
+dataset (before the Insulin/SkinThickness filter was applied):
+
+```{r step18-external}
+new_patient <- data.frame(
+  Pregnancies              = 2,
+  Glucose                  = 148,
+  BloodPressure            = 72,
+  SkinThickness            = 35,
+  Insulin                  = 100,
+  BMI                      = 33.6,
+  DiabetesPedigreeFunction = 0.627,
+  Age                      = 50
+)
+
+tgt_ext <- bl_select_target(bl_results, target = new_patient)
+print(tgt_ext)
+
+# Highlight on the main biplot
+plot_biplotEZ(
+  bl_results,
+  points       = test_pts,
+  target_point = unlist(tgt_ext$x_obs),
+  target_label = "new"
+)
+```
+
+Run the full local explanation pipeline for the external patient:
+
+```{r step18-local}
+bl_local_ext <- bl_find_local_cf(bl_results, tgt_ext)
+print(bl_local_ext)
+
+plot(bl_local_ext)
+```
+
+```{r step18-shapley}
+bl_shap_ext   <- bl_shapley(bl_local_ext)
+bl_sparse_ext <- bl_find_sparse_cf(bl_shap_ext)
+
+plot(bl_shap_ext)
+plot(bl_sparse_ext)
+```
+
+------------------------------------------------------------------------
+
+## Summary
+
+This vignette demonstrated the complete Boundary Logic workflow on a
+real clinical dataset:
+
+| Phase | Step | Function | Purpose |
+|-------|------|----------|---------|
+| 1 | 1 | `bl_prepare_data()` | Load and split the Pima dataset |
+| 1 | 2 | `bl_filter_outliers()` | Remove the outer 10 % of training points |
+| 1 | 3 | `bl_wrap_model()` | Register a custom GAM with spline terms |
+| 1 | 4–6 | `bl_build_result()` | CVA biplot + prediction grid |
+| 2 | 7 | `bl_find_boundary()` | Global counterfactual search |
+| 2 | 8 | `plot(bl_bnd)` | Variable importance, distance to boundary |
+| 2 | 9 | `bl_surrogate()` | Spatial surrogate model |
+| 3 | 10 | `bl_predict()` + `bl_select_target()` | Select target patient |
+| 3 | 12 | `set_filters()` | Encode clinical actionability constraints |
+| 3 | 13 | `bl_find_local_cf()` | Nearest constrained counterfactual |
+| 3 | 14 | `plot(bl_local)` | Local biplot |
+| 3 | 15 | `bl_shapley()` | Shapley attribution |
+| 3 | 16 | `bl_find_sparse_cf()` | Sparse counterfactual |
+| — | 17 | Unconstrained search | Baseline comparison |
+| — | 18 | External patient | New observation not in training data |
+
+The key finding from the Shapley analysis is which clinical variables
+**Support** moving the patient from the diabetic region toward the
+non-diabetic decision boundary, quantified as probability contributions.
+The sparse counterfactual identifies the minimum set of changes that
+would flip the model's prediction, expressed in interpretable clinical
+units.
