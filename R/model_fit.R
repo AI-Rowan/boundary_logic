@@ -112,6 +112,23 @@ print.bl_model <- function(x, ...) {
   } else {
     cat("  Train Accuracy: (not computed)\n")
   }
+
+  # ---- Model summary -----------------------------------------------------
+  # Parsnip/workflow objects need engine extraction; GBM and custom are raw.
+  parsnip_types <- c("GLM", "GAM", "LDA", "SVM", "NNET", "RForrest", "XGB")
+  cat("\n--- Model summary ---\n")
+  tryCatch({
+    if (x$model_type %in% parsnip_types) {
+      engine_fit <- workflows::extract_fit_engine(x$model)
+      print(summary(engine_fit))
+    } else {
+      print(summary(x$model))
+    }
+  }, error = function(e) {
+    cat("  (summary not available for this model type)\n")
+  })
+  cat("---------------------\n")
+
   invisible(x)
 }
 
