@@ -77,22 +77,22 @@
 #'
 #' @export
 bl_assemble <- function(bl_data,
-                        bl_model,
+                        bl_model      = NULL,
                         bl_projection,
-                        bl_grid) {
+                        bl_grid       = NULL) {
 
   # ---- Validate inputs --------------------------------------------------
   if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
     stop("'bl_data' must be a 'bl_data' object from bl_prepare_data() or ",
          "a 'bl_filter_result' object from bl_filter_outliers().",
          call. = FALSE)
-  if (!inherits(bl_model, "bl_model"))
+  if (!is.null(bl_model) && !inherits(bl_model, "bl_model"))
     stop("'bl_model' must be a 'bl_model' object from bl_fit_model().",
          call. = FALSE)
   if (!inherits(bl_projection, "bl_projection"))
     stop("'bl_projection' must be a 'bl_projection' object from bl_build_projection().",
          call. = FALSE)
-  if (!inherits(bl_grid, "bl_grid"))
+  if (!is.null(bl_grid) && !inherits(bl_grid, "bl_grid"))
     stop("'bl_grid' must be a 'bl_grid' object from bl_build_grid().",
          call. = FALSE)
 
@@ -114,12 +114,14 @@ bl_assemble <- function(bl_data,
   # data was passed to bl_build_projection, filtered or unfiltered).
   train_ranges <- bl_projection$train_ranges
 
-  # polygon and hull_fraction: always from bl_grid, because the grid is
-  # computed in the final biplot Z-space (PCA or CVA, possibly rotated).
-  # The bl_filter_result polygon is in PCA space only and would be
-  # inconsistent if the final projection differs.
+  # polygon and hull_fraction: always from bl_grid when available, because
+  # the grid is computed in the final biplot Z-space (PCA or CVA, possibly
+  # rotated). NULL when no model/grid was supplied.
   polygon       <- bl_grid$polygon
   hull_fraction <- bl_grid$hull_fraction
+
+  # var_names: from bl_model when present, else from bl_data
+  var_names_use <- if (!is.null(bl_model)) bl_model$var_names else bl_data$var_names
 
   # CVA always has standardise = FALSE; store the effective value
   standardise_eff <- bl_projection$standardise
@@ -130,10 +132,10 @@ bl_assemble <- function(bl_data,
       # Data
       train_data    = train_data,
       test_data     = test_data,
-      var_names     = bl_model$var_names,
-      num_vars      = length(bl_model$var_names),
+      var_names     = var_names_use,
+      num_vars      = length(var_names_use),
 
-      # Model
+      # Model (NULL when no model supplied)
       model         = bl_model$model,
       model_type    = bl_model$model_type,
       cutoff        = bl_model$cutoff,
@@ -154,10 +156,10 @@ bl_assemble <- function(bl_data,
       hull_fraction = hull_fraction,
       train_ranges  = train_ranges,
 
-      # Grid
+      # Grid (NULL when no model supplied)
       biplot_grid   = bl_grid,
 
-      # Performance
+      # Performance (NULL when no model supplied)
       accuracy      = bl_model$accuracy,
       gini          = bl_model$gini,
 
@@ -244,7 +246,7 @@ bl_assemble <- function(bl_data,
 #' @seealso [bl_build_projection()], [bl_build_grid()], [bl_assemble()]
 #'
 #' @export
-bl_build_result <- function(bl_data,
+bl_build_result <- function(bl_data     = NULL,
                              bl_model    = NULL,
                              method      = "PCA",
                              proj_dims   = c(1L, 2L),
@@ -256,17 +258,41 @@ bl_build_result <- function(bl_data,
                              calc_hull   = TRUE,
                              rounding    = 3L) {
 
+  # ---- Safely resolve bl_model (lazy promise) ---------------------------
+  # If the caller wrote bl_model = bl_mod and bl_mod does not yet exist,
+  # R would throw "object 'bl_mod' not found" at the first is.null() touch.
+  # force() triggers evaluation here so we can catch that error cleanly and
+  # fall through to the standard NULL handling below.
+  bl_model <- tryCatch(force(bl_model), error = function(e) NULL)
+
   # ---- Validate data source ---------------------------------------------
-  if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
-    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data() or ",
-         "a 'bl_filter_result' object from bl_filter_outliers().",
-         call. = FALSE)
+  if (is.null(bl_data)) {
+    message("bl_build_result() requires 'bl_data'. ",
+            "Supply a 'bl_data' object from bl_prepare_data() or ",
+            "a 'bl_filter_result' object from bl_filter_outliers().")
+    return(invisible(NULL))
+  }
+
+  if (!inherits(bl_data, c("bl_data", "bl_filter_result"))) {
+    message("bl_build_result(): 'bl_data' must be a 'bl_data' object from ",
+            "bl_prepare_data() or a 'bl_filter_result' object from ",
+            "bl_filter_outliers().")
+    return(invisible(NULL))
+  }
 
   # The projection matrix V is always built from the training data.
   # bl_build_result() does not support building V from test data — use
   # bl_build_projection() directly if a non-standard data source is needed.
   train_data <- bl_data$train_data
   var_names  <- bl_data$var_names
+
+  # ---- No model: inform user --------------------------------------------
+  if (is.null(bl_model)) {
+    message("Note: 'bl_model' is NULL. ",
+            "Returning a model-free bl_result. ",
+            "plot_biplotEZ() will show the biplot coloured by true class only. ",
+            "No prediction grid or decision boundary will be available.")
+  }
 
   # ---- CVA without model: fall back to binary class labels --------------
   if (method == "CVA" && is.null(bl_model) && is.null(cva_classes)) {
@@ -287,21 +313,20 @@ bl_build_result <- function(bl_data,
     title       = title
   )
 
-  # ---- No model: return projection for exploratory plotting -------------
-  if (is.null(bl_model)) {
-    return(bl_proj)
+  # ---- Step 5: build prediction grid (skipped when no model) -----------
+  bl_grid <- if (!is.null(bl_model)) {
+    bl_build_grid(
+      train_data    = train_data,
+      bl_projection = bl_proj,
+      bl_model      = bl_model,
+      m             = m,
+      outlie        = outlie,
+      calc_hull     = calc_hull,
+      rounding      = rounding
+    )
+  } else {
+    NULL
   }
-
-  # ---- Step 5: build prediction grid ------------------------------------
-  bl_grid <- bl_build_grid(
-    train_data    = train_data,
-    bl_projection = bl_proj,
-    bl_model      = bl_model,
-    m             = m,
-    outlie        = outlie,
-    calc_hull     = calc_hull,
-    rounding      = rounding
-  )
 
   # ---- Step 6: assemble and return --------------------------------------
   bl_assemble(
@@ -319,22 +344,27 @@ bl_build_result <- function(bl_data,
 
 #' @export
 print.bl_result <- function(x, ...) {
-  m <- length(x$biplot_grid$xseq)
   cat("<bl_result>\n")
-  cat(sprintf("  Model type   : %s\n", x$model_type))
+  cat(sprintf("  Model type   : %s\n",
+              if (!is.null(x$model_type)) x$model_type else "(none)"))
   cat(sprintf("  Method       : %s\n", x$method))
   cat(sprintf("  Features     : %d (%s)\n",
               x$num_vars, paste(x$var_names, collapse = ", ")))
   cat(sprintf("  Train rows   : %d  |  Test rows: %d\n",
               nrow(x$train_data), nrow(x$test_data)))
-  cat(sprintf("  Cutoff       : %g\n", x$cutoff))
-  cat(sprintf("  Accuracy     : %.4f  |  Gini: %.4f\n",
-              x$accuracy, x$gini))
-  cat(sprintf("  Grid size    : %d x %d\n", m, m))
-  if (!is.null(x$hull_fraction)) {
-    cat(sprintf("  Hull fraction: %.2f\n", x$hull_fraction))
+  if (!is.null(x$model)) {
+    cat(sprintf("  Cutoff       : %g\n", x$cutoff))
+    cat(sprintf("  Accuracy     : %.4f  |  Gini: %.4f\n",
+                x$accuracy, x$gini))
+    m <- length(x$biplot_grid$xseq)
+    cat(sprintf("  Grid size    : %d x %d\n", m, m))
+    if (!is.null(x$hull_fraction)) {
+      cat(sprintf("  Hull fraction: %.2f\n", x$hull_fraction))
+    } else {
+      cat("  Hull fraction: none applied\n")
+    }
   } else {
-    cat("  Hull fraction: none applied\n")
+    cat("  Model        : none (exploratory biplot only)\n")
   }
   cat(sprintf("  Created      : %s\n",
               format(x$created_at, "%Y-%m-%d %H:%M:%S")))

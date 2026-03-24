@@ -111,26 +111,39 @@ bl_project_points <- function(data, bl_result,
     inside_polygon <- !is.na(sp::over(Z_df, bl_result$polygon))
   }
 
-  # ---- Score through model -----------------------------------------------
-  pred_prob  <- .pred_function(
-    model_use  = bl_result$model,
-    model_type = bl_result$model_type,
-    new_data   = data[, var_names, drop = FALSE]
-  )
-  pred_class <- as.numeric(pred_prob >= cutoff)
-
-  # ---- Point colours -----------------------------------------------------
-  if ("class" %in% names(data)) {
-    actual   <- data[["class"]]
-    pred_col <- dplyr::case_when(
-      actual == pred_class & actual == 1L ~ "red",    # TP
-      actual == pred_class & actual == 0L ~ "blue",   # TN
-      actual != pred_class & actual == 0L ~ "purple", # FP
-      TRUE                               ~ "orange"   # FN
+  # ---- Score through model (skipped when no model) -----------------------
+  if (!is.null(bl_result$model)) {
+    pred_prob  <- .pred_function(
+      model_use  = bl_result$model,
+      model_type = bl_result$model_type,
+      new_data   = data[, var_names, drop = FALSE]
     )
+    pred_class <- as.numeric(pred_prob >= cutoff)
+
+    # Confusion colours when true labels available; predicted-class otherwise
+    if ("class" %in% names(data)) {
+      actual   <- data[["class"]]
+      pred_col <- dplyr::case_when(
+        actual == pred_class & actual == 1L ~ "red",    # TP
+        actual == pred_class & actual == 0L ~ "blue",   # TN
+        actual != pred_class & actual == 0L ~ "purple", # FP
+        TRUE                               ~ "orange"   # FN
+      )
+    } else {
+      actual   <- NULL
+      pred_col <- ifelse(pred_class == 1, "red", "blue")
+    }
   } else {
-    actual   <- NULL
-    pred_col <- ifelse(pred_class == 1, "red", "blue")
+    # No model: colour by true class only (red = 1, blue = 0)
+    pred_prob  <- NULL
+    pred_class <- NULL
+    if ("class" %in% names(data)) {
+      actual   <- data[["class"]]
+      pred_col <- ifelse(actual == 1L, "red", "blue")
+    } else {
+      actual   <- NULL
+      pred_col <- rep("grey50", nrow(Z))
+    }
   }
 
   # ---- Optional filter to polygon ----------------------------------------

@@ -43,6 +43,10 @@
 #'   `bl_project_points(result$test_data, result)` to show test data instead.
 #' @param no_points        Logical; if `TRUE`, data points are hidden.
 #'   Default `FALSE`.
+#' @param confusion_cols   Logical; if `TRUE` (default), points are coloured
+#'   by confusion category (TP=red, TN=blue, FP=purple, FN=orange) when true
+#'   labels are available. Set to `FALSE` to colour points by predicted class
+#'   only (class 1 = red, class 0 = blue), ignoring true labels.
 #' @param no_contour       Logical; if `TRUE`, decision boundary contour lines
 #'   are hidden. Default `FALSE`.
 #' @param new_title        Character; overrides the biplot title stored in
@@ -80,6 +84,12 @@
 #'   each observation to its counterfactual when `boundary` is supplied.
 #' @param arrow_col        Character; colour for the boundary crosses and
 #'   arrows. Default `"grey30"`.
+#' @param grid_col         `NULL` (default) or a length-2 character vector
+#'   `c(class0_col, class1_col)`. When supplied, the prediction grid is
+#'   rendered as hard binary colours — `grid_col[1]` for grid points with
+#'   predicted probability < 0.5 (class 0) and `grid_col[2]` for ≥ 0.5
+#'   (class 1) — instead of the default blue-white-red gradient. Example:
+#'   `grid_col = c("blue", "red")`.
 #' @param contour_col      Character; colour for decision boundary contour
 #'   lines. Default `"black"`.
 #' @param contour_lwd      Numeric; line width for contour lines. Default
@@ -117,6 +127,7 @@ plot_biplotEZ <- function(bl_result,
                            target_label      = NULL,
                            no_grid           = FALSE,
                            no_points         = FALSE,
+                           confusion_cols    = TRUE,
                            no_contour        = FALSE,
                            new_title         = NA,
                            cex_z             = 0.5,
@@ -129,13 +140,16 @@ plot_biplotEZ <- function(bl_result,
                            label_offset_var  = 0L,
                            label_offset_dist = 0.5,
                            rotate_deg        = 0,
+                           grid_col          = NULL,
                            contour_col       = "black",
                            contour_lwd       = 1.5,
                            contour_lty       = 1L) {
 
-  if (!inherits(bl_result, "bl_result"))
-    stop("'bl_result' must be a 'bl_result' object from bl_assemble().",
-         call. = FALSE)
+  if (!inherits(bl_result, "bl_result")) {
+    message("plot_biplotEZ(): 'bl_result' must be a 'bl_result' object from bl_assemble(). ",
+            "Did bl_build_result() return NULL due to a missing 'bl_data' argument?")
+    return(invisible(NULL))
+  }
 
   # ---- Resolve points to plot -------------------------------------------
   if (is.null(points)) {
@@ -234,19 +248,29 @@ plot_biplotEZ <- function(bl_result,
     plot()
 
   # ---- Step 2: prediction grid (coloured squares) ----------------------
-  if (!isTRUE(no_grid)) {
+  if (!isTRUE(no_grid) && !is.null(gr)) {
+    if (!is.null(grid_col) && length(grid_col) == 2L) {
+      grid_draw_col <- ifelse(gr$grid_prob >= 0.5, grid_col[2L], grid_col[1L])
+    } else {
+      grid_draw_col <- gr$col_value
+    }
     graphics::points(gr$Zgrid,
                      type = "p",
-                     col  = gr$col_value,
+                     col  = grid_draw_col,
                      pch  = 15L,
                      cex  = 0.5)
   }
 
   # ---- Step 3: data points ---------------------------------------------
   if (!isTRUE(no_points)) {
+    pt_col <- if (!isTRUE(confusion_cols)) {
+      ifelse(points$pred_class == 1L, "red", "blue")
+    } else {
+      points$pred_col
+    }
     graphics::points(x   = points$Z[, 1L],
                      y   = points$Z[, 2L],
-                     col = points$pred_col,
+                     col = pt_col,
                      pch = 16L,
                      cex = cex_z)
   }
@@ -296,7 +320,7 @@ plot_biplotEZ <- function(bl_result,
     plot(add = TRUE)
 
   # ---- Step 5: decision boundary contour lines -------------------------
-  if (!isTRUE(no_contour)) {
+  if (!isTRUE(no_contour) && !is.null(gr)) {
     for (cl in gr$ct) {
       graphics::lines(cl$x, cl$y,
                       col = contour_col,
@@ -336,32 +360,45 @@ plot_biplotEZ <- function(bl_result,
     }
   }
 
-  # ---- Step 7: prediction summary -------------------------------------
-  n_total  <- length(points$pred_class)
-  n_pos    <- sum(points$pred_class == 1L)
-  n_neg    <- n_total - n_pos
+  # ---- Step 7: summary -------------------------------------------------
+  n_total <- nrow(points$Z)
 
-  cat("\n--- Prediction summary ---\n")
-  cat(sprintf("  Points plotted : %d\n", n_total))
-  cat(sprintf("  Predicted 1    : %d  (%.1f %%)\n",
-              n_pos, 100 * n_pos / n_total))
-  cat(sprintf("  Predicted 0    : %d  (%.1f %%)\n",
-              n_neg, 100 * n_neg / n_total))
-
-  if (!is.null(points$class)) {
-    correct  <- sum(points$pred_class == points$class)
-    accuracy <- correct / n_total
-    cat(sprintf("  Accuracy       : %d / %d  (%.1f %%)\n",
-                correct, n_total, 100 * accuracy))
-    tp <- sum(points$pred_class == 1L & points$class == 1L)
-    tn <- sum(points$pred_class == 0L & points$class == 0L)
-    fp <- sum(points$pred_class == 1L & points$class == 0L)
-    fn <- sum(points$pred_class == 0L & points$class == 1L)
-    cat(sprintf("  TP / TN / FP / FN : %d / %d / %d / %d\n", tp, tn, fp, fn))
-  } else {
-    cat("  (True labels unknown — accuracy not available)\n")
+  if (!is.null(points$pred_class)) {
+    # Model available: prediction summary
+    n_pos <- sum(points$pred_class == 1L)
+    n_neg <- n_total - n_pos
+    cat("\n--- Prediction summary ---\n")
+    cat(sprintf("  Points plotted : %d\n", n_total))
+    cat(sprintf("  Predicted 1    : %d  (%.1f %%)\n",
+                n_pos, 100 * n_pos / n_total))
+    cat(sprintf("  Predicted 0    : %d  (%.1f %%)\n",
+                n_neg, 100 * n_neg / n_total))
+    if (!is.null(points$class)) {
+      correct  <- sum(points$pred_class == points$class)
+      accuracy <- correct / n_total
+      cat(sprintf("  Accuracy       : %d / %d  (%.1f %%)\n",
+                  correct, n_total, 100 * accuracy))
+      tp <- sum(points$pred_class == 1L & points$class == 1L)
+      tn <- sum(points$pred_class == 0L & points$class == 0L)
+      fp <- sum(points$pred_class == 1L & points$class == 0L)
+      fn <- sum(points$pred_class == 0L & points$class == 1L)
+      cat(sprintf("  TP / TN / FP / FN : %d / %d / %d / %d\n", tp, tn, fp, fn))
+    } else {
+      cat("  (True labels unknown — accuracy not available)\n")
+    }
+    cat("--------------------------\n")
+  } else if (!is.null(points$class)) {
+    # No model: class balance summary from true labels
+    n_pos <- sum(points$class == 1L)
+    n_neg <- n_total - n_pos
+    cat("\n--- Class summary (no model) ---\n")
+    cat(sprintf("  Points plotted : %d\n", n_total))
+    cat(sprintf("  Class 1        : %d  (%.1f %%)\n",
+                n_pos, 100 * n_pos / n_total))
+    cat(sprintf("  Class 0        : %d  (%.1f %%)\n",
+                n_neg, 100 * n_neg / n_total))
+    cat("--------------------------------\n")
   }
-  cat("--------------------------\n")
 
   invisible(bl_result)
 }
