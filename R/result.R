@@ -258,6 +258,13 @@ bl_build_result <- function(bl_data     = NULL,
                              calc_hull   = TRUE,
                              rounding    = 3L) {
 
+  # ---- Safely resolve bl_model (lazy promise) ---------------------------
+  # If the caller wrote bl_model = bl_mod and bl_mod does not yet exist,
+  # R would throw "object 'bl_mod' not found" at the first is.null() touch.
+  # force() triggers evaluation here so we can catch that error cleanly and
+  # fall through to the standard NULL handling below.
+  bl_model <- tryCatch(force(bl_model), error = function(e) NULL)
+
   # ---- Validate data source ---------------------------------------------
   if (is.null(bl_data)) {
     message("bl_build_result() requires 'bl_data'. ",

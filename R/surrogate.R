@@ -257,22 +257,69 @@ print.bl_surrogate <- function(x, ...) {
 #' 4. Axes redrawn on top so labels remain visible over the grid.
 #' 5. Hull-clipped surrogate contour lines in black.
 #'
-#' @param x   A `"bl_surrogate"` object from `bl_surrogate()`.
+#' @param x                A `"bl_surrogate"` object from `bl_surrogate()`.
+#' @param cex_z            Numeric; size of observation points. Default `0.7`.
+#' @param label_dir        Character; biplotEZ axis label direction.
+#'   `"Hor"` (horizontal, default) or `"Rad"` (radial).
+#' @param label_cex        Numeric; variable name (axis label) size. Default `1`.
+#' @param tick_label_cex   Numeric; axis tick label size. Default `0.6`.
+#' @param ticks_v          Integer; number of ticks per variable axis.
+#'   Default `1L`.
+#' @param which            Integer vector; indices of variables to draw axes
+#'   for. Defaults to all variables.
+#' @param X_names          Character vector; custom variable names for axis
+#'   labels. Defaults to `bl_result$var_names`.
+#' @param label_offset_var Integer or integer vector; index/indices of variables
+#'   whose axis labels should be shifted outward. `0` (default) means no
+#'   offset.
+#' @param label_offset_dist Numeric or numeric vector; outward offset
+#'   distance(s) for `label_offset_var`. Default `0.5`.
 #' @param ... Unused; for S3 compatibility.
 #'
 #' @importFrom graphics points lines legend
 #' @importFrom sp over coordinates
 #' @export
-plot.bl_surrogate <- function(x, ...) {
+plot.bl_surrogate <- function(x,
+                               cex_z             = 0.7,
+                               label_dir         = "Hor",
+                               label_cex         = 1,
+                               tick_label_cex    = 0.6,
+                               ticks_v           = 1L,
+                               which             = NULL,
+                               X_names           = NULL,
+                               label_offset_var  = 0L,
+                               label_offset_dist = 0.5,
+                               ...) {
 
   bl_result <- x$bl_result
   gr        <- bl_result$biplot_grid
   polygon   <- bl_result$polygon
+  num_vars  <- bl_result$num_vars
+  var_names <- bl_result$var_names
+
+  if (is.null(which))   which   <- seq_len(num_vars)
+  if (is.null(X_names)) X_names <- var_names
+
+  # ---- Label offset vector ---------------------------------------------
+  label_line_vec <- rep(0, num_vars)
+  valid_idx <- label_offset_var[label_offset_var >= 1L &
+                                label_offset_var <= num_vars]
+  if (length(valid_idx) > 0L) {
+    dist_vec <- rep_len(label_offset_dist, length(valid_idx))
+    label_line_vec[valid_idx] <- dist_vec
+  }
 
   # ---- Step 1: biplotEZ axis skeleton ----------------------------------
   bl_result$biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
-    biplotEZ::axes(col = "grey", which = NULL) |>
+    biplotEZ::axes(col            = "grey",
+                   label.dir      = label_dir,
+                   label.cex      = label_cex,
+                   which          = which,
+                   X.names        = X_names,
+                   tick.label.cex = tick_label_cex,
+                   ticks          = ticks_v,
+                   label.line     = label_line_vec) |>
     plot()
 
   # ---- Step 2: prediction grid, clipped to hull -----------------------
@@ -292,12 +339,19 @@ plot.bl_surrogate <- function(x, ...) {
   # ---- Step 3: surrogate-coloured observation points ------------------
   surr_col <- ifelse(x$surrogate_pred == 1L, "red", "blue")
   graphics::points(x$Z_obs[, 1L], x$Z_obs[, 2L],
-                   col = surr_col, pch = 16L, cex = 0.7)
+                   col = surr_col, pch = 16L, cex = cex_z)
 
   # ---- Step 4: axes redrawn on top ------------------------------------
   bl_result$biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
-    biplotEZ::axes(col = "grey22", which = NULL) |>
+    biplotEZ::axes(col            = "grey22",
+                   label.dir      = label_dir,
+                   label.cex      = label_cex,
+                   which          = which,
+                   X.names        = X_names,
+                   tick.label.cex = tick_label_cex,
+                   ticks          = ticks_v,
+                   label.line     = label_line_vec) |>
     plot(add = TRUE)
 
   # ---- Step 5: hull-clipped surrogate contour lines -------------------

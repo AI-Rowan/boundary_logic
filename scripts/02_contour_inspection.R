@@ -176,4 +176,18 @@ picked
 
 
 cf_pts
-ct_preds[350:380,]
+ct_preds[360:590,]
+
+getOption("max.print" = 100000)
+
+
+
+
+bp_Z <- bl_results$biplot_obj$Z[, bl_results$proj_dims]
+
+sv <- if (bl_results$standardise) bl_results$X_sd else FALSE
+X_st <- scale(as.matrix(bl_results$train_data[, bl_results$var_names]),
+              center = bl_results$X_center, scale = sv)
+manual_Z <- X_st %*% bl_results$V[, bl_results$proj_dims]
+
+all.equal(bp_Z, manual_Z, check.attributes = FALSE)

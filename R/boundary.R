@@ -101,9 +101,23 @@
 #'
 #' @section Counterfactual logic:
 #' A class-1 observation's counterfactual is the nearest point on a class-0
-#' contour (and vice versa). Boundary segments are filtered to the training
-#' data variable ranges (`bl_result$train_ranges`) to ensure counterfactuals
-#' remain within the observed feature space.
+#' contour (and vice versa). Selection is based on minimum Euclidean distance
+#' in Z-space, which gives the geometric orthogonal projection from each
+#' observation onto the boundary line.
+#'
+#' Boundary segments are first clipped to the training-data convex hull
+#' polygon (in Z-space) and then pruned to retain only points whose
+#' back-projected model prediction is consistent with the contour's
+#' probability level. The training variable ranges (`bl_result$train_ranges`)
+#' are checked **after** the nearest point is selected, not before. Applying
+#' the range filter as a pre-filter would remove geometrically correct
+#' candidates — particularly for PCA biplots where back-projecting a 2D
+#' Z-space point to p-dimensional X-space sets all non-plotted components to
+#' their mean (rank-2 reconstruction), which can push individual feature
+#' values outside observed ranges even for Z-space points well inside the
+#' convex hull. A message is issued if any selected counterfactual
+#' back-projects outside training ranges; the caller can apply additional
+#' feasibility filtering via `bl_result$train_ranges` on the returned `B_x`.
 #'
 #' @param bl_result A `"bl_result"` object from `bl_assemble()`.
 #' @param data      Data frame to process. Defaults to
@@ -259,9 +273,19 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   nr_boundaries <- length(z_boundaries_list)
 
   # ---- Consistency pruning: keep segments where model agrees --------
-  # Back-project each boundary segment to X-space, apply train_ranges
-  # filter, score through the model, keep only segments whose model
-  # prediction is consistent with the contour's probability level.
+  # Back-project each boundary segment to X-space, score through the
+  # model, and keep only points whose prediction is consistent with
+  # the contour's probability level.
+  #
+  # NOTE: train_ranges is intentionally NOT applied here as a pre-filter.
+  # Filtering candidates by X-space feature ranges before finding the
+  # nearest point can discard the geometrically correct orthogonal
+  # projection, causing an incorrect (farther) boundary point to be
+  # selected instead. This is particularly harmful for PCA biplots
+  # where back-projection to p-dimensional X-space sets non-plotted
+  # components to their mean, which can push individual features outside
+  # training ranges even for Z-space points inside the convex hull.
+  # train_ranges is instead applied post-selection (see below).
   for (i in seq_len(nr_boundaries)) {
     Mi <- z_boundaries_list[[i]]
     if (is.null(Mi) || nrow(Mi) == 0L) next
@@ -271,28 +295,14 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
     Bx <- sweep(Bx, 2L, X_center, "+")
     colnames(Bx) <- var_names
 
-    keep_rows <- if (is.list(train_ranges)) {
-      get_filter_logical_vector(Bx, train_ranges)
-    } else {
-      rep(TRUE, nrow(Bx))
-    }
-
-    if (!any(keep_rows)) {
-      z_boundaries_list[[i]] <- Mi[0L, , drop = FALSE]
-      next
-    }
-
-    Bx_keep <- Bx[keep_rows, , drop = FALSE]
-    Mi_keep <- Mi[keep_rows, , drop = FALSE]
-
     p_bnd <- .pred_function(
       model_use  = bl_result$model,
       model_type = bl_result$model_type,
-      new_data   = Bx_keep
+      new_data   = Bx
     )
     ok <- if (z_boundary_type[i] < cutoff) (p_bnd < cutoff) else (p_bnd >= cutoff)
     z_boundaries_list[[i]] <- if (any(ok)) {
-      Mi_keep[ok, , drop = FALSE]
+      Mi[ok, , drop = FALSE]
     } else {
       Mi[0L, , drop = FALSE]
     }
@@ -387,6 +397,23 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   if (isTRUE(standardise)) B_x <- sweep(B_x, 2L, X_sd, "*")
   B_x <- sweep(B_x, 2L, X_center, "+")
   colnames(B_x) <- var_names
+
+  # ---- Post-selection train_ranges check ----------------------------
+  # Report how many selected counterfactuals back-project to X values
+  # outside the observed training feature ranges.  These are still the
+  # geometrically nearest boundary points in Z-space; we do not discard
+  # them here because doing so would select a farther-away (geometrically
+  # incorrect) point.  Callers that require strict X-space feasibility
+  # can filter using bl_result$train_ranges on the returned B_x.
+  if (is.list(train_ranges)) {
+    in_range <- get_filter_logical_vector(B_x, train_ranges)
+    n_out <- sum(!is.na(B_z[, 1L]) & !in_range)
+    if (n_out > 0L)
+      message(sprintf(
+        "bl_find_boundary(): %d counterfactual(s) back-project outside training feature ranges.",
+        n_out
+      ))
+  }
 
   # Score counterfactuals (should be near cutoff)
   B_pred <- tryCatch(
