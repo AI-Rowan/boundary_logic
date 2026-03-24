@@ -6,47 +6,42 @@
 
 #' Get the min/max range of each variable in a data frame
 #'
-#' Returns a list of `rlang` expressions of the form
-#' `var >= min & var <= max` for each column. These can be passed
-#' directly to `get_filter_logical_vector()`.
+#' Returns a named list with one element per column. Each element is a
+#' length-2 numeric vector `c(min, max)` for that variable. The list can
+#' be passed directly to `get_filter_logical_vector()`.
 #'
 #' @param data A data frame. All columns are included.
 #'
-#' @importFrom rlang expr sym eval_tidy
-#' @return A list of expressions, one per column of `data`.
+#' @return Named list of `c(min, max)` vectors, one per column of `data`.
 #' @keywords internal
 get_variable_ranges <- function(data) {
   vars <- names(data)
-  filters <- lapply(vars, function(var) {
-    rng <- range(data[[var]], na.rm = TRUE)
-    rlang::expr(
-      (!!rlang::sym(var)) >= !!rng[1] & (!!rlang::sym(var)) <= !!rng[2]
-    )
-  })
-  filters
+  ranges <- lapply(vars, function(var) range(data[[var]], na.rm = TRUE))
+  names(ranges) <- vars
+  ranges
 }
 
 
-#' Evaluate a list of range expressions as a row-wise AND filter
+#' Evaluate a list of variable ranges as a row-wise AND filter
 #'
-#' @param data         Data frame to evaluate against.
-#' @param filter_exprs List of expressions as returned by
-#'   `get_variable_ranges()`.
+#' @param data        Data frame to evaluate against.
+#' @param range_list  Named list of `c(min, max)` vectors as returned by
+#'   `get_variable_ranges()`. Variables not present in `data` are silently
+#'   skipped.
 #'
 #' @return Logical vector of length `nrow(data)`. `TRUE` means the row
-#'   passes all filters.
+#'   satisfies all range constraints.
 #' @keywords internal
-get_filter_logical_vector <- function(data, filter_exprs) {
-  # Single TRUE means "no filter": return all rows
-  if (identical(filter_exprs, list(TRUE)) ||
-      identical(filter_exprs, TRUE)) {
+get_filter_logical_vector <- function(data, range_list) {
+  if (identical(range_list, list(TRUE)) || identical(range_list, TRUE))
     return(rep(TRUE, nrow(data)))
-  }
 
-  # Combine all expressions with AND
-  row_filter_expr <- Reduce(
-    function(x, y) rlang::expr((!!x) & (!!y)),
-    filter_exprs
-  )
-  rlang::eval_tidy(row_filter_expr, data = data)
+  keep <- rep(TRUE, nrow(data))
+  for (var in names(range_list)) {
+    if (!var %in% names(data)) next
+    rng  <- range_list[[var]]
+    vals <- data[[var]]
+    keep <- keep & !is.na(vals) & vals >= rng[1L] & vals <= rng[2L]
+  }
+  keep
 }
