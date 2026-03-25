@@ -1,0 +1,10 @@
+citHeader("To cite boundarylogic in publications use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "boundarylogic: Biplot-Based Decision Boundary Interpretability for Classification Models",
+  author   = person("Adriaan", "Rowan"),
+  year     = "2026",
+  note     = "R package version 0.1.0",
+  url      = "https://github.com/AI-Rowan/boundary_logic"
+)

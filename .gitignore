@@ -10,3 +10,7 @@ outputs/
 data/
 
 #Note: If you do want outputs tracked (sometimes helpful for papers), remove outputs/.
+/doc/
+/Meta/
+/dev_notes/
+.claude/
