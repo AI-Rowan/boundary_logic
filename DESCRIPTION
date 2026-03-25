@@ -2,6 +2,7 @@ Package: boundarylogic
 Type: Package
 Title: Biplot-Based Decision Boundary Interpretability for Classification Models
 Version: 0.1.0
+Date: 2026-03-25
 Authors@R: person("Adriaan", "Rowan", role = c("aut", "cre"),
                   email = "adriaanrowan@gmail.com")
 Description: Provides a biplot-based post hoc explanation framework for binary
