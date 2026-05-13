@@ -90,6 +90,11 @@
       parsnip::set_engine("glm") |>
       parsnip::set_mode("classification"),
 
+    # TODO: GAM fitting via parsnip/workflows is broken — the two-formula
+    # workaround (simple preprocessor + spline formula in add_model()) still
+    # raises workflow errors in some configurations. Needs investigation.
+    # Workaround: use a custom GAM via bl_wrap_model() with mgcv::gam()
+    # directly (see scripts/00_pima_Boundary_Logic.R Step 3 for the pattern).
     "GAM" = parsnip::gen_additive_mod() |>
       parsnip::set_engine("mgcv") |>
       parsnip::set_mode("classification"),
@@ -127,7 +132,8 @@
         colsample_bytree = params$colsample_bytree,
         objective        = params$objective,
         eval_metric      = params$eval_metric,
-        verbose          = 0L
+        verbose          = 0L,
+        counts           = FALSE
       ) |>
       parsnip::set_mode("classification"),
 
@@ -138,9 +144,21 @@
   )
 
   # ---- Build workflow and fit --------------------------------------------
-  wf <- workflows::workflow() |>
-    workflows::add_formula(form) |>
-    workflows::add_model(model_spec)
+  # GAM requires two formulas: a simple linear preprocessor formula so the
+  # workflow knows which columns to select, and the spline formula passed
+  # directly to add_model() so mgcv receives the s() terms unmodified.
+  if (model_type == "GAM") {
+    simple_form <- stats::as.formula(
+      paste("class ~", paste(var_names, collapse = " + "))
+    )
+    wf <- workflows::workflow() |>
+      workflows::add_formula(simple_form) |>
+      workflows::add_model(model_spec, formula = form)
+  } else {
+    wf <- workflows::workflow() |>
+      workflows::add_formula(form) |>
+      workflows::add_model(model_spec)
+  }
 
   fitted_wf <- parsnip::fit(wf, data = train_tm)
 

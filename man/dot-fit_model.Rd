@@ -15,11 +15,12 @@
 \item{model_type}{One of \code{"GLM"}, \code{"GAM"}, \code{"GBM"}, \code{"LDA"}, \code{"SVM"},
 \code{"NNET"}, \code{"RForrest"}, \code{"XGB"}.}
 
-\item{model_params}{Named list of hyperparameter overrides. Unknown keys
-are silently ignored per model.}
+\item{model_params}{Named list of hyperparameter overrides.}
 }
 \value{
 A named list: \verb{list(model = <fitted object>, model_type = <char>)}.
+For all types except \code{"GBM"}, \code{model} is a fitted \code{workflows::workflow}.
+For \code{"GBM"}, \code{model} is a raw \code{gbm} object.
 }
 \description{
 Fit a classification model (internal dispatcher)

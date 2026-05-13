@@ -2,21 +2,22 @@
 % Please edit documentation in R/feasibility_utils.R
 \name{get_filter_logical_vector}
 \alias{get_filter_logical_vector}
-\title{Evaluate a list of range expressions as a row-wise AND filter}
+\title{Evaluate a list of variable ranges as a row-wise AND filter}
 \usage{
-get_filter_logical_vector(data, filter_exprs)
+get_filter_logical_vector(data, range_list)
 }
 \arguments{
 \item{data}{Data frame to evaluate against.}
 
-\item{filter_exprs}{List of expressions as returned by
-\code{get_variable_ranges()}.}
+\item{range_list}{Named list of \code{c(min, max)} vectors as returned by
+\code{get_variable_ranges()}. Variables not present in \code{data} are silently
+skipped.}
 }
 \value{
 Logical vector of length \code{nrow(data)}. \code{TRUE} means the row
-passes all filters.
+satisfies all range constraints.
 }
 \description{
-Evaluate a list of range expressions as a row-wise AND filter
+Evaluate a list of variable ranges as a row-wise AND filter
 }
 \keyword{internal}

@@ -10,8 +10,7 @@ bl_wrap_model(
   var_names,
   predict_fn = NULL,
   train_data = NULL,
-  cutoff = 0.5,
-  rounding = 2L
+  cutoff = 0.5
 )
 }
 \arguments{
@@ -37,8 +36,6 @@ to compute training accuracy and Gini. If \code{NULL}, these are returned as
 \strong{Note}: only \code{cutoff = 0.5} gives valid results in the current
 methodology. Other values are accepted for exploration but should be
 treated with caution.}
-
-\item{rounding}{Integer; floor-based rounding precision. Default \code{2}.}
 }
 \value{
 A list of class \code{"bl_model"} compatible with \code{bl_build_grid()}

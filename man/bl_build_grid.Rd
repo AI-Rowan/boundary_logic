@@ -11,11 +11,10 @@ bl_build_grid(
   m = 200L,
   cutoff = 0.5,
   b_margin = NULL,
-  rounding = 2L,
+  rounding = 3L,
   polygon = NULL,
-  outlie = 0.9,
-  calc_hull = FALSE,
-  calc_ct_in_hull = FALSE
+  outlie = 1,
+  calc_hull = TRUE
 )
 }
 \arguments{
@@ -38,8 +37,10 @@ computation time.}
 to extract contour lines. Default \code{NULL}, which resolves to
 \code{1 / (10^rounding)}.}
 
-\item{rounding}{Integer; floor-based rounding precision for grid
-scores. Default \code{2}.}
+\item{rounding}{Integer; controls the contour band width only —
+\code{b_margin = 1 / (10^rounding)}. Default \code{3L} gives contours at
+\verb{cutoff ± 0.001}. All prediction scores are always floor-rounded to
+3 decimal places regardless of this setting.}
 
 \item{polygon}{An \code{sp::SpatialPolygons} object to use as the hull
 boundary. If \code{NULL} (default), a new polygon is computed from
@@ -49,11 +50,11 @@ boundary. If \code{NULL} (default), a new polygon is computed from
 \code{polygon} is \code{NULL}. Default \code{0.9}.}
 
 \item{calc_hull}{Logical; if \code{TRUE}, grid points outside the polygon
-are removed from the returned grid. Default \code{FALSE}.}
-
-\item{calc_ct_in_hull}{Logical; if \code{TRUE}, outside-polygon grid cells are
-set to \code{cutoff} before contour extraction, so contours are confined to
-the hull interior. Default \code{FALSE}.}
+are removed from the returned grid object. This affects only the visual
+prediction surface in the biplot — the coloured background is trimmed to
+the hull shape. It does \strong{not} affect counterfactual search:
+\code{bl_find_boundary()} always clips contour segments to the hull polygon
+independently. Default \code{TRUE}.}
 }
 \value{
 A list of class \code{"bl_grid"} with components:
@@ -62,23 +63,17 @@ A list of class \code{"bl_grid"} with components:
 \item{\code{Xgrid}}{Data frame (m² x p); grid back-projected to X-space.}
 \item{\code{grid_prob}}{Numeric vector (length m²); model scores per grid
 point, in \link{0, 1}.}
-\item{\code{Z_train}}{Numeric matrix (n x 2); training data projected to
-Z-space.}
 \item{\code{col_value}}{Character vector (length m²); colour per grid point
 on a blue-white-red scale.}
 \item{\code{min_val}}{Numeric; lower bound of the square plot region.}
 \item{\code{max_val}}{Numeric; upper bound of the square plot region.}
 \item{\code{polygon}}{\code{sp::SpatialPolygons} convex hull.}
-\item{\code{ct}}{List of contour line objects as returned by
-\code{grDevices::contourLines()}.}
+\item{\code{ct}}{List of contour line objects (boundary search contours).}
+\item{\code{ct_surrogate}}{List of contour line objects with hull-clipped
+boundaries for \code{bl_surrogate()}. Outside-hull cells are set to
+\code{cutoff} before extraction. Not used in biplot rendering.}
 \item{\code{xseq}}{Numeric vector (length m); x-axis grid sequence.}
 \item{\code{yseq}}{Numeric vector (length m); y-axis grid sequence.}
-\item{\code{pred_use}}{Numeric 0/1 vector (length n); predicted class of
-each training point.}
-\item{\code{pred_col}}{Character vector (length n); colour label per training
-point based on confusion category.}
-\item{\code{class}}{Numeric 0/1 vector (length n); true class of each
-training point.}
 }
 }
 \description{
@@ -100,10 +95,16 @@ research script.
 
 \section{Contour lines}{
 
-Contours are extracted at \code{cutoff - b_margin} and \code{cutoff + b_margin}.
-These two lines bracket the decision boundary. A narrower \code{b_margin}
-gives a more precise boundary estimate but may produce fewer contour
-points in regions where the model probability changes slowly.
+Two sets of contour lines are always computed and stored:
+\itemize{
+\item \strong{\code{ct}} — standard boundary contours at \verb{cutoff ± b_margin}. These
+are used by \code{bl_find_boundary()} for counterfactual search.
+\item \strong{\code{ct_surrogate}} — hull-clipped contours for the surrogate model.
+Grid cells outside the training-data convex hull are set to \code{cutoff}
+before extraction, so contour lines are fully enclosed within the hull.
+Used exclusively by \code{bl_surrogate()}. Do not use these for biplot
+rendering or boundary search.
+}
 }
 
 \examples{

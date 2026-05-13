@@ -1,0 +1,485 @@
+# Code Walkthrough: Steps 3–6 of `03_loan_status_Boundary_Logic.R`
+
+## Context
+
+This document traces the full data, object, and value flow through Steps 3–6 of the loan-default script. It assumes `loan_encoded` is already in memory: a data.frame of ~45,000 rows × 9 numeric columns (all categoricals have been integer-encoded; `loan_intent`, `person_education`, `person_home_ownership` already dropped in Step 1).
+
+---
+
+## Step 3 — Domain filter (base R, no package functions)
+
+```r
+loan_filtered <- loan_encoded[loan_encoded$previous_loan_defaults_on_file == 0, ]
+
+feature_cols <- setdiff(
+  names(loan_filtered),
+  c("loan_status", "previous_loan_defaults_on_file")
+)
+```
+
+**What happens:**
+
+| Operation | Input | Output |
+|---|---|---|
+| Row filter | `loan_encoded` (~45 k rows) | `loan_filtered` — only applicants with no prior default (~27 k rows) |
+| `setdiff()` | All column names minus the outcome + the now-constant default column | `feature_cols` — character vector of predictor names |
+
+**Why `previous_loan_defaults_on_file` is dropped from features:**
+After filtering to only `== 0`, that column is constant — zero variance. Feeding a constant feature into PCA/CVA or an ML model is numerically meaningless.
+
+**Values at end of Step 3:**
+- `loan_filtered`: data.frame, ~27 k rows × 9 cols (includes `loan_status` and `previous_loan_defaults_on_file`)
+- `feature_cols`: character vector, e.g. `c("person_age", "person_gender", "person_income", "person_emp_exp", "person_home_ownership_encoded", "loan_amnt", "loan_int_rate", "loan_percent_income", "cb_person_cred_hist_length", "credit_score")`  
+  *(exact names depend on what survived Step 1 pruning)*
+
+---
+
+## Steps 4–6 — One combined code block
+
+The block runs 7 operations in sequence. Each produces one named object used by the next.
+
+---
+
+### 4a — `bl_prepare_data()` → `bl_dat`
+
+**File:** `R/data_prepare.R`
+
+**Call:**
+```r
+bl_dat <- bl_prepare_data(
+  data           = loan_filtered,
+  class_col      = "loan_status",
+  feature_cols   = feature_cols,
+  train_fraction = 0.8,
+  seed           = 121L
+)
+```
+
+**What it does, step by step:**
+
+1. **Validates** inputs (all via `stop_if_*` helpers in `utils.R`):
+   - `data` is a data.frame
+   - `class_col` exists in data
+   - `train_fraction` is strictly in (0, 1)
+
+2. **Selects feature columns** — uses the supplied `feature_cols` vector; validates all columns exist.
+
+3. **Binarises the outcome**: `loan_status` is already 0/1, so it passes through as-is and is renamed to `"class"` in the output.
+
+4. **Assembles clean data**: a data.frame with only `feature_cols` + `"class"`.
+
+5. **Train/test split** with `set.seed(121L)`:
+   - Randomly samples `floor(0.8 × n)` row indices → `train_data`
+   - Remaining rows → `test_data`
+   - Row names are cleared from both.
+
+**Returned object — `bl_dat` (S3 class `"bl_data"`):**
+
+| Field | Type | Content |
+|---|---|---|
+| `train_data` | data.frame | ~21 600 rows × (p features + `"class"`) |
+| `test_data` | data.frame | ~5 400 rows × same columns |
+| `var_names` | character vector | Predictor column names (copy of `feature_cols`) |
+| `num_vars` | integer | Length of `var_names` |
+| `target_class` | NULL | NULL because `loan_status` was pre-coded 0/1 |
+
+---
+
+### 4b — `bl_filter_outliers()` → `bl_filt`
+
+**File:** `R/outlier_filter.R`
+
+**Call:**
+```r
+bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
+```
+
+**Purpose:** Remove extreme outliers from the *training set* by keeping only points inside a 90%-density convex hull in 2D PCA space. The test set is passed through unchanged.
+
+**What it does, step by step:**
+
+1. **Validates** `bl_dat` is a `"bl_data"` object; `hull_fraction` is in (0, 1].
+
+2. **Standardises training features** (z-score, using training means and SDs):
+   ```
+   X_st = (X - colMeans(X)) / colSDs(X)
+   ```
+   Any constant column gets SD=1 to avoid division by zero.
+
+3. **Lightweight 2D PCA** via `svd(X_st, nu=2, nv=2)`:
+   - Extracts the first 2 right singular vectors (i.e., the first 2 PC loading directions)
+   - Projects: `Z_train = X_st %*% V[, 1:2]` → n × 2 matrix, columns named `"x"`, `"y"`
+
+4. **Builds convex hull** via `.build_hull_polygon()` (`hull_utils.R`):
+   - Opens an off-screen PNG device (so nothing appears on screen)
+   - Calls `aplpack::plothulls(x=Z[,1], y=Z[,2], fraction=0.9, n.hull=1)` — the `fraction=0.9` means 90% of points land inside the hull
+   - Wraps the returned hull vertex coordinates as an `sp::SpatialPolygons` object
+   - Closes the PNG device
+
+5. **Point-in-polygon test** via `.points_in_polygon()` (`hull_utils.R`):
+   - Converts `Z_train` to spatial points (`sp::SpatialPoints`)
+   - `sp::over(points, polygon)` returns NA for points outside → logical vector `inside`
+
+6. **Filters** `train_data` to only rows where `inside == TRUE`.
+
+7. Prints one-line summary: `"Retained X of Y (Z%); removed A (B%)"`.
+
+**Returned object — `bl_filt` (S3 class `"bl_filter_result"`):**
+
+| Field | Type | Content |
+|---|---|---|
+| `train_data` | data.frame | Filtered training rows (inside hull); row names cleared |
+| `test_data` | data.frame | Test data **unchanged** from `bl_dat$test_data` |
+| `var_names` | character vector | Same as `bl_dat$var_names` |
+| `num_vars` | integer | Same as `bl_dat$num_vars` |
+| `target_class` | NULL | Passed through |
+| `polygon` | `sp::SpatialPolygons` | The 2D convex hull in *standardised PCA space* (used only for this filtering step — NOT reused downstream) |
+| `hull_fraction` | numeric | `0.9` |
+| `n_retained` | integer | Rows kept |
+| `n_removed` | integer | Rows removed |
+
+> **Note:** The `polygon` in `bl_filt` is in the *raw standardised PCA space* used during filtering. It is **not** the same polygon that gets stored in `bl_results` later. The downstream polygon (in `bl_results`) is recomputed in the final CVA Z-space by `bl_build_grid()`.
+
+---
+
+### 5 — `bl_fit_model()` → `bl_mod`
+
+**File:** `R/model_fit.R` (dispatcher) + `R/model_utils.R` (internal fitter) + `R/predict_utils.R` (prediction)
+
+**Call:**
+```r
+bl_mod <- bl_fit_model(
+  train_data = bl_filt$train_data,
+  var_names  = bl_filt$var_names,
+  model_type = "XGB"
+)
+```
+
+**What it does, step by step:**
+
+1. **Validates** inputs.
+
+2. **Calls `.fit_model()`** (`R/model_utils.R`):
+   - For `"XGB"`, builds a tidymodels `workflows::workflow`:
+     - Recipe: `class ~ var1 + var2 + ...` using `var_names`
+     - Model spec: `parsnip::boost_tree(mode = "classification")` with xgboost engine
+     - Applies any user `model_params` overrides via `modifyList()`
+     - Calls `workflows::fit(workflow, data = train_data)`
+   - Returns `list(model = <workflow>, model_type = "XGB")`
+
+3. **Scores training data** via `.pred_function()` (`R/predict_utils.R`):
+   - For a tidymodels workflow: `predict(model, new_data=train_data, type="prob")$.pred_1`
+   - Floor-rounds to 3 d.p.: `floor(prob * 1000) / 1000`
+   - Binarises at cutoff 0.5: `pred_class = as.numeric(pred_prob >= 0.5)`
+
+4. **Computes training metrics:**
+   - `accuracy = mean(pred_class == actual)` — proportion correct
+   - `gini = 2 * AUC - 1` via `calc_gini()` (`utils.R`) using trapezoidal ROC integration
+
+**Returned object — `bl_mod` (S3 class `"bl_model"`):**
+
+| Field | Type | Content |
+|---|---|---|
+| `model` | `workflows::workflow` | Fitted XGBoost model in tidymodels wrapper |
+| `model_type` | character | `"XGB"` |
+| `var_names` | character vector | Predictor names (copy of `bl_filt$var_names`) |
+| `cutoff` | numeric | `0.5` |
+| `accuracy` | numeric | Training accuracy, e.g. `0.897` |
+| `gini` | numeric | Training Gini coefficient, e.g. `0.83` |
+
+---
+
+### 6 — `bl_build_result()` → `bl_results`
+
+**File:** `R/result.R` (orchestrator) → calls `bl_build_projection()`, `bl_build_grid()`, `bl_assemble()`
+
+**Call:**
+```r
+bl_results <- bl_build_result(
+  bl_data  = bl_filt,
+  bl_model = bl_mod,
+  method   = "CVA",
+  title    = "Loan default (prior defaulters) — XGB, CVA biplot",
+  rounding = 2L
+)
+```
+
+This is the **Phase 1 anchor function**. It orchestrates three sub-steps and returns the central `bl_result` object that everything in Phases 2 and 3 consumes.
+
+---
+
+#### Sub-step 6a — `bl_build_projection()` → `bl_proj`
+
+**File:** `R/projection.R`
+
+**What it does:**
+
+1. Extracts feature matrix `X = train_data[, var_names]`.
+2. Computes `X_center = colMeans(X)` and `X_sd = colSDs(X)`.
+3. **CVA forces `standardise = FALSE`** internally — CVA works with class-structured covariance, not z-scores.
+4. **Computes confusion labels** (because CVA needs class groupings):
+   - Calls `.pred_function()` on training data with `bl_mod`
+   - Labels each row: TP / TN / FP / FN as a 4-level factor
+5. Builds the **biplotEZ object**:
+   ```r
+   biplotEZ::biplot(X, scaled = FALSE, Title = title) |>
+     biplotEZ::CVA(classes = confusion_labels, e.vects = c(1L, 2L))
+   ```
+   Internally, biplotEZ solves the generalised eigenvalue problem for the between/within class covariance to find the loading matrix `V` that maximally separates the confusion classes.
+6. Extracts `V = bp$Lmat` (p × p loading matrix) and computes `tV = solve(V)` (the inverse, for back-projection).
+7. Calls `get_variable_ranges()` (`R/feasibility_utils.R`) to record `c(min, max)` per feature — used later to filter test data to plausible ranges.
+
+**`bl_proj` fields (not returned to user, passed to next sub-step):**
+`V`, `tV`, `X_center`, `X_sd`, `method`, `standardise`, `proj_dims`, `biplot_obj`, `train_ranges`
+
+---
+
+#### Sub-step 6b — `bl_build_grid()` → `bl_grid`
+
+**File:** `R/biplot_grid.R`
+
+**What it does:**
+
+1. Extracts the 2-column submatrices: `Vr = V[, 1:2]` (p×2) and `tVr = tV[1:2, ]` (2×p).
+
+2. **Projects training data to Z-space:**
+   ```
+   Z_train = X_centered %*% Vr    (n × 2)
+   ```
+   (No scaling because CVA uses `standardise = FALSE`)
+
+3. **Gets plot bounds** by rendering the biplot off-screen, reading `par("usr")` — gives the square `[min_val, max_val]` of the visible plot area.
+
+4. **Builds the m×m prediction grid** in Z-space:
+   ```
+   xseq = seq(min_val, max_val, length.out = m)   # m = 200 default
+   Zgrid = expand.grid(xseq, xseq)                # 40 000 × 2
+   ```
+
+5. **Back-projects grid to X-space:**
+   ```
+   Xgrid = Zgrid %*% tVr              # 40 000 × p
+   Xgrid = Xgrid + X_center           # add back training means
+   ```
+   This is the key operation that lets us ask: "if a point is at Z-space coordinates (a, b), what feature values does it correspond to?"
+
+6. **Computes convex hull** of `Z_train` using `aplpack::plothulls` (at `outlie=1`, so all training points included — the `hull_fraction=0.9` used in `bl_filter_outliers` was already applied to the training data).
+
+7. **Scores all 40 000 grid points** through the XGBoost model in 50 000-row chunks:
+   ```
+   grid_prob = .pred_function(bl_mod$model, "XGB", Xgrid)
+   ```
+   Each grid probability is floor-rounded to 3 d.p.
+
+8. **Assigns colours** for the grid: a 101-colour ramp (blue → white → red) indexed by `floor(grid_prob * 100) + 1`.
+
+9. **Extracts contour lines** at `cutoff ± b_margin`:
+   - `b_margin = 1 / 10^rounding = 1 / 10^2 = 0.01` (because `rounding = 2L`)
+   - `ct`: contours at `[0.49, 0.51]` — used for boundary search in Phase 2
+   - `ct_surrogate`: hull-clipped contours at `[0.49, 0.50, 0.51]` — used only by `bl_surrogate()`
+
+**`bl_grid` fields (not returned to user directly, assembled into `bl_results`):**
+`Zgrid`, `Xgrid`, `grid_prob`, `col_value`, `min_val`, `max_val`, `polygon`, `hull_fraction`, `ct`, `ct_surrogate`, `xseq`, `yseq`, `rounding`
+
+---
+
+#### Sub-step 6c — `bl_assemble()` → `bl_results`
+
+**File:** `R/result.R`
+
+Combines all artifacts into the final `bl_result` object.
+
+**Returned object — `bl_results` (S3 class `c("bl_result", "list")`):**
+
+| Category | Field | Content |
+|---|---|---|
+| **Data** | `train_data` | Filtered training data (from `bl_filt`) |
+| | `test_data` | Test data filtered to training variable ranges |
+| | `var_names` | Predictor names |
+| | `num_vars` | Number of predictors |
+| **Model** | `model` | Fitted XGBoost workflow |
+| | `model_type` | `"XGB"` |
+| | `cutoff` | `0.5` |
+| **Projection** | `V` | p×p CVA loading matrix |
+| | `tV` | Inverse of V (for back-projection) |
+| | `X_center` | Training column means |
+| | `X_sd` | Training column SDs |
+| | `method` | `"CVA"` |
+| | `standardise` | `FALSE` (CVA always) |
+| | `proj_dims` | `c(1L, 2L)` |
+| | `biplot_obj` | biplotEZ S3 object (used for axis rendering) |
+| **Feasibility** | `train_ranges` | Named list of `c(min, max)` per feature |
+| | `polygon` | Convex hull of Z-space training points (`sp::SpatialPolygons`) |
+| | `hull_fraction` | `1` (grid-level hull fraction) |
+| **Grid** | `biplot_grid` | Full `bl_grid` list (Zgrid, Xgrid, grid_prob, ct, ct_surrogate, ...) |
+| **Performance** | `accuracy` | Training accuracy |
+| | `gini` | Training Gini |
+| | `rounding` | `2L` |
+| **Metadata** | `call` | The `bl_build_result()` call expression |
+| | `created_at` | Timestamp |
+
+---
+
+### 7 — `plot_biplotEZ(bl_results)` — renders the training biplot
+
+**File:** `R/plot_biplot.R`
+
+**Call:**
+```r
+plot_biplotEZ(
+  bl_results,
+  label_dir         = "Hor",
+  label_offset_var  = 0L,
+  label_offset_dist = 0.5
+)
+```
+
+**What it renders (in layer order):**
+
+| Layer | Source data | Visual element |
+|---|---|---|
+| 1 | `bl_results$biplot_obj` + `V[, proj_dims]` | Grey coordinate axes + variable labels |
+| 2 | `biplot_grid$Zgrid` + `col_value` | 40 000 coloured squares (blue→red probability surface) |
+| 3 | `points$Z` + `points$pred_col` | Training obs as coloured dots: TP=red, TN=blue, FP=purple, FN=orange |
+| 4 | `biplot_obj` again | Darker axes re-drawn on top of the grid and points |
+| 5 | `biplot_grid$ct` | Black contour lines marking the decision boundary (probability ≈ 0.5) |
+
+**`points` here:** Because no `points=` argument is passed, `plot_biplotEZ()` automatically calls `bl_project_points(bl_results$train_data, bl_results)` internally to project the training data.
+
+**Returns:** `bl_results` invisibly (for pipe-compatibility). Side effect: renders plot to active device.
+
+---
+
+### 8 — `bl_project_points()` → `test_pts`
+
+**File:** `R/project_points.R`
+
+**Call:**
+```r
+test_pts <- bl_project_points(bl_results$test_data, bl_results)
+```
+
+**What it does:**
+
+1. Extracts from `bl_results`: `V`, `X_center`, `X_sd`, `standardise` (FALSE for CVA), `cutoff`, `proj_dims`, `polygon`.
+
+2. **Projects test data to Z-space** using the **same** loading matrix and centering as training:
+   ```
+   X_centered = X_test - X_center          # subtract training means
+   # (no scaling — CVA, standardise = FALSE)
+   Z = X_centered %*% V[, proj_dims]       # n_test × 2
+   ```
+   This is critical: using training means ensures test points are placed in the *same coordinate frame* as training points.
+
+3. **Checks polygon membership** — tests whether each test point falls inside the training convex hull using `sp::over()`.
+
+4. **Scores through the model:**
+   ```
+   pred_prob  = .pred_function(bl_results$model, "XGB", X_test[, var_names])
+   pred_class = as.numeric(pred_prob >= 0.5)
+   ```
+
+5. **Assigns confusion colours**: TP=red, TN=blue, FP=purple, FN=orange (test set has a `"class"` column, so true labels are known).
+
+**Returned object — `test_pts` (S3 class `"bl_points"`):**
+
+| Field | Type | Content |
+|---|---|---|
+| `Z` | numeric matrix (n_test × 2) | Z-space coordinates, columns `"x"` and `"y"` |
+| `pred_prob` | numeric vector | Predicted probability of default per test obs |
+| `pred_class` | numeric vector (0/1) | Predicted class at cutoff 0.5 |
+| `pred_col` | character vector | Point colour per obs (TP/TN/FP/FN) |
+| `class` | numeric vector (0/1) | True loan status labels |
+| `inside_polygon` | logical vector | TRUE if obs falls inside training hull |
+
+---
+
+### 9 — `plot_biplotEZ(bl_results, points = test_pts)` — overlays test data
+
+**Same function, different arguments.** Renders identical layers 1–5 as above, but uses `test_pts$Z` and `test_pts$pred_col` for the data points (layer 3) instead of projecting training data automatically. This shows where the held-out test observations fall on the decision surface.
+
+---
+
+## Complete Object Flow Summary
+
+```
+loan_encoded (data.frame, ~45 k rows × 9 cols)
+     │
+     │  Step 3: row filter, setdiff()
+     ▼
+loan_filtered (data.frame, ~27 k rows × 9 cols)
+feature_cols  (character vector, p predictor names)
+     │
+     │  bl_prepare_data()
+     ▼
+bl_dat  [bl_data]
+  ├── train_data  (21 600 rows × p+1 cols)
+  ├── test_data   (5 400 rows × p+1 cols)
+  └── var_names, num_vars, target_class=NULL
+     │
+     │  bl_filter_outliers(hull_fraction = 0.9)
+     │  → standardise → SVD → 2D hull → point-in-polygon
+     ▼
+bl_filt  [bl_filter_result]
+  ├── train_data  (filtered, ~19-20 k rows)
+  ├── test_data   (unchanged, 5 400 rows)
+  └── var_names, polygon, n_retained, n_removed
+     │
+     │  bl_fit_model(model_type = "XGB")
+     │  → tidymodels workflow fit → accuracy + Gini on train
+     ▼
+bl_mod  [bl_model]
+  ├── model       (workflows::workflow with fitted XGBoost)
+  ├── model_type  "XGB"
+  ├── var_names
+  ├── cutoff      0.5
+  ├── accuracy    (e.g. 0.90)
+  └── gini        (e.g. 0.84)
+     │
+     │  bl_build_result(method = "CVA", rounding = 2L)
+     │  → bl_build_projection() → V, tV, biplot_obj
+     │  → bl_build_grid()       → 200×200 grid, scored, contours
+     │  → bl_assemble()         → combines all
+     ▼
+bl_results  [bl_result]              ← THE CENTRAL ANCHOR OBJECT
+  ├── train_data, test_data, var_names, num_vars
+  ├── model, model_type, cutoff
+  ├── V, tV, X_center, X_sd, method="CVA", standardise=FALSE
+  ├── biplot_obj       (biplotEZ — for axis rendering)
+  ├── train_ranges     (min/max per feature)
+  ├── polygon          (hull in CVA Z-space)
+  ├── biplot_grid      (Zgrid, Xgrid, grid_prob, ct, ct_surrogate)
+  ├── accuracy, gini, rounding=2L
+  └── call, created_at
+     │
+     │  plot_biplotEZ(bl_results)   → renders training biplot
+     │
+     │  bl_project_points(bl_results$test_data, bl_results)
+     │  → project using same V, X_center → Z_test
+     │  → score through XGBoost → pred_prob, pred_col
+     ▼
+test_pts  [bl_points]
+  ├── Z              (n_test × 2, CVA Z-space coordinates)
+  ├── pred_prob      (predicted default probability)
+  ├── pred_class     (0/1 at cutoff 0.5)
+  ├── pred_col       (TP/TN/FP/FN colour)
+  ├── class          (true loan_status)
+  └── inside_polygon (TRUE/FALSE per obs)
+     │
+     │  plot_biplotEZ(bl_results, points = test_pts)
+     └─→ renders same biplot with test points overlaid
+```
+
+---
+
+## Key Design Principles to Note
+
+1. **One anchor object:** `bl_results` carries everything. All Phase 2 and Phase 3 functions take `bl_results` as their first argument and extract what they need.
+
+2. **Two-way street between X and Z:** `V` projects forward (X → Z) and `tV = solve(V)` projects backward (Z → X). The entire boundary and counterfactual machinery depends on this invertibility.
+
+3. **Consistent coordinate frame:** `X_center` and `X_sd` from training are applied to every subsequent projection (test data, grid, target points) — so all Z-space coordinates are directly comparable.
+
+4. **CVA vs PCA:** CVA (`method = "CVA"`) maximises separation between the four confusion categories (TP/TN/FP/FN), producing a biplot where the decision boundary is most clearly visible. PCA would instead maximise total variance, which may not align with the class boundary.
+
+5. **`rounding` controls only the contour band**, not the predictions themselves. `rounding = 2L` means the boundary search looks for contour lines at probability 0.49 and 0.51 (a 0.02-wide band). All predicted values are always stored at 3 d.p. regardless.

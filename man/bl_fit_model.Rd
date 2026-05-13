@@ -9,7 +9,6 @@ bl_fit_model(
   var_names,
   model_type = "GLM",
   cutoff = 0.5,
-  rounding = 2L,
   model_params = list()
 )
 }
@@ -29,15 +28,15 @@ Default \code{"GLM"}.}
 \item{cutoff}{Numeric decision threshold for computing accuracy.
 Default \code{0.5}.}
 
-\item{rounding}{Integer; floor-based rounding precision for predicted
-probabilities. Default \code{2}.}
-
 \item{model_params}{Named list of hyperparameter overrides. Unrecognised
-keys are silently ignored. Common overrides:
+keys are silently ignored. Parameter names follow \strong{parsnip} conventions
+for all types except \code{"GBM"} (which uses the gbm package directly).
+Common overrides:
 \itemize{
 \item GBM: \code{list(n.trees = 1000, shrinkage = 0.05)}
-\item NNET: \code{list(size = 10, decay = 0.01)}
-\item XGB: \code{list(max_depth = 5, nrounds = 300)}
+\item NNET: \code{list(hidden_units = 10, penalty = 0.01, epochs = 500)}
+\item XGB: \code{list(trees = 300, tree_depth = 5, learn_rate = 0.05)}
+\item RForrest: \code{list(min_n = 10)}
 }}
 }
 \value{
@@ -47,7 +46,6 @@ A list of class \code{"bl_model"} with components:
 \item{\code{model_type}}{Character; the model family used.}
 \item{\code{var_names}}{Character vector of feature names.}
 \item{\code{cutoff}}{The decision threshold.}
-\item{\code{rounding}}{The rounding precision.}
 \item{\code{accuracy}}{Numeric; classification accuracy on \code{train_data}.}
 \item{\code{gini}}{Numeric; Gini coefficient on \code{train_data}.}
 }

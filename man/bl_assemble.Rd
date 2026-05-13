@@ -4,13 +4,14 @@
 \alias{bl_assemble}
 \title{Assemble Phase 1 artifacts into a single result object}
 \usage{
-bl_assemble(bl_data, bl_filter_result = NULL, bl_model, bl_projection, bl_grid)
+bl_assemble(bl_data, bl_model = NULL, bl_projection, bl_grid = NULL)
 }
 \arguments{
-\item{bl_data}{A \code{"bl_data"} object from \code{bl_prepare_data()}.}
-
-\item{bl_filter_result}{A \code{"bl_filter_result"} from \code{bl_filter_outliers()},
-or \code{NULL} if no polygon filtering was applied.}
+\item{bl_data}{Either a \code{"bl_data"} object from \code{bl_prepare_data()} (when
+no polygon filtering was applied), or a \code{"bl_filter_result"} object from
+\code{bl_filter_outliers()} (when filtering was applied). Pass whichever is the
+last step in your data-preparation chain — the function detects the type
+automatically and extracts the correct training and test data.}
 
 \item{bl_model}{A \code{"bl_model"} from \code{bl_fit_model()}.}
 
@@ -50,8 +51,8 @@ bl_proj <- bl_build_projection(bl_filt$train_data, bl_filt$var_names,
 # Step 5: build prediction grid
 bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod)
 
-# Step 6: assemble
-result  <- bl_assemble(bl_dat, bl_filt, bl_mod, bl_proj, bl_grid)
+# Step 6: assemble — pass bl_filt if filtering was used, bl_dat otherwise
+bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
 }\if{html}{\out{</div>}}
 }
 

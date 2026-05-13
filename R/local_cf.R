@@ -799,7 +799,7 @@ plot.bl_local_result <- function(x,
   }
 
   # ---- Step 4: axes redrawn on top -------------------------------------
-  biplot_plot |>
+  bp_overlay <- biplot_plot |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
@@ -807,8 +807,9 @@ plot.bl_local_result <- function(x,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
                    ticks          = ticks_v,
-                   label.line     = label_line_vec) |>
-    plot(add = TRUE)
+                   label.line     = label_line_vec)
+  graphics::par(new = TRUE)
+  plot(bp_overlay)
 
   # ---- Step 5: decision boundary contour lines -------------------------
   if (!isTRUE(no_contour)) {

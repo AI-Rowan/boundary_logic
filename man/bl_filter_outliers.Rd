@@ -21,7 +21,8 @@ rows retained and removed with percentages. Default \code{TRUE}.}
 A list of class \code{"bl_filter_result"} with components:
 \describe{
 \item{\code{train_data}}{Filtered training data frame.}
-\item{\code{test_data}}{Test data frame (filtered to training variable ranges).}
+\item{\code{test_data}}{Test data frame (passed through unchanged; apply range
+filtering later via \code{bl_project_points(..., filter_to_train_ranges = TRUE)}).}
 \item{\code{var_names}}{Feature column names.}
 \item{\code{num_vars}}{Number of features.}
 \item{\code{target_class}}{The positive class value (passed through).}

@@ -6,20 +6,28 @@
 \usage{
 plot_biplotEZ(
   bl_result,
+  points = NULL,
+  boundary = NULL,
+  show_arrows = TRUE,
+  arrow_col = "grey30",
   target_point = NULL,
   target_label = NULL,
   no_grid = FALSE,
   no_points = FALSE,
+  confusion_cols = TRUE,
   no_contour = FALSE,
   new_title = NA,
   cex_z = 0.5,
   label_dir = "Hor",
+  label_cex = 1,
   tick_label_cex = 0.6,
   ticks_v = 1L,
   which = NULL,
   X_names = NULL,
   label_offset_var = 0L,
   label_offset_dist = 0.5,
+  rotate_deg = 0,
+  grid_col = NULL,
   contour_col = "black",
   contour_lwd = 1.5,
   contour_lty = 1L
@@ -27,6 +35,24 @@ plot_biplotEZ(
 }
 \arguments{
 \item{bl_result}{A \code{"bl_result"} object from \code{bl_assemble()}.}
+
+\item{points}{A \code{"bl_points"} object from \code{bl_project_points()}.
+Controls which observations are plotted as coloured points. If \code{NULL}
+(default), training data is projected automatically. Pass
+\code{bl_project_points(result$test_data, result)} to show test data instead.}
+
+\item{boundary}{A \code{"bl_boundary"} object from \code{bl_find_boundary()},
+or \code{NULL} (default). When supplied, each observation's nearest boundary
+point (\code{B_z}) is plotted as a cross in Z-space, and an arrow is drawn
+from the observation to its counterfactual. Observations with no boundary
+found (\code{B_z = NA}) are silently skipped. If \code{rotate_deg} is set, the
+boundary coordinates are rotated to match.}
+
+\item{show_arrows}{Logical; if \code{TRUE} (default), arrows are drawn from
+each observation to its counterfactual when \code{boundary} is supplied.}
+
+\item{arrow_col}{Character; colour for the boundary crosses and
+arrows. Default \code{"grey30"}.}
 
 \item{target_point}{Named numeric vector of feature values (in original
 X-space) for an observation to highlight. Names must match
@@ -39,8 +65,13 @@ point is shown without a label.}
 \item{no_grid}{Logical; if \code{TRUE}, the prediction grid is hidden.
 Default \code{FALSE}.}
 
-\item{no_points}{Logical; if \code{TRUE}, training data points are hidden.
+\item{no_points}{Logical; if \code{TRUE}, data points are hidden.
 Default \code{FALSE}.}
+
+\item{confusion_cols}{Logical; if \code{TRUE} (default), points are coloured
+by confusion category (TP=red, TN=blue, FP=purple, FN=orange) when true
+labels are available. Set to \code{FALSE} to colour points by predicted class
+only (class 1 = red, class 0 = blue), ignoring true labels.}
 
 \item{no_contour}{Logical; if \code{TRUE}, decision boundary contour lines
 are hidden. Default \code{FALSE}.}
@@ -54,6 +85,8 @@ Default \code{0.5}.}
 \item{label_dir}{Character; biplotEZ axis label direction.
 \code{"Hor"} (horizontal, default) or \code{"Rad"} (radial).}
 
+\item{label_cex}{Numeric; variable name (axis label) size. Default \code{1}.}
+
 \item{tick_label_cex}{Numeric; axis tick label size. Default \code{0.6}.}
 
 \item{ticks_v}{Integer; number of ticks per variable axis.
@@ -65,11 +98,26 @@ for. Defaults to all variables.}
 \item{X_names}{Character vector; custom variable names for axis
 labels. Defaults to \code{bl_result$var_names}.}
 
-\item{label_offset_var}{Integer; index of the variable whose axis label
-should be shifted outward. \code{0} (default) means no offset.}
+\item{label_offset_var}{Integer or integer vector; index/indices of variables
+whose axis labels should be shifted outward. \code{0} (default) means no
+offset. Supply a vector (e.g., \code{c(1L, 3L)}) to offset multiple variables.}
 
-\item{label_offset_dist}{Numeric; outward offset distance for
-\code{label_offset_var}. Default \code{0.5}.}
+\item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
+for \code{label_offset_var}. If a single value, the same distance is applied to
+all variables listed in \code{label_offset_var}. If a vector, must be the same
+length as \code{label_offset_var}. Default \code{0.5}.}
+
+\item{rotate_deg}{Numeric; angle in degrees to rotate the entire plot
+clockwise. Rotates all plotted elements — grid, training points, contour
+lines, variable axes, and the target point — without rerunning the
+pipeline. Default \code{0} (no rotation).}
+
+\item{grid_col}{\code{NULL} (default) or a length-2 character vector
+\code{c(class0_col, class1_col)}. When supplied, the prediction grid is
+rendered as hard binary colours — \code{grid_col[1]} for grid points with
+predicted probability < 0.5 (class 0) and \code{grid_col[2]} for ≥ 0.5
+(class 1) — instead of the default blue-white-red gradient. Example:
+\code{grid_col = c("blue", "red")}.}
 
 \item{contour_col}{Character; colour for decision boundary contour
 lines. Default \code{"black"}.}

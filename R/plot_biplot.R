@@ -54,7 +54,7 @@
 #' @param cex_z            Numeric; size of training data points (`cex`).
 #'   Default `0.5`.
 #' @param label_dir        Character; biplotEZ axis label direction.
-#'   `"Hor"` (horizontal, default) or `"Rad"` (radial).
+#'   `"Hor"` (horizontal, default) or `"Orthog"` (orthogonal to axis direction).
 #' @param label_cex        Numeric; variable name (axis label) size. Default `1`.
 #' @param tick_label_cex   Numeric; axis tick label size. Default `0.6`.
 #' @param ticks_v          Integer; number of ticks per variable axis.
@@ -307,7 +307,7 @@ plot_biplotEZ <- function(bl_result,
   }
 
   # ---- Step 4: axes redrawn on top (visible over grid and points) ------
-  biplot_plot |>
+  bp_overlay <- biplot_plot |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
@@ -316,8 +316,9 @@ plot_biplotEZ <- function(bl_result,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
                    ticks          = ticks_v,
-                   label.line     = label_line_vec) |>
-    plot(add = TRUE)
+                   label.line     = label_line_vec)
+  graphics::par(new = TRUE)
+  plot(bp_overlay)
 
   # ---- Step 5: decision boundary contour lines -------------------------
   if (!isTRUE(no_contour) && !is.null(gr)) {

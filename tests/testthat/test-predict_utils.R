@@ -6,7 +6,7 @@ bl_mod <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
 test_that(".pred_function returns numeric vector same length as nrow(new_data)", {
   new_data <- bl_dat$train_data[1:5, bl_dat$var_names, drop = FALSE]
   preds    <- boundarylogic:::.pred_function(
-    bl_mod$model, bl_mod$model_type, 2L, new_data
+    bl_mod$model, bl_mod$model_type, new_data
   )
   expect_length(preds, 5L)
   expect_true(is.numeric(preds))
@@ -15,24 +15,26 @@ test_that(".pred_function returns numeric vector same length as nrow(new_data)",
 test_that(".pred_function GLM predictions are in [0,1]", {
   new_data <- bl_dat$train_data[, bl_dat$var_names, drop = FALSE]
   preds    <- boundarylogic:::.pred_function(
-    bl_mod$model, "GLM", 2L, new_data
+    bl_mod$model, "GLM", new_data
   )
   expect_true(all(preds >= 0 & preds <= 1))
 })
 
-test_that("floor rounding with rounding=2 has no more than 2 decimal places", {
+test_that("floor rounding: predictions have no more than 3 decimal places", {
   new_data <- bl_dat$train_data[, bl_dat$var_names, drop = FALSE]
   preds    <- boundarylogic:::.pred_function(
-    bl_mod$model, "GLM", 2L, new_data
+    bl_mod$model, "GLM", new_data
   )
-  # floor to 2 d.p. means preds * 100 is always an integer
-  expect_true(all(abs(preds * 100 - floor(preds * 100)) < 1e-9))
+  # floor to 3 d.p. means preds * 1000 is always an integer
+  expect_true(all(abs(preds * 1000 - floor(preds * 1000)) < 1e-9))
 })
 
 test_that(".pred_function throws error for unknown model_type", {
-  new_data <- bl_dat$train_data[1L, bl_dat$var_names, drop = FALSE]
+  # Must use a non-workflow object to reach the legacy switch path
+  new_data   <- bl_dat$train_data[1L, bl_dat$var_names, drop = FALSE]
+  fake_model <- structure(list(), class = "some_raw_model")
   expect_error(
-    boundarylogic:::.pred_function(bl_mod$model, "BANANA", 2L, new_data),
+    boundarylogic:::.pred_function(fake_model, "BANANA", new_data),
     "Unknown model_type"
   )
 })

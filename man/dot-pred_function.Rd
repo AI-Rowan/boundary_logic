@@ -4,30 +4,34 @@
 \alias{.pred_function}
 \title{Standardise prediction calls across all supported model families}
 \usage{
-.pred_function(model_use, model_type, rounding = 2L, new_data)
+.pred_function(model_use, model_type, new_data)
 }
 \arguments{
-\item{model_use}{Fitted model object. For XGB this must be a list with
-fields \code{model} (an \code{xgb.Booster}) and \code{features} (character vector of
-column names used during training). For \code{"custom"} models created by
-\code{bl_wrap_model()}, this must be a list with fields \code{model} and
-\code{predict_fn}.}
+\item{model_use}{Fitted model. A \code{workflows::workflow} for tidymodels
+types; a raw \code{gbm} object for \code{"GBM"}; a list with \code{model} and
+\code{predict_fn} for \code{"custom"}.}
 
-\item{model_type}{Character scalar identifying the model family. One of
-\code{"GLM"}, \code{"GAM"}, \code{"GBM"}, \code{"LDA"}, \code{"SVM"}, \code{"NNET"}, \code{"RForrest"},
-\code{"XGB"}, \code{"custom"}.}
-
-\item{rounding}{Integer number of decimal places for floor-based
-rounding. Default \code{2}.}
+\item{model_type}{Character scalar identifying the model family.}
 
 \item{new_data}{Data frame of observations to score.}
 }
 \value{
-Numeric vector of predicted probabilities / scores, length
-\code{nrow(new_data)}, rounded via \code{floor(x * 10^rounding) / 10^rounding}.
+Numeric vector of predicted probabilities, length \code{nrow(new_data)},
+floor-rounded to 3 decimal places.
 }
 \description{
-Applies floor-based rounding and dispatches to the correct prediction
-method for each model type.
+Dispatches to one of three paths:
+}
+\details{
+\enumerate{
+\item \strong{tidymodels workflow} (\code{inherits(model_use, "workflow")}): all model
+types fitted by \code{bl_fit_model()} except \code{"GBM"}. Uses
+\verb{predict(<workflow>, new_data, type = "prob")} and extracts \code{.pred_1}.
+\item \strong{Legacy / raw model}: \code{"GBM"} (raw \code{gbm} object) and any model passed
+via \code{bl_wrap_model()} using a raw fitted object. Model-type-specific
+predict calls are used.
+\item \strong{Custom}: \code{model_type = "custom"} from \code{bl_wrap_model()}. Calls the
+user-supplied \code{predict_fn}.
+}
 }
 \keyword{internal}

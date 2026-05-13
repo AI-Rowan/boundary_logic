@@ -7,12 +7,12 @@ bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names,
 bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 30L)
 
 test_that("bl_assemble returns bl_result class", {
-  result <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   expect_s3_class(result, "bl_result")
 })
 
 test_that("all required fields are present", {
-  result   <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result   <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   required <- c("train_data", "test_data", "var_names", "num_vars",
                 "model", "model_type", "cutoff", "rounding",
                 "V", "tV", "X_center", "X_sd",
@@ -23,12 +23,12 @@ test_that("all required fields are present", {
 })
 
 test_that("var_names matches bl_model var_names", {
-  result <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   expect_equal(result$var_names, bl_mod$var_names)
 })
 
 test_that("model_type matches bl_model model_type", {
-  result <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   expect_equal(result$model_type, bl_mod$model_type)
 })
 
@@ -39,21 +39,22 @@ test_that("standardise is FALSE when method is CVA", {
                                      cva_classes = pred_col)
   bl_grid_cva <- bl_build_grid(bl_dat$train_data, bl_proj_cva, bl_mod,
                                m = 30L)
-  result      <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj_cva, bl_grid_cva)
+  result      <- bl_assemble(bl_dat, bl_mod, bl_proj_cva, bl_grid_cva)
   expect_false(result$standardise)
 })
 
-test_that("hull_fraction is NULL when bl_filter_result=NULL", {
-  result <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
-  expect_null(result$hull_fraction)
+test_that("hull_fraction is a numeric value from bl_grid", {
+  result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
+  expect_true(is.numeric(result$hull_fraction))
+  expect_true(result$hull_fraction >= 0 && result$hull_fraction <= 1)
 })
 
 test_that("print.bl_result runs without error and returns invisibly", {
-  result   <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result   <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   returned <- expect_output(print(result), "<bl_result>")
 })
 
 test_that("summary.bl_result runs without error", {
-  result <- bl_assemble(bl_dat, NULL, bl_mod, bl_proj, bl_grid)
+  result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   expect_output(summary(result), "Confusion matrix")
 })

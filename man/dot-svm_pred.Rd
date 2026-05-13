@@ -2,7 +2,7 @@
 % Please edit documentation in R/predict_utils.R
 \name{.svm_pred}
 \alias{.svm_pred}
-\title{Extract class-1 probability from an e1071 SVM model}
+\title{Extract class-1 probability from a raw e1071 SVM model}
 \usage{
 .svm_pred(model_use, new_data)
 }
@@ -15,6 +15,6 @@
 Numeric vector of class-1 probabilities.
 }
 \description{
-Extract class-1 probability from an e1071 SVM model
+Extract class-1 probability from a raw e1071 SVM model
 }
 \keyword{internal}

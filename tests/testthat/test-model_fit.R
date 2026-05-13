@@ -38,7 +38,7 @@ test_that("pred_function returns vector same length as nrow(new_data)", {
                            model_type = "GLM")
   new_data <- bl_dat$train_data[1:10, bl_dat$var_names, drop = FALSE]
   preds    <- boundarylogic:::.pred_function(
-    result$model, result$model_type, result$rounding, new_data
+    result$model, result$model_type, new_data
   )
   expect_length(preds, 10L)
   expect_true(all(preds >= 0 & preds <= 1))
@@ -60,15 +60,15 @@ test_that("error when class column missing", {
   )
 })
 
-test_that("floor rounding: predictions have <= rounding decimal places", {
+test_that("floor rounding: predictions have no more than 3 decimal places", {
   result <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
-                         model_type = "GLM", rounding = 2L)
+                         model_type = "GLM")
   preds  <- boundarylogic:::.pred_function(
-    result$model, result$model_type, 2L,
+    result$model, result$model_type,
     bl_dat$train_data[, bl_dat$var_names, drop = FALSE]
   )
-  # floor to 2 d.p.: preds * 100 should have no fractional part
-  expect_true(all(abs(preds * 100 - round(preds * 100)) < 1e-9))
+  # floor to 3 d.p.: preds * 1000 should have no fractional part
+  expect_true(all(abs(preds * 1000 - round(preds * 1000)) < 1e-9))
 })
 
 test_that("print.bl_model runs without error", {

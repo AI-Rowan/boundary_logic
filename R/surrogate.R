@@ -342,7 +342,7 @@ plot.bl_surrogate <- function(x,
                    col = surr_col, pch = 16L, cex = cex_z)
 
   # ---- Step 4: axes redrawn on top ------------------------------------
-  bl_result$biplot_obj |>
+  bp_overlay <- bl_result$biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
@@ -351,8 +351,9 @@ plot.bl_surrogate <- function(x,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
                    ticks          = ticks_v,
-                   label.line     = label_line_vec) |>
-    plot(add = TRUE)
+                   label.line     = label_line_vec)
+  graphics::par(new = TRUE)
+  plot(bp_overlay)
 
   # ---- Step 5: hull-clipped surrogate contour lines -------------------
   # ct_surrogate contours are already bounded within the training hull

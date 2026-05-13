@@ -41,7 +41,7 @@ test_that("CVA with cva_classes=NULL throws informative error", {
   expect_error(
     bl_build_projection(bl_dat$train_data, bl_dat$var_names,
                         method = "CVA", cva_classes = NULL),
-    "requires 'cva_classes'"
+    "method = 'CVA' requires"
   )
 })
 

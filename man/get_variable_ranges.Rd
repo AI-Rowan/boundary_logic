@@ -10,11 +10,11 @@ get_variable_ranges(data)
 \item{data}{A data frame. All columns are included.}
 }
 \value{
-A list of expressions, one per column of \code{data}.
+Named list of \code{c(min, max)} vectors, one per column of \code{data}.
 }
 \description{
-Returns a list of \code{rlang} expressions of the form
-\code{var >= min & var <= max} for each column. These can be passed
-directly to \code{get_filter_logical_vector()}.
+Returns a named list with one element per column. Each element is a
+length-2 numeric vector \code{c(min, max)} for that variable. The list can
+be passed directly to \code{get_filter_logical_vector()}.
 }
 \keyword{internal}
