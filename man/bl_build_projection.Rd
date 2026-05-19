@@ -96,7 +96,7 @@ bl_proj <- bl_build_projection(bl_dat$train_data,
                                 bl_dat$var_names,
                                 method = "PCA")
 
-# CVA with bl_model — confusion labels (TP/TN/FP/FN) used automatically
+# CVA with bl_model -- confusion labels (TP/TN/FP/FN) used automatically
 bl_mod <- bl_fit_model(bl_dat$train_data, bl_dat$var_names)
 bl_proj_cva <- bl_build_projection(
   bl_dat$train_data,

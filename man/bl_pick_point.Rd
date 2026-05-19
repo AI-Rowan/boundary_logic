@@ -2,9 +2,16 @@
 % Please edit documentation in R/pick_point.R
 \name{bl_pick_point}
 \alias{bl_pick_point}
-\title{Interactively identify the nearest data point on an active biplot}
+\title{Interactively identify the nearest data point on an active biplot, with
+optional counterfactual boundary overlay for each picked point}
 \usage{
-bl_pick_point(bl_result, data = NULL)
+bl_pick_point(
+  bl_result,
+  data = NULL,
+  bl_boundary = NULL,
+  show_arrows = TRUE,
+  arrow_col = "grey30"
+)
 }
 \arguments{
 \item{bl_result}{A \code{"bl_result"} object from \code{\link[=bl_assemble]{bl_assemble()}}.}
@@ -13,6 +20,21 @@ bl_pick_point(bl_result, data = NULL)
 \code{bl_result$train_data}. Pass \code{bl_result$test_data} to search test
 points, or any other data frame whose features match
 \code{bl_result$var_names}.}
+
+\item{bl_boundary}{A \code{"bl_boundary"} object from \code{\link[=bl_find_boundary]{bl_find_boundary()}}, or
+\code{NULL} (default). When supplied, each picked observation's nearest boundary
+counterfactual is drawn on the active plot: an \code{x} cross at \code{B_z} and (if
+\code{show_arrows = TRUE}) an arrow from the observation to \code{B_z}. If no
+boundary was found for that observation (\code{B_z = NA}), a message is
+printed. The rows of \code{bl_boundary} must correspond 1-to-1 with the rows
+of \code{data}; a warning is issued if the row counts differ.}
+
+\item{show_arrows}{Logical; if \code{TRUE} (default) and \code{bl_boundary} is
+supplied, draws an arrow from each picked observation to its boundary
+counterfactual. Set \code{FALSE} to draw only the cross at \code{B_z}.}
+
+\item{arrow_col}{Character; colour for the boundary cross and arrow.
+Default \code{"grey30"}.}
 }
 \value{
 Invisibly returns a data frame with one row per click containing:
@@ -43,6 +65,20 @@ picked <- bl_pick_point(bl_results)
 plot_biplotEZ(bl_results,
               points = bl_project_points(bl_results$test_data, bl_results))
 picked <- bl_pick_point(bl_results, data = bl_results$test_data)
+
+# Show counterfactual arrow for each picked point
+bl_bnd <- bl_find_boundary(bl_results)
+plot_biplotEZ(bl_results)
+picked <- bl_pick_point(bl_results, bl_boundary = bl_bnd)
 }\if{html}{\out{</div>}}
+}
+
+\section{Known limitations}{
+
+If the biplot was rendered with \code{rotate_deg != 0} in \code{\link[=plot_biplotEZ]{plot_biplotEZ()}},
+the boundary cross and arrow drawn by \code{bl_pick_point()} will be misaligned
+because \code{bl_boundary$Z_obs} and \code{B_z} are stored in unrotated Z-space
+coordinates. Use \code{rotate_deg = 0} (the default) when combining
+\code{bl_pick_point()} with boundary overlay.
 }
 

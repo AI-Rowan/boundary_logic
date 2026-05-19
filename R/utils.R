@@ -66,7 +66,7 @@ stop_if_not_positive_integer <- function(x, arg_name) {
 #' @param actual Numeric 0/1 vector of true class labels.
 #' @param predicted_prob Numeric vector of predicted class-1 probabilities.
 #'
-#' @return Single numeric in [-1, 1].
+#' @return Single numeric in `[-1, 1]`.
 #' @keywords internal
 calc_gini <- function(actual, predicted_prob) {
   n <- length(actual)

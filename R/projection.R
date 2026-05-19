@@ -70,7 +70,7 @@
 #'                                 bl_dat$var_names,
 #'                                 method = "PCA")
 #'
-#' # CVA with bl_model — confusion labels (TP/TN/FP/FN) used automatically
+#' # CVA with bl_model -- confusion labels (TP/TN/FP/FN) used automatically
 #' bl_mod <- bl_fit_model(bl_dat$train_data, bl_dat$var_names)
 #' bl_proj_cva <- bl_build_projection(
 #'   bl_dat$train_data,
@@ -158,7 +158,7 @@ bl_build_projection <- function(train_data,
       } else {
         stop(paste0(
           "method = 'CVA' requires either:\n",
-          "  (a) bl_model: a 'bl_model' object — confusion labels (TP/TN/FP/FN) ",
+          "  (a) bl_model: a 'bl_model' object -- confusion labels (TP/TN/FP/FN) ",
           "will be used automatically, or\n",
           "  (b) cva_classes: a factor of class labels (one per row of train_data),\n",
           "      e.g., as.factor(train_data$class) when no model is available."
@@ -249,6 +249,7 @@ bl_build_projection <- function(train_data,
 #' @param ... Ignored; present for S3 compatibility.
 #'
 #' @return Invisibly returns `x`.
+#' @importFrom grDevices dev.cur dev.new
 #' @export
 plot.bl_projection <- function(x,
                                 col      = NULL,
@@ -257,6 +258,8 @@ plot.bl_projection <- function(x,
                                 axes_col = "grey22",
                                 tick_cex = 0.6,
                                 ...) {
+  if (grDevices::dev.cur() == 1L) grDevices::dev.new()
+
   col <- if (!is.null(col)) col else x$point_col
   if (is.null(col)) col <- "grey40"
 

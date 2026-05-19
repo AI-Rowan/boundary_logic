@@ -7,3 +7,9 @@
 ^pkgdown$
 ^\.positai$
 ^\.claude$
+^1\ Foundation\ intro\ documents\.txt$
+^2\ implementation_summary\.txt$
+^documentation$
+^progress\.md$
+^CLAUDE\.md$
+^scripts/pima\ diabetes\.csv$

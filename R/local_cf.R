@@ -329,6 +329,7 @@ set_filters <- function(bl_target, ...) {
 #'   }
 #'
 #' @importFrom grDevices contourLines colorRampPalette
+#' @importFrom stats setNames
 #' @export
 bl_find_local_cf <- function(bl_result, bl_target,
                                    set_filters = NULL,
@@ -462,7 +463,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
         rep(TRUE, nrow(Bx))
       }
 
-      # Actionability filter (Phase 3 only — no hull polygon)
+      # Actionability filter (Phase 3 only -- no hull polygon)
       if (!is.null(set_filters)) {
         keep <- keep & .apply_actionability(Bx, x_obs_named, set_filters)
       }
@@ -654,6 +655,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param ...             Additional arguments (currently ignored).
 #'
 #' @importFrom graphics points lines arrows text
+#' @importFrom grDevices dev.cur dev.new
 #' @importFrom dplyr case_when
 #' @export
 plot.bl_local_result <- function(x,
@@ -676,9 +678,11 @@ plot.bl_local_result <- function(x,
                                  print_summary     = TRUE,
                                  ...) {
   if (!x$solution_found) {
-    message("No solution found — nothing to plot.")
+    message("No solution found -- nothing to plot.")
     return(invisible(x))
   }
+
+  if (grDevices::dev.cur() == 1L) grDevices::dev.new()
 
   bl_result   <- x$bl_result
   bl_target   <- x$bl_target

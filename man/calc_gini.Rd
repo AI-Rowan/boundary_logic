@@ -12,7 +12,7 @@ calc_gini(actual, predicted_prob)
 \item{predicted_prob}{Numeric vector of predicted class-1 probabilities.}
 }
 \value{
-Single numeric in \link{-1, 1}.
+Single numeric in \verb{[-1, 1]}.
 }
 \description{
 Calculate the Gini coefficient (2 * AUC - 1)

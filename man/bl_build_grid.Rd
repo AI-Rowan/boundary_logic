@@ -62,7 +62,7 @@ A list of class \code{"bl_grid"} with components:
 \item{\code{Zgrid}}{Numeric matrix (m² x 2); grid coordinates in Z-space.}
 \item{\code{Xgrid}}{Data frame (m² x p); grid back-projected to X-space.}
 \item{\code{grid_prob}}{Numeric vector (length m²); model scores per grid
-point, in \link{0, 1}.}
+point, in \verb{[0, 1]}.}
 \item{\code{col_value}}{Character vector (length m²); colour per grid point
 on a blue-white-red scale.}
 \item{\code{min_val}}{Numeric; lower bound of the square plot region.}

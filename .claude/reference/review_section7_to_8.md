@@ -197,33 +197,44 @@ Prints to console:
 
 ---
 
-### `plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)`
+### `plot_biplotEZ(bl_results, points = test_pts)`
 
-The boundary overlay adds two new visual layers on top of the standard biplot (layers 1–5 described in `review_section4_to_6.md`):
+`plot_biplotEZ()` no longer accepts a `boundary =` parameter. The biplot renders without
+arrow overlays. To inspect boundary counterfactuals for individual observations, call
+`bl_pick_point()` on the active plot after rendering:
 
-**Layer 3b — Boundary crosses**
-- Draws an `×` symbol (`pch = 4`) at each `bl_bnd$B_z[i, ]` (the counterfactual location in Z-space)
-- Colour: `arrow_col = "grey30"`
-- Only drawn for rows where both `Z_obs[i, ]` and `B_z[i, ]` are finite (NA rows silently skipped)
+```r
+plot_biplotEZ(bl_results, points = test_pts)
+bl_pick_point(bl_results, bl_boundary = bl_bnd)
+```
 
-**Layer 3c — Arrows** (because `show_arrows = TRUE` by default)
-- Draws an arrow from `Z_obs[i, ]` (observation position) to `B_z[i, ]` (boundary position)
-- Direction: "this is the direction the observation would need to move to change prediction"
-- Arrowhead length: 0.05 units; line width: 0.8
+Each click identifies the nearest training observation and draws its counterfactual on the
+plot: an `×` cross at `B_z` (the counterfactual position in Z-space) and an arrow from
+the observation to `B_z`. If no boundary was found for that observation (`B_z = NA`), a
+message is printed. Press Escape to finish clicking.
 
-If `rotate_deg` were non-zero, both `Z_obs` and `B_z` would be rotated before drawing. It is `0` here.
+**Why interactive instead of global:** The global overlay drew n arrows at once, causing
+zero-length arrow warnings from R's graphics device (when an observation is exactly on the
+boundary) and visual clutter at large n. The per-click approach fires at most one arrow per
+interaction, in interactive mode where the warning is visible and actionable.
 
-**Complete layer order with `boundary` supplied:**
+**Complete layer order:**
 
 | Layer | Content |
 |---|---|
 | 1 | Grey axes + variable labels (biplotEZ) |
 | 2 | 200 × 200 probability grid (blue→white→red) |
-| 3a | Test data points coloured by confusion category (from `test_pts`) |
-| 3b | `×` crosses at counterfactual (boundary) positions |
-| 3c | Grey arrows from observations to counterfactuals |
+| 3 | Test data points coloured by confusion category (from `test_pts`) |
 | 4 | Darker axes redrawn on top |
 | 5 | Decision boundary contour lines |
+
+**Per-click additions (via `bl_pick_point(bl_results, bl_boundary = bl_bnd)`):**
+
+| Element | Content |
+|---|---|
+| Yellow circle + row label | Picked observation highlighted on the plot |
+| `×` cross | Counterfactual position `B_z` in Z-space |
+| Grey arrow | Direction from observation to counterfactual |
 
 ---
 
@@ -383,8 +394,11 @@ bl_bnd  [bl_boundary]
      ├── print(bl_bnd)
      │     └─→ console: n, boundaries, mean distances, B_pred range
      │
-     ├── plot_biplotEZ(bl_results, points=test_pts, boundary=bl_bnd)
-     │     └─→ biplot + ×-crosses at B_z + arrows from Z_obs → B_z
+     ├── plot_biplotEZ(bl_results, points=test_pts)
+     │     └─→ clean biplot (no boundary overlay)
+     │
+     ├── bl_pick_point(bl_results, bl_boundary=bl_bnd)    [interactive]
+     │     └─→ per-click: yellow circle + ×-cross at B_z + arrow from Z_obs → B_z
      │
      ├── plot(bl_bnd)                     [type = "jitter"]
      │     ├── compute vec_to_boundary_sd  (n × p signed distances)

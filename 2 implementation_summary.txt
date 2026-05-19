@@ -176,7 +176,7 @@ The central Phase 1 anchor object. Consolidates all metadata into a single repro
 
 | Function | Signature | Returns |
 |---|---|---|
-| `plot_biplotEZ()` | `(bl_result, points=NULL, boundary=NULL, show_arrows=TRUE, arrow_col, target_point=NULL, target_label=NULL, no_grid, no_points, confusion_cols=TRUE, no_contour, new_title, cex_z, label_dir, tick_label_cex, ticks_v, which, X_names, label_offset_var, label_offset_dist, rotate_deg, grid_col, contour_col, contour_lwd, contour_lty)` | `bl_result` (invisible) |
+| `plot_biplotEZ()` | `(bl_result, points=NULL, target_point=NULL, target_label=NULL, no_grid, no_points, confusion_cols=TRUE, no_contour, new_title, cex_z, label_dir, tick_label_cex, ticks_v, which, X_names, label_offset_var, label_offset_dist, rotate_deg, grid_col, contour_col, contour_lwd, contour_lty)` | `bl_result` (invisible) |
 
 Eight-step rendering pipeline using biplotEZ:
 
@@ -346,13 +346,13 @@ The `round_to` parameter is **resolution-based** (round to nearest multiple), no
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_pick_point()` | `(bl_result, data=NULL)` | `data.frame` (invisibly) |
+| `bl_pick_point()` | `(bl_result, data=NULL, bl_boundary=NULL, show_arrows=TRUE, arrow_col="grey30")` | `data.frame` (invisibly) |
 
-`bl_pick_point()` opens an interactive session on an existing active biplot plot. The user clicks one or more points on the plot; the function identifies the nearest data observation by Z-space Euclidean distance, highlights it with a yellow circle and row label on the active device, and prints the row details to the console. Press Escape to exit.
+`bl_pick_point()` opens an interactive session on an existing active biplot plot. The user clicks one or more points on the plot; the function identifies the nearest data observation by Z-space Euclidean distance, highlights it with a yellow circle and row label on the active device, and prints the row details to the console. Press Escape to exit. When `bl_boundary` is supplied (a `"bl_boundary"` object from `bl_find_boundary()`), each picked point's counterfactual is overlaid: a cross (`×`) at `B_z` and (if `show_arrows = TRUE`) an arrow from the observation to `B_z`. If no boundary was found for that observation, a message is printed. Row indices of `data` must align 1-to-1 with rows of `bl_boundary`.
 
 Returns invisibly: a data frame with columns `row`, `dist_to_click`, `z1`, `z2`, plus all feature columns for the selected observations. Returns `NULL` invisibly if no points were picked.
 
-This function requires an active graphics device with a rendered biplot (i.e., `plot(bl_results)` or `plot_biplotEZ()` must have been called first). By default searches `bl_result$train_data`; pass `data = bl_result$test_data` or any compatible data frame to search other point sets.
+This function requires an active graphics device with a rendered biplot (i.e., `plot_biplotEZ()` must have been called first). By default searches `bl_result$train_data`; pass `data = bl_result$test_data` or any compatible data frame to search other point sets.
 
 ---
 

@@ -36,7 +36,6 @@
 #'
 #' @importFrom parsnip logistic_reg gen_additive_mod mlp svm_rbf decision_tree boost_tree set_engine set_mode fit
 #' @importFrom workflows workflow add_formula add_model
-#' @importFrom discrim discrim_linear
 #' @importFrom gbm gbm
 #' @importFrom stats as.formula
 #' @importFrom utils modifyList

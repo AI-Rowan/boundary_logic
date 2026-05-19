@@ -595,8 +595,16 @@ are not considered feasible counterfactuals.
 bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data)
 print(bl_bnd)
 
-# Overlay counterfactuals on the biplot
-plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+# Biplot with test data overlaid
+plot_biplotEZ(bl_results, points = test_pts)
+```
+
+To inspect the counterfactual arrow for any individual observation,
+call `bl_pick_point()` on the active plot (not evaluated here —
+requires an interactive graphics device):
+
+```{r phase2-pick, eval=FALSE}
+bl_pick_point(bl_results, bl_boundary = bl_bnd)
 ```
 
 The `data` argument accepts any labelled data frame with the same

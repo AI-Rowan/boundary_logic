@@ -244,11 +244,18 @@ bl_bnd <- bl_find_boundary(bl_results)
 print(bl_bnd)
 ```
 
-Overlay the boundary arrows on the biplot (each arrow runs from an
-observation to its nearest boundary point):
+Render the biplot with test data overlaid. To inspect the counterfactual
+arrow for any individual observation interactively, call
+`bl_pick_point()` after rendering (not evaluated here — requires an
+interactive graphics device):
 
 ```{r step7-biplot}
-plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+plot_biplotEZ(bl_results, points = test_pts)
+```
+
+```{r step7-pick, eval=FALSE}
+# Interactive: click an observation to see its counterfactual arrow
+bl_pick_point(bl_results, bl_boundary = bl_bnd)
 ```
 
 ------------------------------------------------------------------------

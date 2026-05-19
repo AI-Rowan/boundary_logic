@@ -158,6 +158,7 @@
 #'   }
 #'
 #' @importFrom dplyr case_when
+#' @importFrom utils combn
 #' @export
 bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
                        approx_perm = 2048L, seed = 1L) {

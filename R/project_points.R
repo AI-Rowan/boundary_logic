@@ -34,7 +34,7 @@
 #' \describe{
 #'   \item{`Z`}{Numeric matrix (n x 2); projected coordinates in Z-space.}
 #'   \item{`pred_prob`}{Numeric vector (length n); model probabilities in
-#'     [0, 1].}
+#'     `[0, 1]`.}
 #'   \item{`pred_class`}{Numeric 0/1 vector (length n); predicted class.}
 #'   \item{`pred_col`}{Character vector (length n); point colour.}
 #'   \item{`class`}{Numeric 0/1 vector if `"class"` was in `data`, else

@@ -1,37 +1,17 @@
 ############################################################
 # Loan default — Iterative Phases 1, 2 & 3
+# Custom XGBoost variant
 #
 # Dataset : inst/extdata/loan_data.csv
-#           45,000 observations, 14 columns (5 categorical), binary outcome
-#           Source: https://github.com/TSMathi/loan_approval_analysis/tree/main
-# Model   : XGBoost (xgboost)
-# Biplot  : PCA
+#           45,000 observations, binary outcome
+# Model   : xgboost::xgb.train() with custom hyperparameters,
+#           wrapped via bl_wrap_model()
+# Biplot  : CVA
 #
-# Iterative workflow:
-#
-#   Step 1   : Load and integer-encode categorical variables
-#   Step 2   : Exploratory biplot (no model) — inspect cluster structure
-#   Step 3   : Domain filter: keep only prior-defaulter sub-population
-#   Steps 4-6: Fit XGBoost model, build first PCA biplot
-#
-#   Phase 2 (Steps 7-9): Global interpretations
-#     7. Find nearest boundary point for each observation
-#     8. Distance-to-boundary plot (jitter + boxplot)
-#     9. Surrogate model
-#
-#   Step 10  : Extract per-variable importance, prune weak variables
-#   Steps 4b-6b: Refit XGBoost on reduced feature set, rebuild biplot
-#   Phase 2 second pass (Steps 7b-9b): re-inspect with reduced model
-#
-#   Phase 3 (Steps 11-18): Local interpretation of one target
-#    11. Inspect predictions and select target
-#    12. Set actionability constraints
-#    13. Find local counterfactual via biplot rotation
-#    14. Local biplot plot
-#    15. Shapley contribution plot
-#    16. Sparse counterfactual
-#    17. (Optional) Unconstrained local search
-#    18. External applicant
+# Key difference from script 03:
+#   Steps 4-6 and 4b-6b fit XGBoost directly with xgboost::xgb.train()
+#   using a train/validation watchlist and early stopping, then register
+#   the fitted booster via bl_wrap_model() instead of bl_fit_model().
 #
 # Run interactively: place cursor inside a {} block and press Ctrl+Enter
 ############################################################
@@ -40,10 +20,8 @@
 {
   rm(list = ls())
   devtools::load_all()
+  library(xgboost)
 }
-
-
-devtools::check()
 
 # ===========================================================
 # PHASE 1a — Load and explore
@@ -55,7 +33,6 @@ devtools::check()
     system.file("extdata", "loan_data.csv", package = "boundarylogic")
   )
 
-  
   loan_encoded <- loan_raw
 
   gender_map     <- c(female = 0, male = 1)
@@ -73,26 +50,16 @@ devtools::check()
   loan_encoded$loan_intent                    <- intent_map[loan_encoded$loan_intent]
   loan_encoded$previous_loan_defaults_on_file <- defaults_map[loan_encoded$previous_loan_defaults_on_file]
 
-  # Coerce all columns to double so the training data and prediction grid
-  # share the same type — read.csv() reads integer-valued columns as integer,
-  # but bl_build_grid() generates sequences as double.
   loan_encoded[] <- lapply(loan_encoded, as.numeric)
-
-  str(loan_encoded)
 
   vars_to_remove <- c("loan_intent", "person_education", "person_home_ownership")
   loan_encoded <- loan_encoded[, setdiff(names(loan_encoded), vars_to_remove), drop = FALSE]
+
+  str(loan_encoded)
 }
 
 
 # ---- Step 2: Exploratory biplot — full data, no model -----------------
-# Build a PCA biplot coloured by loan_status before fitting any model.
-# Purpose: inspect class separation and variable loading directions
-# to guide modelling and feature decisions.
-#
-# bl_build_result() with no bl_model argument returns a bl_projection
-# object (not a full bl_result). plot_biplotEZ() renders it in the
-# same style as a model-backed biplot.
 {
   bl_dat_exp  <- bl_prepare_data(
     data           = loan_encoded,
@@ -109,23 +76,11 @@ devtools::check()
     title   = "Loan default — exploratory PCA biplot (all data)"
   )
 
-  plot_biplotEZ(
-    bl_proj,
-    label_dir         = "Hor",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
-    label_offset_var  = 0L,     # variable index/indices to shift, e.g. c(1L, 3L)
-    label_offset_dist = 0.5     # outward distance per shifted label
-  )
+  plot_biplotEZ(bl_proj, label_dir = "Hor")
 }
 
 
 # ---- Step 3: Domain filter — keep applicants without prior defaults ----
-# Retain only applicants with no prior default on file
-# (previous_loan_defaults_on_file == 0). This sub-population is the
-# focus of the credit-risk model.
-#
-# Because previous_loan_defaults_on_file is now constant (all 0) within
-# the filtered set, it is excluded from feature_cols to avoid zero-variance
-# issues in the model and projection.
 {
   loan_filtered <- loan_encoded[loan_encoded$previous_loan_defaults_on_file == 0, ]
 
@@ -139,7 +94,7 @@ devtools::check()
 }
 
 
-# ---- Steps 4-6: Prepare data, fit XGBoost, build biplot ---------------
+# ---- Steps 4-6: Prepare data, fit custom XGBoost, build biplot --------
 {
   bl_dat  <- bl_prepare_data(
     data           = loan_filtered,
@@ -152,38 +107,76 @@ devtools::check()
 
   bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
-  # NOTE: GAM via bl_fit_model() is currently broken — use XGB or GLM.
-  # To fit a custom GAM, use bl_wrap_model() with mgcv::gam() directly
-  # (see scripts/00_pima_Boundary_Logic.R Step 3 for the pattern).
-  bl_mod <- bl_fit_model(
-    train_data = bl_filt$train_data,
-    var_names  = bl_filt$var_names,
-    model_type = "XGB"
+  # ---- Fit custom XGBoost -----------------------------------------------
+  # Use 90 % of the filtered training data to train and 10 % as a validation
+  # watchlist for early stopping.  Set seed before the split so results
+  # are reproducible.
+  train_df  <- bl_filt$train_data
+  var_names <- bl_filt$var_names
+
+  set.seed(42L)
+  val_idx   <- sample(nrow(train_df), size = floor(0.1 * nrow(train_df)))
+  xgb_train <- train_df[-val_idx, ]
+  xgb_val   <- train_df[ val_idx, ]
+
+  dtrain <- xgboost::xgb.DMatrix(
+    data  = as.matrix(xgb_train[, var_names]),
+    label = xgb_train[["class"]]
+  )
+  dval <- xgboost::xgb.DMatrix(
+    data  = as.matrix(xgb_val[, var_names]),
+    label = xgb_val[["class"]]
+  )
+
+  xgb_params <- list(
+    objective         = "binary:logistic",
+    eval_metric       = "auc",
+    eta               = 0.05,        # learning rate
+    max_depth         = 6,           # tree depth
+    subsample         = 0.8,         # row subsampling per tree
+    colsample_bytree  = 0.8,         # column subsampling per tree
+    min_child_weight  = 5,           # minimum leaf weight (regularises small splits)
+    gamma             = 0.1,         # minimum loss reduction to split
+    nthread           = 1L           # single thread for reproducibility
+  )
+
+  xgb_fit <- xgboost::xgb.train(
+    params                = xgb_params,
+    data                  = dtrain,
+    nrounds               = 2000L,
+    watchlist             = list(train = dtrain, val = dval),
+    early_stopping_rounds = 50L,
+    verbose               = 1L,
+    print_every_n         = 100L
+  )
+
+  cat("\nBest iteration:", xgb_fit$best_iteration, "\n")
+  cat("Best val AUC:  ", xgb_fit$best_score, "\n")
+
+  # ---- Wrap for boundarylogic -------------------------------------------
+  # bl_wrap_model() with model_type = "XGB" expects:
+  #   model = list(model = <xgb.Booster>, features = <character vector>)
+  bl_mod <- bl_wrap_model(
+    model      = list(model = xgb_fit, features = var_names),
+    model_type = "XGB",
+    var_names  = var_names,
+    train_data = train_df
   )
   print(bl_mod)
 
-  # CVA is the default biplot method for this workflow — it maximises
-  # class separation in the projection plane.
   bl_results <- bl_build_result(
     bl_data  = bl_filt,
     bl_model = bl_mod,
     method   = "CVA",
-    title    = "Loan default (prior defaulters) — XGB, CVA biplot",
+    title    = "Loan default — custom XGB, CVA biplot",
     rounding = 3L
   )
   print(bl_results)
-  bl_results$test_data
-  # Reference biplot — training data coloured by confusion category
-  plot_biplotEZ(
-    bl_results,
-    label_dir         = "Hor",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
-    label_offset_var  = 0L,     # variable index/indices to shift, e.g. c(1L, 3L)
-    label_offset_dist = 0.5     # outward distance per shifted label
-  )
 
-  # Project all observations and overlay on the biplot
-  test_pts <- bl_project_points(bl_results$test_data, bl_results, filter_to_polygon = TRUE )   # removes out-of-polygon points before plotting)
-  sum(test_pts$inside_polygon==F)
+  plot_biplotEZ(bl_results, label_dir = "Hor")
+
+  test_pts <- bl_project_points(bl_results$test_data, bl_results,
+                                 filter_to_polygon = TRUE)
   plot_biplotEZ(bl_results, points = test_pts)
 }
 
@@ -192,23 +185,17 @@ devtools::check()
 # PHASE 2 (first pass) — Global interpretations
 # ===========================================================
 
-
 # ---- Step 7: Find nearest boundary point for each observation ----------
 {
   bl_bnd <- bl_find_boundary(bl_results)
   print(bl_bnd)
-  hist(bl_bnd$B_pred)
-  bl_bnd$B_pred
-  bl_bnd$x_obs
-  bl_bnd$pred_obs
+  hist(bl_bnd$B_pred, main = "Predicted probability at counterfactual", xlab = "p")
   plot_biplotEZ(bl_results, points = test_pts)
   # To inspect individual counterfactuals: bl_pick_point(bl_results, bl_boundary = bl_bnd)
 }
 
+
 # ---- Step 8: Distance-to-boundary plot ---------------------------------
-# Y-axis label shows "variable : total absolute standardised distance" —
-# a variable-level importance proxy. Sorted ascending (least important first).
-# Colour scheme: TP = red, TN = blue, FP = purple, FN = orange.
 {
   plot(bl_bnd)
   plot(bl_bnd, type = "boxplot")
@@ -226,24 +213,21 @@ devtools::check()
 # ===========================================================
 # STEP 10 — Prune least-important variables
 # ===========================================================
-# bl_robustness() prints sum_of_distance: the total absolute standardised
-# distance contribution per variable (ascending = weakest first).
-# Review var_imp, then explicitly list the variables to drop in vars_to_drop.
 {
   rob     <- bl_robustness(bl_bnd)
-  var_imp <- sort(rob$sum_of_distance)     # ascending: weakest variable first
+  var_imp <- sort(rob$sum_of_distance)
   print(round(var_imp, 2))
 
-  # List variables to remove based on the var_imp output above.
-  vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length", "person_income")
-  
+  # Update this list after reviewing var_imp output above
+  vars_to_drop    <- c("person_gender", "person_emp_exp",
+                       "cb_person_cred_hist_length", "person_income")
   feature_cols_v2 <- setdiff(bl_filt$var_names, vars_to_drop)
   cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
 }
 
 
 # ===========================================================
-# PHASE 1 (refit) — XGBoost on reduced feature set
+# PHASE 1 (refit) — Custom XGBoost on reduced feature set
 # ===========================================================
 
 # ---- Steps 4b-6b: Rebuild pipeline with pruned features ----------------
@@ -258,10 +242,42 @@ devtools::check()
 
   bl_filt_v2 <- bl_filter_outliers(bl_dat_v2, hull_fraction = 0.9)
 
-  bl_mod_v2 <- bl_fit_model(
-    train_data = bl_filt_v2$train_data,
-    var_names  = bl_filt_v2$var_names,
-    model_type = "XGB"
+  # ---- Fit custom XGBoost on reduced features ---------------------------
+  train_df_v2  <- bl_filt_v2$train_data
+  var_names_v2 <- bl_filt_v2$var_names
+
+  set.seed(42L)
+  val_idx_v2   <- sample(nrow(train_df_v2), size = floor(0.1 * nrow(train_df_v2)))
+  xgb_train_v2 <- train_df_v2[-val_idx_v2, ]
+  xgb_val_v2   <- train_df_v2[ val_idx_v2, ]
+
+  dtrain_v2 <- xgboost::xgb.DMatrix(
+    data  = as.matrix(xgb_train_v2[, var_names_v2]),
+    label = xgb_train_v2[["class"]]
+  )
+  dval_v2 <- xgboost::xgb.DMatrix(
+    data  = as.matrix(xgb_val_v2[, var_names_v2]),
+    label = xgb_val_v2[["class"]]
+  )
+
+  xgb_fit_v2 <- xgboost::xgb.train(
+    params                = xgb_params,   # same hyperparameters as Phase 1
+    data                  = dtrain_v2,
+    nrounds               = 2000L,
+    watchlist             = list(train = dtrain_v2, val = dval_v2),
+    early_stopping_rounds = 50L,
+    verbose               = 1L,
+    print_every_n         = 100L
+  )
+
+  cat("\nBest iteration:", xgb_fit_v2$best_iteration, "\n")
+  cat("Best val AUC:  ", xgb_fit_v2$best_score, "\n")
+
+  bl_mod_v2 <- bl_wrap_model(
+    model      = list(model = xgb_fit_v2, features = var_names_v2),
+    model_type = "XGB",
+    var_names  = var_names_v2,
+    train_data = train_df_v2
   )
   print(bl_mod_v2)
 
@@ -269,7 +285,7 @@ devtools::check()
     bl_data  = bl_filt_v2,
     bl_model = bl_mod_v2,
     method   = "CVA",
-    title    = "Loan default — XGB, reduced features, CVA biplot",
+    title    = "Loan default — custom XGB, reduced features, CVA biplot",
     rounding = 2L
   )
   print(bl_results_v2)
@@ -309,13 +325,10 @@ devtools::check()
 
 
 # ===========================================================
-# PHASE 3 — Local interpretation (using reduced model bl_results_v2)
+# PHASE 3 — Local interpretation (reduced model)
 # ===========================================================
 
 # ---- Step 11: Inspect predictions and select target -------------------
-# Review pred_summary to choose a target. False Negatives (predicted 0,
-# true 1) are most actionable: the applicant will default but the model
-# clears them — what would need to change to flag them correctly?
 {
   pred_summary <- bl_predict(bl_results_v2)
   print(pred_summary)
@@ -324,7 +337,6 @@ devtools::check()
   tgt <- bl_select_target(bl_results_v2, target = tdp)
   print(tgt)
 
-  # Highlight the target on the main biplot
   plot_biplotEZ(
     bl_results_v2,
     points       = test_pts_v2,
@@ -335,22 +347,11 @@ devtools::check()
 
 
 # ---- Step 12: Set actionability constraints ----------------------------
-# Omit any pruned variables from set_filters() — they are no longer in
-# the model and passing them will raise an error.
-#
-# Valid constraint types:
-#   "decrease"  — counterfactual value must be <= observed
-#   "increase"  — counterfactual value must be >= observed
-#   "fixed"     — constrained to ± 0.5 of observed; always reverts in sparse CF
-#   c(min, max) — counterfactual must lie within this absolute range
 {
   flt <- set_filters(
     tgt,
-  #  person_age     = "fixed",       # not actionable
-   # person_gender  = "fixed",       # not actionable
-  #  person_emp_exp = "increase",    # can only grow over time
-    loan_amnt      = "decrease",    # borrow less to reduce repayment risk
-    loan_int_rate  = "fixed"        # set by the lender, not the applicant
+    loan_amnt     = "decrease",
+    loan_int_rate = "fixed"
   )
   print(flt)
 }
@@ -409,9 +410,6 @@ devtools::check()
 
 # ===========================================================
 # EXTERNAL APPLICANT
-# Analyse a new loan application not in the training data.
-# Only include variables in feature_cols_v2 (remove any pruned variables).
-# No class column is required.
 # ===========================================================
 
 # ---- Step 18: External applicant --------------------------------------
@@ -428,14 +426,12 @@ devtools::check()
     cb_person_cred_hist_length = 4,
     credit_score               = 420
   )
-  # Drop any columns that were pruned in Step 10
   new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
                                   drop = FALSE]
 
   tgt_ext <- bl_select_target(bl_results_v2, target = new_applicant)
   print(tgt_ext)
 
-  # Highlight on main biplot
   plot_biplotEZ(
     bl_results_v2,
     points       = test_pts_v2,
@@ -443,7 +439,6 @@ devtools::check()
     target_label = "new"
   )
 
-  # Local search — no actionability constraints for this new applicant
   bl_local_ext  <- bl_find_local_cf(bl_results_v2, tgt_ext)
   print(bl_local_ext)
   plot(bl_local_ext)
@@ -454,4 +449,3 @@ devtools::check()
   plot(bl_shap_ext)
   plot(bl_sparse_ext)
 }
-

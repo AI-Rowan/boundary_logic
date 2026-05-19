@@ -65,6 +65,7 @@
 #' @param new_data     Data frame of observations to score.
 #'
 #' @importFrom xgboost xgb.DMatrix
+#' @importFrom stats predict
 #' @return Numeric vector of predicted probabilities, length `nrow(new_data)`,
 #'   floor-rounded to 3 decimal places.
 #' @keywords internal

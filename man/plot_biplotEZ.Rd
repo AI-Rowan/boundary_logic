@@ -2,14 +2,11 @@
 % Please edit documentation in R/plot_biplot.R
 \name{plot_biplotEZ}
 \alias{plot_biplotEZ}
-\title{Plot the Phase 1 biplot with decision boundary}
+\title{Plot the Phase 1 biplot}
 \usage{
 plot_biplotEZ(
   bl_result,
   points = NULL,
-  boundary = NULL,
-  show_arrows = TRUE,
-  arrow_col = "grey30",
   target_point = NULL,
   target_label = NULL,
   no_grid = FALSE,
@@ -41,19 +38,6 @@ Controls which observations are plotted as coloured points. If \code{NULL}
 (default), training data is projected automatically. Pass
 \code{bl_project_points(result$test_data, result)} to show test data instead.}
 
-\item{boundary}{A \code{"bl_boundary"} object from \code{bl_find_boundary()},
-or \code{NULL} (default). When supplied, each observation's nearest boundary
-point (\code{B_z}) is plotted as a cross in Z-space, and an arrow is drawn
-from the observation to its counterfactual. Observations with no boundary
-found (\code{B_z = NA}) are silently skipped. If \code{rotate_deg} is set, the
-boundary coordinates are rotated to match.}
-
-\item{show_arrows}{Logical; if \code{TRUE} (default), arrows are drawn from
-each observation to its counterfactual when \code{boundary} is supplied.}
-
-\item{arrow_col}{Character; colour for the boundary crosses and
-arrows. Default \code{"grey30"}.}
-
 \item{target_point}{Named numeric vector of feature values (in original
 X-space) for an observation to highlight. Names must match
 \code{bl_result$var_names}. If \code{NULL} (default), no target is plotted.}
@@ -83,7 +67,7 @@ are hidden. Default \code{FALSE}.}
 Default \code{0.5}.}
 
 \item{label_dir}{Character; biplotEZ axis label direction.
-\code{"Hor"} (horizontal, default) or \code{"Rad"} (radial).}
+\code{"Hor"} (horizontal, default) or \code{"Orthog"} (orthogonal to axis direction).}
 
 \item{label_cex}{Numeric; variable name (axis label) size. Default \code{1}.}
 
@@ -108,15 +92,15 @@ all variables listed in \code{label_offset_var}. If a vector, must be the same
 length as \code{label_offset_var}. Default \code{0.5}.}
 
 \item{rotate_deg}{Numeric; angle in degrees to rotate the entire plot
-clockwise. Rotates all plotted elements — grid, training points, contour
-lines, variable axes, and the target point — without rerunning the
+clockwise. Rotates all plotted elements -- grid, training points, contour
+lines, variable axes, and the target point -- without rerunning the
 pipeline. Default \code{0} (no rotation).}
 
 \item{grid_col}{\code{NULL} (default) or a length-2 character vector
 \code{c(class0_col, class1_col)}. When supplied, the prediction grid is
-rendered as hard binary colours — \code{grid_col[1]} for grid points with
-predicted probability < 0.5 (class 0) and \code{grid_col[2]} for ≥ 0.5
-(class 1) — instead of the default blue-white-red gradient. Example:
+rendered as hard binary colours -- \code{grid_col[1]} for grid points with
+predicted probability < 0.5 (class 0) and \code{grid_col[2]} for >= 0.5
+(class 1) -- instead of the default blue-white-red gradient. Example:
 \code{grid_col = c("blue", "red")}.}
 
 \item{contour_col}{Character; colour for decision boundary contour
@@ -135,11 +119,11 @@ Invisibly returns \code{bl_result}. Called for its side-effect (plot).
 Creates a biplot visualisation of the Phase 1 result using the biplotEZ
 rendering pipeline. The plot shows:
 \itemize{
-\item \strong{Base axes} — biplotEZ variable axes drawn as a canvas.
-\item \strong{Coloured prediction grid} — each grid point coloured blue
+\item \strong{Base axes} -- biplotEZ variable axes drawn as a canvas.
+\item \strong{Coloured prediction grid} -- each grid point coloured blue
 (class 0) through white to red (class 1) by model probability.
-\item \strong{Training data points} — coloured by confusion category.
-\item \strong{Variable axes redrawn on top} — so axes are visible over
+\item \strong{Training data points} -- coloured by confusion category.
+\item \strong{Variable axes redrawn on top} -- so axes are visible over
 the grid and points.
 \item \strong{Decision boundary contour lines.}
 \item Optionally, a \strong{target observation} highlighted in yellow.

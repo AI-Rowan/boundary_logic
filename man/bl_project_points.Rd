@@ -31,7 +31,7 @@ A list of class \code{"bl_points"} with components:
 \describe{
 \item{\code{Z}}{Numeric matrix (n x 2); projected coordinates in Z-space.}
 \item{\code{pred_prob}}{Numeric vector (length n); model probabilities in
-\link{0, 1}.}
+\verb{[0, 1]}.}
 \item{\code{pred_class}}{Numeric 0/1 vector (length n); predicted class.}
 \item{\code{pred_col}}{Character vector (length n); point colour.}
 \item{\code{class}}{Numeric 0/1 vector if \code{"class"} was in \code{data}, else
