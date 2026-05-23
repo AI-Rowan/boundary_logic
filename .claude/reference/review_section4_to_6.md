@@ -142,50 +142,129 @@ bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
 ---
 
-### 5 — `bl_fit_model()` → `bl_mod`
+### 5 — Model fitting → `bl_mod`
 
-**File:** `R/model_fit.R` (dispatcher) + `R/model_utils.R` (internal fitter) + `R/predict_utils.R` (prediction)
+**Files:** `R/model_fit.R` (dispatcher) + `R/model_utils.R` (internal fitter) + `R/predict_utils.R` (prediction)
 
-**Call:**
+`bl_fit_model()` supports four parsnip/tidymodels types directly: GLM, SVM, NNET, RForrest. For XGBoost (used in this script) the model must be fitted externally and registered via `bl_wrap_model()`. Both paths return the same `"bl_model"` S3 object.
+
+---
+
+#### 5a — Direct fit: SVM via `bl_fit_model()`
+
+**Call (Step 5a in script, quick baseline):**
 ```r
-bl_mod <- bl_fit_model(
+bl_mod_svm <- bl_fit_model(
   train_data = bl_filt$train_data,
   var_names  = bl_filt$var_names,
-  model_type = "XGB"
+  model_type = "SVM"
 )
 ```
 
 **What it does, step by step:**
 
-1. **Validates** inputs.
+1. **Validates** inputs; checks `model_type` is one of GLM/SVM/NNET/RForrest.
 
 2. **Calls `.fit_model()`** (`R/model_utils.R`):
-   - For `"XGB"`, builds a tidymodels `workflows::workflow`:
-     - Recipe: `class ~ var1 + var2 + ...` using `var_names`
-     - Model spec: `parsnip::boost_tree(mode = "classification")` with xgboost engine
-     - Applies any user `model_params` overrides via `modifyList()`
-     - Calls `workflows::fit(workflow, data = train_data)`
-   - Returns `list(model = <workflow>, model_type = "XGB")`
+   - Looks up `.default_model_params[["SVM"]]` — empty list (SVM uses parsnip defaults).
+   - Builds parsnip model spec:
+     ```r
+     parsnip::svm_rbf() |>
+       parsnip::set_engine("kernlab") |>
+       parsnip::set_mode("classification")
+     ```
+   - Wraps in a workflow:
+     ```r
+     workflows::workflow() |>
+       workflows::add_formula(class ~ var1 + var2 + ...) |>
+       workflows::add_model(model_spec)
+     ```
+   - Calls `parsnip::fit(wf, data = train_tm)` where `train_tm$class` is a factor.
+   - Returns `list(model = <workflows::workflow>, model_type = "SVM")`.
 
 3. **Scores training data** via `.pred_function()` (`R/predict_utils.R`):
-   - For a tidymodels workflow: `predict(model, new_data=train_data, type="prob")$.pred_1`
+   - Workflow path: `predict(model, new_data=train_data, type="prob")$.pred_1`
    - Floor-rounds to 3 d.p.: `floor(prob * 1000) / 1000`
    - Binarises at cutoff 0.5: `pred_class = as.numeric(pred_prob >= 0.5)`
 
 4. **Computes training metrics:**
-   - `accuracy = mean(pred_class == actual)` — proportion correct
-   - `gini = 2 * AUC - 1` via `calc_gini()` (`utils.R`) using trapezoidal ROC integration
+   - `accuracy = mean(pred_class == actual)`
+   - `gini = 2 * AUC - 1` via `calc_gini()` (`utils.R`)
 
-**Returned object — `bl_mod` (S3 class `"bl_model"`):**
+**`bl_mod_svm` fields:** `model` = `workflows::workflow`; `model_type` = `"SVM"`.
+
+| Use `bl_fit_model()` when... | Use `bl_wrap_model()` when... |
+|---|---|
+| GLM, SVM, NNET, RForrest with default or simple params | XGB, GBM, GAM, LDA, or any other type |
+| Quick exploration / baseline | Custom nrounds, watchlists, regularisation |
+| | Model already fitted externally |
+
+---
+
+#### 5b — Wrap path: XGB via `bl_wrap_model()` with explicit `predict_fn`
+
+**Call (Step 5b in script, used for full analysis):**
+```r
+xgb_data <- xgboost::xgb.DMatrix(
+  data  = as.matrix(bl_filt$train_data[, bl_filt$var_names]),
+  label = bl_filt$train_data$class
+)
+xgb_fit <- xgboost::xgboost(
+  data        = xgb_data,
+  nrounds     = 200,
+  objective   = "binary:logistic",
+  eval_metric = "logloss",
+  max_depth   = 3,
+  eta         = 0.1,
+  verbose     = 0
+)
+bl_mod <- bl_wrap_model(
+  model      = xgb_fit,
+  model_type = "custom",
+  var_names  = bl_filt$var_names,
+  predict_fn = function(m, new_data) {
+    mat <- xgboost::xgb.DMatrix(as.matrix(new_data))
+    as.numeric(predict(m, newdata = mat))
+  },
+  train_data = bl_filt$train_data
+)
+```
+
+**What it does, step by step:**
+
+1. `bl_wrap_model()` validates inputs. Because `model_type = "custom"`, it bundles the raw `xgb_fit` object and the user-supplied `predict_fn` together:
+   ```r
+   model_use <- list(model = xgb_fit, predict_fn = predict_fn)
+   ```
+
+2. Calls `.pred_function(model_use, "custom", train_data[, var_names])`:
+   - Dispatches to the `custom` branch: `predict_fn(model_use$model, new_data)`
+   - The lambda calls `xgb.DMatrix(as.matrix(new_data))` then `predict(m, newdata = mat)`
+   - Floor-rounds to 3 d.p.
+
+3. Computes `accuracy` and `gini` from training data (same as `bl_fit_model`).
+
+> **Alternative (direct XGB path):** Instead of `model_type = "custom"` with a `predict_fn`, you can pass the raw booster with feature metadata and let the built-in XGB dispatch handle prediction:
+> ```r
+> bl_mod <- bl_wrap_model(
+>   model      = list(model = xgb_fit, features = bl_filt$var_names),
+>   model_type = "XGB",
+>   var_names  = bl_filt$var_names,
+>   train_data = bl_filt$train_data
+> )
+> ```
+> The `custom` + `predict_fn` approach is shown here because it makes the prediction contract explicit and generalises to any model type not natively supported.
+
+**`bl_mod` fields:**
 
 | Field | Type | Content |
 |---|---|---|
-| `model` | `workflows::workflow` | Fitted XGBoost model in tidymodels wrapper |
-| `model_type` | character | `"XGB"` |
+| `model` | list | `list(model = <xgb.Booster>, predict_fn = <function>)` |
+| `model_type` | character | `"custom"` |
 | `var_names` | character vector | Predictor names (copy of `bl_filt$var_names`) |
 | `cutoff` | numeric | `0.5` |
-| `accuracy` | numeric | Training accuracy, e.g. `0.897` |
-| `gini` | numeric | Training Gini coefficient, e.g. `0.83` |
+| `accuracy` | numeric | Training accuracy, e.g. `0.91` |
+| `gini` | numeric | Training Gini coefficient, e.g. `0.85` |
 
 ---
 
@@ -444,12 +523,12 @@ bl_filt  [bl_filter_result]
   ├── test_data   (unchanged, 5 400 rows)
   └── var_names, polygon, n_retained, n_removed
      │
-     │  bl_fit_model(model_type = "XGB")
-     │  → tidymodels workflow fit → accuracy + Gini on train
+     │  bl_wrap_model(model_type = "custom", predict_fn = ...)
+     │  → external xgboost fit → accuracy + Gini on train
      ▼
 bl_mod  [bl_model]
-  ├── model       (workflows::workflow with fitted XGBoost)
-  ├── model_type  "XGB"
+  ├── model       (list(model = xgb.Booster, predict_fn = fn))
+  ├── model_type  "custom"
   ├── var_names
   ├── cutoff      0.5
   ├── accuracy    (e.g. 0.90)

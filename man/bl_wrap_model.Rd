@@ -50,8 +50,9 @@ object is a \code{"bl_model"} compatible with \code{bl_build_grid()} and
 }
 \note{
 For \code{"XGB"} models, \code{model} must be a list of the form
-\verb{list(model = <xgb.Booster>, features = <character vector>)}, matching
-the format produced internally by \code{bl_fit_model()}.
+\verb{list(model = <xgb.Booster>, features = <character vector>)}.
+XGB is no longer supported by \code{bl_fit_model()}; use this function
+with \code{xgboost::xgboost()} fitted externally.
 }
 \section{Supported model types}{
 

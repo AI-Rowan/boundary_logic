@@ -115,7 +115,9 @@ Implements the iterative convex hull polygon filter. At each iteration: removes 
 | `bl_fit_model()` | `(train_data, var_names, model_type="GLM", cutoff=0.5, model_params=list())` | `bl_model` |
 | `bl_wrap_model()` | `(model, model_type, var_names, predict_fn=NULL, train_data=NULL, cutoff=0.5)` | `bl_model` |
 
-`bl_fit_model()` supports: GLM, GAM, GBM, SVM, LDA, NNET, decision tree (via parsnip/tidymodels or direct calls). `bl_wrap_model()` accepts any external fitted model with a custom `predict_fn`, enabling GAMs (mgcv), XGBoost, or any user-defined classifier. Both store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
+`bl_fit_model()` supports four parsnip/tidymodels types: GLM, SVM, NNET, RForrest. All are returned as `workflows::workflow` objects. `bl_wrap_model()` accepts any externally fitted model: GAM (mgcv), GBM (gbm), LDA (MASS), XGB (xgboost), or any user-defined classifier via `predict_fn`. Use `bl_wrap_model()` for types requiring custom training code, non-default hyperparameters, or not natively supported by `bl_fit_model()`. Both functions store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
+
+**LDA and multi-class prediction (not yet implemented):** Linear Discriminant Analysis naturally extends to k > 2 classes -- its discriminant functions produce one axis per class boundary. The current package is restricted to binary 0/1 outcomes. A future enhancement could expose LDA via `bl_wrap_model()` or a dedicated `bl_fit_lda()` to support multi-class biplots where each class pair yields a separate boundary. See CLAUDE.md Section 9.
 
 ---
 
@@ -442,7 +444,7 @@ Input validation functions used by all exported functions: `stop_if_not_data_fra
 `get_variable_ranges()` extracts per-variable min/max bounds from training data as a named list of `c(min, max)` values. `get_filter_logical_vector()` evaluates these row-wise against any data frame — used in both global and local CF search to enforce `train_ranges`.
 
 ### `R/model_utils.R`
-`.fit_model()` dispatches to the appropriate fitting backend by `model_type`: GLM/GAM/SVM/LDA/NNET/rpart via parsnip workflows; GBM via direct `gbm::gbm()` call; XGBoost via `xgboost`. Returns a fitted model object wrapped in a tidymodels workflow where applicable.
+`.fit_model()` dispatches to the appropriate parsnip/tidymodels fitting backend by `model_type`: GLM, SVM, NNET, RForrest (rpart). All return a fitted `workflows::workflow`. Types not supported here (GBM, GAM, LDA, XGB) must be fitted externally and registered via `bl_wrap_model()`.
 
 ### `R/predict_utils.R`
 `.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict()`, `gbm::predict.gbm()`, `e1071` SVM probability extraction, or a user-supplied `predict_fn`. Always returns a numeric vector in [0, 1], floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.

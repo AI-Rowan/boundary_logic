@@ -13,20 +13,16 @@
 #'   plus a column named `"class"` (numeric 0/1).
 #' @param var_names    Character vector of feature column names.
 #' @param model_type   Character scalar specifying the model family. One of:
-#'   `"GLM"` (logistic regression), `"GAM"` (generalised additive model),
-#'   `"GBM"` (gradient boosting), `"LDA"` (linear discriminant analysis),
-#'   `"SVM"` (support vector machine), `"NNET"` (neural network),
-#'   `"RForrest"` (rpart decision tree), `"XGB"` (XGBoost).
-#'   Default `"GLM"`.
+#'   `"GLM"` (logistic regression), `"SVM"` (support vector machine),
+#'   `"NNET"` (neural network), `"RForrest"` (rpart decision tree).
+#'   Default `"GLM"`. For other model families (XGBoost, GBM, GAM, LDA)
+#'   use `bl_wrap_model()` with the externally fitted object.
 #' @param cutoff       Numeric decision threshold for computing accuracy.
 #'   Default `0.5`.
 #' @param model_params Named list of hyperparameter overrides. Unrecognised
-#'   keys are silently ignored. Parameter names follow **parsnip** conventions
-#'   for all types except `"GBM"` (which uses the gbm package directly).
+#'   keys are silently ignored. Parameter names follow **parsnip** conventions.
 #'   Common overrides:
-#'   - GBM: `list(n.trees = 1000, shrinkage = 0.05)`
 #'   - NNET: `list(hidden_units = 10, penalty = 0.01, epochs = 500)`
-#'   - XGB: `list(trees = 300, tree_depth = 5, learn_rate = 0.05)`
 #'   - RForrest: `list(min_n = 10)`
 #'
 #' @return A list of class `"bl_model"` with components:
@@ -61,7 +57,7 @@ bl_fit_model <- function(train_data,
     stop("'train_data' must contain a column named 'class'.", call. = FALSE)
   stop_if_not_scalar_numeric(cutoff, "cutoff")
 
-  valid_types <- c("GLM", "GAM", "GBM", "LDA", "SVM", "NNET", "RForrest", "XGB")
+  valid_types <- c("GLM", "SVM", "NNET", "RForrest")
   if (!model_type %in% valid_types)
     stop(sprintf("model_type '%s' is not supported. Choose from: %s.",
                  model_type, paste(valid_types, collapse = ", ")),
@@ -114,8 +110,9 @@ print.bl_model <- function(x, ...) {
   }
 
   # ---- Model summary -----------------------------------------------------
-  # Parsnip/workflow objects need engine extraction; GBM and custom are raw.
-  parsnip_types <- c("GLM", "GAM", "LDA", "SVM", "NNET", "RForrest", "XGB")
+  # Only models produced by bl_fit_model() are workflow objects.
+  # Raw objects (bl_wrap_model) use summary() directly.
+  parsnip_types <- c("GLM", "SVM", "NNET", "RForrest")
   cat("\n--- Model summary ---\n")
   tryCatch({
     if (x$model_type %in% parsnip_types) {
@@ -156,8 +153,9 @@ print.bl_model <- function(x, ...) {
 #' probabilities (one per row of `new_data`).
 #'
 #' @note For `"XGB"` models, `model` must be a list of the form
-#'   `list(model = <xgb.Booster>, features = <character vector>)`, matching
-#'   the format produced internally by `bl_fit_model()`.
+#'   `list(model = <xgb.Booster>, features = <character vector>)`.
+#'   XGB is no longer supported by `bl_fit_model()`; use this function
+#'   with `xgboost::xgboost()` fitted externally.
 #'
 #' @param model        The fitted model object (or for `"XGB"`, the wrapper
 #'   list described above).

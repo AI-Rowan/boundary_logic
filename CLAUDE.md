@@ -84,7 +84,7 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 - **Never entangle plotting code with computation code.** `plot_biplotEZ()` renders; it does not compute boundary points or projections.
 - **Never remove metadata fields** from S3 objects (`V`, `tV`, `X_center`, `X_sd`, `train_ranges`, etc.). These are required for inverse projection and downstream analysis.
 - **Never change the `cutoff` default from 0.5.** Other values are accepted but are methodologically invalid under the current method.
-- **Never change the XGB model format.** The `bl_model$model` field for XGB must be `list(model = <xgb.Booster>, features = <character vector>)`.
+- **Never change the XGB model format.** When calling `bl_wrap_model(model_type = "XGB")`, the `model` argument must be `list(model = <xgb.Booster>, features = <character vector>)`. XGB is no longer supported by `bl_fit_model()`.
 - **Never expose `outlie`, `calc_hull`, or `bl_robustness()` as sequential steps in examples or vignettes.** These are internal or redundant.
 - **Never add a `boundary =` parameter back to `plot_biplotEZ()`.** Counterfactual arrows belong exclusively in `bl_pick_point(bl_result, bl_boundary = bl_bnd)` — drawing n arrows at plot-flush time caused unsuppressable zero-length arrow warnings.
 - **Never use literal non-ASCII characters in R source files.** Use ASCII equivalents (`--` for em dash, `x` for ×, `>=` for ≥) or `\uXXXX` escape sequences in code strings. The Edit tool cannot reliably write `\uXXXX` escapes — use a Python one-liner via Bash for bulk replacement.
@@ -118,9 +118,15 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 
 ## 7. Adding a New Model Type
 
-Touches three files — do all three or do none:
+Two distinct paths depending on where the type should be supported.
 
-1. Add the type string to `valid_types` in `bl_fit_model()` and `bl_wrap_model()` (`R/model_fit.R`)
+**`bl_wrap_model()` only** (externally fitted model, complex training, or non-parsnip engine):
+1. Add the type string to `valid_types` in `bl_wrap_model()` (`R/model_fit.R`)
+2. Add a prediction branch in `.pred_function()` (`R/predict_utils.R`)
+3. Test with the iris two-class binary dataset
+
+**`bl_fit_model()` + `bl_wrap_model()`** (simple parsnip-compatible type; current four are GLM, SVM, NNET, RForrest):
+1. Add the type string to `valid_types` in both `bl_fit_model()` and `bl_wrap_model()` (`R/model_fit.R`)
 2. Add a fitting branch in `.fit_model()` (`R/model_utils.R`)
 3. Add a prediction branch in `.pred_function()` (`R/predict_utils.R`)
 4. Test with the iris two-class binary dataset
@@ -143,7 +149,8 @@ Do not implement these without a new instruction:
 - Unit tests for `bl_build_result()` and `bl_assemble()`
 - CRAN submission preparation
 - Per-variable label direction in `plot_biplotEZ()` — currently `label_dir` accepts only a single scalar (`"Hor"` or `"Orthog"`) applied to all labels, as biplotEZ::axes() does not support per-variable direction. A future enhancement would add a `label_dir_var` vector parameter with a second-pass redraw for specific variables.
-- GAM fitting via `bl_fit_model()` — the parsnip/workflows two-formula workaround is broken in some configurations. Until fixed, use `bl_wrap_model()` with `mgcv::gam()` directly (see `scripts/00_pima_Boundary_Logic.R` Step 3).
+- ~~GAM fitting via `bl_fit_model()`~~ — **REMOVED.** The parsnip/workflows two-formula workaround was broken and unmaintainable; GAM support was removed from `bl_fit_model()` entirely. Use `bl_wrap_model()` with `mgcv::gam()` directly (see `scripts/00_pima_Boundary_Logic.R` Step 3 for the pattern).
+- LDA multi-class biplots (k > 2 classes) — LDA naturally produces one discriminant axis per class boundary and could support multi-class interpretation. The current package is restricted to binary 0/1 outcomes. A future enhancement could add an LDA path in `bl_wrap_model()` (using `MASS::lda()` directly) and a dedicated biplot variant where each class pair yields a separate boundary. See `2 implementation_summary.txt` for the design note.
 - ~~**`.bl_rotate()` bug** — when `best_pair != c(1, 2)`, the target point appears at the biplot origin~~ — **RESOLVED.** `.bl_rotate()` now returns `Vrho[, c(1L, 2L)]` and `tVrho[c(1L, 2L), ]` unconditionally. The SVD construction guarantees target information concentrates in columns 1-2 of `Vrho` regardless of `proj_pair`.
 - ~~Zero-length arrow warning in `plot_biplotEZ()` boundary overlay~~ — **RESOLVED.** The `boundary`, `show_arrows`, and `arrow_col` parameters have been removed from `plot_biplotEZ()`. Arrow drawing has moved to `bl_pick_point(bl_result, bl_boundary = bl_bnd)`, where it fires once per interactively selected observation. The global n-arrow overlay (which fired the warning n times at plot-flush time) is gone. The per-click code in `bl_pick_point()` guards with `all(is.finite(bz_row))` before drawing; if an observation is exactly on the boundary the warning may fire at most once per click, in interactive mode. Known limitation: if the biplot was rendered with `rotate_deg != 0`, the arrow will be misaligned (boundary coordinates are in unrotated space). Use `rotate_deg = 0` when combining `bl_pick_point()` with boundary overlay.
 

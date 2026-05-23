@@ -4,7 +4,7 @@
 # Dataset : inst/extdata/loan_data.csv
 #           45,000 observations, 14 columns (5 categorical), binary outcome
 #           Source: https://github.com/TSMathi/loan_approval_analysis/tree/main
-# Model   : XGBoost (xgboost)
+# Model   : SVM baseline (bl_fit_model) + XGBoost full analysis (bl_wrap_model)
 # Biplot  : PCA
 #
 # Iterative workflow:
@@ -151,13 +151,41 @@
 
   bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
-  # NOTE: GAM via bl_fit_model() is currently broken — use XGB or GLM.
-  # To fit a custom GAM, use bl_wrap_model() with mgcv::gam() directly
-  # (see scripts/00_pima_Boundary_Logic.R Step 3 for the pattern).
-  bl_mod <- bl_fit_model(
+  # ---- Step 5a: SVM via bl_fit_model() (quick baseline) ------------------
+  bl_mod_svm <- bl_fit_model(
     train_data = bl_filt$train_data,
     var_names  = bl_filt$var_names,
-    model_type = "XGB"
+    model_type = "SVM"
+  )
+  print(bl_mod_svm)
+
+  # ---- Step 5b: XGB via bl_wrap_model() with explicit predict_fn ---------
+  # Using model_type = "custom" makes the prediction contract explicit.
+  # Alternative: model_type = "XGB" with model = list(model = xgb_fit,
+  # features = bl_filt$var_names) also works via the built-in XGB dispatch
+  # in .pred_function() — no predict_fn required in that case.
+  xgb_data <- xgboost::xgb.DMatrix(
+    data  = as.matrix(bl_filt$train_data[, bl_filt$var_names]),
+    label = bl_filt$train_data$class
+  )
+  xgb_fit <- xgboost::xgboost(
+    data        = xgb_data,
+    nrounds     = 200,
+    objective   = "binary:logistic",
+    eval_metric = "logloss",
+    max_depth   = 3,
+    eta         = 0.1,
+    verbose     = 0
+  )
+  bl_mod <- bl_wrap_model(
+    model      = xgb_fit,
+    model_type = "custom",
+    var_names  = bl_filt$var_names,
+    predict_fn = function(m, new_data) {
+      mat <- xgboost::xgb.DMatrix(as.matrix(new_data))
+      as.numeric(predict(m, newdata = mat))
+    },
+    train_data = bl_filt$train_data
   )
   print(bl_mod)
 
@@ -257,10 +285,26 @@
 
   bl_filt_v2 <- bl_filter_outliers(bl_dat_v2, hull_fraction = 0.9)
 
-  bl_mod_v2 <- bl_fit_model(
-    train_data = bl_filt_v2$train_data,
+  # Direct XGB path — no predict_fn required; see Step 5b for the
+  # custom/predict_fn alternative demonstrated on the full feature set.
+  xgb_data_v2 <- xgboost::xgb.DMatrix(
+    data  = as.matrix(bl_filt_v2$train_data[, bl_filt_v2$var_names]),
+    label = bl_filt_v2$train_data$class
+  )
+  xgb_fit_v2 <- xgboost::xgboost(
+    data        = xgb_data_v2,
+    nrounds     = 200,
+    objective   = "binary:logistic",
+    eval_metric = "logloss",
+    max_depth   = 3,
+    eta         = 0.1,
+    verbose     = 0
+  )
+  bl_mod_v2 <- bl_wrap_model(
+    model      = list(model = xgb_fit_v2, features = bl_filt_v2$var_names),
+    model_type = "XGB",
     var_names  = bl_filt_v2$var_names,
-    model_type = "XGB"
+    train_data = bl_filt_v2$train_data
   )
   print(bl_mod_v2)
 

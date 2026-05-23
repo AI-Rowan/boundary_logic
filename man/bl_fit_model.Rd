@@ -19,23 +19,19 @@ plus a column named \code{"class"} (numeric 0/1).}
 \item{var_names}{Character vector of feature column names.}
 
 \item{model_type}{Character scalar specifying the model family. One of:
-\code{"GLM"} (logistic regression), \code{"GAM"} (generalised additive model),
-\code{"GBM"} (gradient boosting), \code{"LDA"} (linear discriminant analysis),
-\code{"SVM"} (support vector machine), \code{"NNET"} (neural network),
-\code{"RForrest"} (rpart decision tree), \code{"XGB"} (XGBoost).
-Default \code{"GLM"}.}
+\code{"GLM"} (logistic regression), \code{"SVM"} (support vector machine),
+\code{"NNET"} (neural network), \code{"RForrest"} (rpart decision tree).
+Default \code{"GLM"}. For other model families (XGBoost, GBM, GAM, LDA)
+use \code{bl_wrap_model()} with the externally fitted object.}
 
 \item{cutoff}{Numeric decision threshold for computing accuracy.
 Default \code{0.5}.}
 
 \item{model_params}{Named list of hyperparameter overrides. Unrecognised
-keys are silently ignored. Parameter names follow \strong{parsnip} conventions
-for all types except \code{"GBM"} (which uses the gbm package directly).
+keys are silently ignored. Parameter names follow \strong{parsnip} conventions.
 Common overrides:
 \itemize{
-\item GBM: \code{list(n.trees = 1000, shrinkage = 0.05)}
 \item NNET: \code{list(hidden_units = 10, penalty = 0.01, epochs = 500)}
-\item XGB: \code{list(trees = 300, tree_depth = 5, learn_rate = 0.05)}
 \item RForrest: \code{list(min_n = 10)}
 }}
 }
