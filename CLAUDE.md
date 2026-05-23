@@ -91,6 +91,7 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 
 ## 5. Always Do
 
+- **After implementing any plan: stop after `devtools::document()` and `devtools::test()` pass.** Report the PASS/FAIL count and wait. Do NOT proceed to `git add`, `git commit`, or `git push` unless the user explicitly asks — even in auto-accept mode.
 - Add `roxygen2` documentation (`#' @param`, `#' @return`, `#' @export`) to every exported function.
 - Validate inputs with the `stop_if_*()` helpers in `utils.R`, always with `call. = FALSE`.
 - Name the assembled pipeline result `bl_results` in scripts (not `result` or `bl_result`).
