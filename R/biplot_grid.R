@@ -93,13 +93,13 @@
 #'   Default `200L`. Increase for finer boundary resolution at the cost of
 #'   computation time.
 #' @param cutoff        Numeric; the decision threshold. Default `0.5`.
-#' @param b_margin      Numeric; half-width of the band around `cutoff` used
-#'   to extract contour lines. Default `NULL`, which resolves to
-#'   `1 / (10^rounding)`.
-#' @param rounding      Integer; controls the contour band width only —
-#'   `b_margin = 1 / (10^rounding)`. Default `3L` gives contours at
-#'   `cutoff ± 0.001`. All prediction scores are always floor-rounded to
-#'   3 decimal places regardless of this setting.
+#' @param b_margin      Numeric scalar; half-width of the band around
+#'   `cutoff` used to extract contour lines. Default `0.001` (contours at
+#'   `cutoff +/- 0.001`). Must satisfy `0 < b_margin < 0.5` so that both
+#'   `cutoff - b_margin` and `cutoff + b_margin` stay strictly inside
+#'   `[0, 1]` for the default `cutoff = 0.5`. Independent of prediction
+#'   precision: all prediction scores are always floor-rounded to 3 decimal
+#'   places inside `.pred_function()` regardless of `b_margin`.
 #' @param polygon       An `sp::SpatialPolygons` object to use as the hull
 #'   boundary. If `NULL` (default), a new polygon is computed from
 #'   `train_data` using `aplpack::plothulls()` with `fraction = outlie`.
@@ -151,8 +151,7 @@ bl_build_grid <- function(train_data,
                           bl_model,
                           m        = 200L,
                           cutoff   = 0.5,
-                          b_margin = NULL,
-                          rounding = 3L,
+                          b_margin = 0.001,
                           polygon  = NULL,
                           outlie   = 1,
                           calc_hull = TRUE) {
@@ -167,8 +166,9 @@ bl_build_grid <- function(train_data,
          call. = FALSE)
   stop_if_not_positive_integer(m, "m")
   stop_if_not_scalar_numeric(cutoff, "cutoff")
-
-  if (is.null(b_margin)) b_margin <- 1 / (10^rounding)
+  stop_if_not_scalar_numeric(b_margin, "b_margin")
+  if (b_margin <= 0 || b_margin >= 0.5)
+    stop("'b_margin' must satisfy 0 < b_margin < 0.5.", call. = FALSE)
 
   # ---- Unpack projection -----------------------------------------------
   V           <- bl_projection$V
@@ -289,7 +289,7 @@ bl_build_grid <- function(train_data,
       ct_surrogate  = ct_surrogate,
       xseq          = xseq,
       yseq          = yseq,
-      rounding      = rounding
+      b_margin      = b_margin
     ),
     class = "bl_grid"
   )

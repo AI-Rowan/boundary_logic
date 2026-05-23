@@ -4,12 +4,21 @@
 \alias{plot.bl_boundary}
 \title{Distance-to-boundary plot}
 \usage{
-\method{plot}{bl_boundary}(x, type = c("jitter", "boxplot"), ...)
+\method{plot}{bl_boundary}(
+  x,
+  type = c("jitter", "boxplot"),
+  distance = c("mahalanobis", "euclidean"),
+  ...
+)
 }
 \arguments{
 \item{x}{A \code{"bl_boundary"} object from \code{bl_find_boundary()}.}
 
 \item{type}{Character; \code{"jitter"} (default) or \code{"boxplot"}.}
+
+\item{distance}{Character; per-feature standardisation metric. One of
+\code{"mahalanobis"} (default; uses \code{sqrt(diag(W))}) or \code{"euclidean"} (legacy;
+uses \code{X_sd}).}
 
 \item{...}{Unused; for S3 compatibility.}
 }
@@ -53,10 +62,23 @@ predicted class 0 (blue).
 
 The distance vector per observation is computed in biplot Z-space
 (\code{Z_obs - Z_boundary}), back-projected to X-space via the 2 x p block
-of \code{tV}, then standardised by \code{X_sd} so that variables are comparable
-regardless of their original scale. If the projection was standardised
-(PCA with \code{standardise = TRUE}), the X-space vector is first
-unstandardised by multiplying by \code{X_sd} before the final division.
+of \code{tV}, then standardised so variables are comparable regardless of
+their original scale. The denominator depends on \code{distance}:
+\describe{
+\item{\code{"mahalanobis"} (default)}{\code{sqrt(diag(W))} — within-class
+standard deviation per feature. This is the diagonal of the
+Mahalanobis metric matrix stored on \code{bl_result$metric}. Features
+that are good class separators (large between-class variance, small
+within-class variance) are correctly \emph{amplified} in the importance
+measure. A cross-correlation diagnostic is printed to the console
+so users can judge whether the diagonal approximation captures
+enough of the full Mahalanobis distance for their data.}
+\item{\code{"euclidean"}}{\code{X_sd} — total per-feature standard deviation
+(legacy behaviour). Conflates within- and between-class variance.}
+}
+If the projection was standardised (PCA with \code{standardise = TRUE}),
+the X-space vector is first unstandardised by multiplying by \code{X_sd}
+before the final division.
 
 The sign indicates which side of the boundary the observation lies on:
 positive values indicate the observation is above the boundary in that
@@ -66,5 +88,15 @@ The y-axis label shows \code{"VarName : <total>"} where \verb{<total>} is the su
 of absolute standardised distances across all observations — a
 variable-level importance proxy. Use \code{bl_robustness()} for the scalar
 total across all variables.
+}
+
+\section{Why not full Mahalanobis with per-feature decomposition}{
+
+Full Mahalanobis distance \verb{v' W^\{-1\} v} is a quadratic form with cross-terms
+that do not decompose cleanly per feature. The theoretically correct
+per-feature attribution is the Shapley value decomposition of the full
+Mahalanobis distance, but its computational cost is \code{O(n * 2^p)}, which is
+infeasible for the global Phase 2 use case. See
+\verb{2 implementation_summary.txt} Section 4.6.1 for the full discussion.
 }
 

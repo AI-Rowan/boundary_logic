@@ -15,7 +15,7 @@ bl_build_result(
   m = 200L,
   outlie = 1,
   calc_hull = TRUE,
-  rounding = 3L
+  b_margin = 0.001
 )
 }
 \arguments{
@@ -52,10 +52,12 @@ prediction grid. Default \code{1}. Ignored when \code{bl_model = NULL}.}
 hull. Visual only — does not affect counterfactual search. Default
 \code{TRUE}. Ignored when \code{bl_model = NULL}.}
 
-\item{rounding}{Integer; controls the decision boundary contour band
-width only — \code{b_margin = 1 / (10^rounding)}. Default \code{3L} gives contours
-at \verb{cutoff ± 0.001}. All prediction scores are always floor-rounded to
-3 decimal places regardless of this setting.
+\item{b_margin}{Numeric scalar; half-width of the band around
+\code{cutoff} used to extract the decision boundary contour. Default
+\code{0.001} (contours at \verb{cutoff +/- 0.001}). Must satisfy
+\verb{0 < b_margin < 0.5}. Independent of prediction precision: all
+prediction scores are always floor-rounded to 3 decimal places inside
+\code{.pred_function()} regardless of \code{b_margin}.
 Ignored when \code{bl_model = NULL}.}
 }
 \value{

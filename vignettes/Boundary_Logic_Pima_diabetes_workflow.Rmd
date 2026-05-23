@@ -174,14 +174,14 @@ maximises between-class separation relative to within-class spread,
 which makes the decision boundary clearly visible in the 2D biplot plane
 for datasets with a well-separated binary outcome.
 
-`rounding = 2L` sets a wider contour band (`cutoff ± 0.01`, i.e. contour
-levels at 0.49 / 0.51), which works well for smooth, gradual decision
-surfaces like those produced by a GAM:
+`b_margin = 0.01` sets a wider contour band (`cutoff ± 0.01`, i.e.
+contour levels at 0.49 / 0.51), which works well for smooth, gradual
+decision surfaces like those produced by a GAM:
 
-| `rounding` | `b_margin` | Contour levels    |
-|------------|------------|-------------------|
-| `2L`       | `0.01`     | `0.49` / `0.51`   |
-| `3L`       | `0.001`    | `0.499` / `0.501` |
+| `b_margin` | Contour levels    |
+|------------|-------------------|
+| `0.001`    | `0.499` / `0.501` |
+| `0.01`     | `0.49` / `0.51`   |
 
 ```{r steps4-6}
 bl_results <- bl_build_result(
@@ -189,7 +189,7 @@ bl_results <- bl_build_result(
   bl_model = bl_mod,
   method   = "CVA",
   title    = "Pima diabetes — GAM, CVA biplot",
-  rounding = 2L
+  b_margin = 0.01
 )
 
 print(bl_results)

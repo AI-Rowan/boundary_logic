@@ -60,8 +60,8 @@
   tVrho <- solve(Vrho)
 
   list(
-    Vr_rot  = Vrho[, proj_pair, drop = FALSE],    # p x 2
-    tVr_rot = tVrho[proj_pair, , drop = FALSE]    # 2 x p
+    Vr_rot  = Vrho[, c(1L, 2L), drop = FALSE],    # p x 2 -- SVD always puts target info in cols 1-2
+    tVr_rot = tVrho[c(1L, 2L), , drop = FALSE]    # 2 x p
   )
 }
 
@@ -290,6 +290,26 @@ set_filters <- function(bl_target, ...) {
 #'     \code{\link{set_filters}}.}
 #' }
 #'
+#' @section Cross-pair selection criterion:
+#' The best eigenvector pair is selected by minimum distance from the target
+#' to the nearest valid boundary vertex. Two distance metrics are available:
+#' \describe{
+#'   \item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
+#'     original X-space using the within-class covariance matrix \eqn{W} stored
+#'     on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
+#'     \eqn{v = B_x - x_{obs}}. This is invariant to the eigenvector pair
+#'     chosen and is the mathematically sound default -- it measures
+#'     within-class noise units regardless of which 2D rotated slice produced
+#'     the counterfactual.}
+#'   \item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
+#'     Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}. Not comparable across
+#'     pairs (each pair captures a different amount of variance), but
+#'     preserves the pre-Mahalanobis behaviour for reproducibility.}
+#' }
+#' Within-pair selection (the nearest valid contour vertex) always uses 2D
+#' Euclidean distance in the rotated Z-space; only the cross-pair comparison
+#' is affected by \code{distance}.
+#'
 #' @param bl_result   A \code{"bl_result"} object.
 #' @param bl_target   A \code{"bl_target"} object from
 #'   \code{\link{bl_select_target}}.
@@ -299,6 +319,9 @@ set_filters <- function(bl_target, ...) {
 #'   Default \code{10L}.
 #' @param m           Integer; grid resolution along each axis. Default
 #'   \code{200L}.
+#' @param distance    Character; cross-pair selection metric. One of
+#'   \code{"mahalanobis"} (default) or \code{"euclidean"}. See \strong{Cross-pair
+#'   selection criterion} section above.
 #' @param verbose     Logical; print progress messages. Default \code{TRUE}.
 #'
 #' @return A list of class \code{"bl_local_result"} with the following fields:
@@ -306,7 +329,12 @@ set_filters <- function(bl_target, ...) {
 #'     \item{B_z}{1 x 2 matrix; best boundary point in rotated Z-space.}
 #'     \item{B_x}{Data frame (1 row); back-projected boundary in X-space.}
 #'     \item{B_pred}{Scalar predicted probability at the boundary.}
-#'     \item{dist_z}{Euclidean distance from target to boundary in Z-space.}
+#'     \item{dist_z}{Euclidean distance from target to boundary in Z-space
+#'       (reported for all pairs).}
+#'     \item{dist_mahalanobis}{Squared Mahalanobis distance from target to
+#'       boundary in X-space (reported for all pairs).}
+#'     \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
+#'       or \code{"euclidean"}).}
 #'     \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
 #'     \item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
 #'     \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
@@ -318,7 +346,9 @@ set_filters <- function(bl_target, ...) {
 #'     \item{ct_local}{Raw contour list from \code{grDevices::contourLines}.}
 #'     \item{xseq, yseq}{Grid axis sequences.}
 #'     \item{min_val, max_val}{Grid axis limits.}
-#'     \item{all_distances}{Named numeric vector; best Z-distance per pair.}
+#'     \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
+#'     \item{all_distances_mahalanobis}{Named numeric vector; squared
+#'       Mahalanobis distance per pair tried.}
 #'     \item{solution_found}{Logical.}
 #'     \item{blocking_constraint}{Character message if no solution, else NULL.}
 #'     \item{bl_target}{The \code{"bl_target"} object.}
@@ -335,6 +365,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
                                    set_filters = NULL,
                                    max_pairs   = 10L,
                                    m           = 200L,
+                                   distance    = c("mahalanobis", "euclidean"),
                                    verbose     = TRUE) {
 
   if (!inherits(bl_result, "bl_result"))
@@ -345,17 +376,28 @@ bl_find_local_cf <- function(bl_result, bl_target,
   if (!is.null(set_filters) && !inherits(set_filters, "bl_filters"))
     stop("'set_filters' must be a 'bl_filters' object from set_filters() or NULL.",
          call. = FALSE)
+  distance <- match.arg(distance)
 
   V            <- bl_result$V
   X_center     <- bl_result$X_center
   X_sd         <- bl_result$X_sd
   standardise  <- bl_result$standardise
   cutoff       <- bl_result$cutoff
-  rounding     <- bl_result$rounding
+  b_margin     <- bl_result$b_margin
   var_names    <- bl_result$var_names
   p            <- bl_result$num_vars
   train_ranges <- bl_result$train_ranges
-  b_margin     <- 1 / (10^rounding)
+  metric_inv   <- bl_result$metric_inv
+
+  # Fall back to Euclidean if metric_inv is missing (older bl_result objects)
+  if (distance == "mahalanobis" && is.null(metric_inv)) {
+    warning(
+      "bl_result$metric_inv not found; falling back to distance = 'euclidean'. ",
+      "Rebuild bl_result with the current package version to enable Mahalanobis.",
+      call. = FALSE
+    )
+    distance <- "euclidean"
+  }
 
   x_obs <- as.numeric(bl_target$x_obs[, var_names])
 
@@ -373,10 +415,11 @@ bl_find_local_cf <- function(bl_result, bl_target,
     stop("Cannot generate any eigenvector pairs from the available dimensions.",
          call. = FALSE)
 
-  pair_names    <- apply(pairs, 1L, function(r) paste0("(", r[1], ",", r[2], ")"))
-  all_distances <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
-  best_dist     <- Inf
-  best_result   <- NULL
+  pair_names                <- apply(pairs, 1L, function(r) paste0("(", r[1], ",", r[2], ")"))
+  all_distances             <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
+  all_distances_mahalanobis <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
+  best_selector             <- Inf
+  best_result               <- NULL
 
   for (k in seq_len(nrow(pairs))) {
     pair <- pairs[k, ]
@@ -456,16 +499,21 @@ bl_find_local_cf <- function(bl_result, bl_target,
       Bx <- sweep(Bx, 2L, X_center, "+")
       colnames(Bx) <- var_names
 
-      # train_ranges filter
-      keep <- if (is.list(train_ranges)) {
-        get_filter_logical_vector(Bx, train_ranges)
+      # Actionability filter first (Phase 3 only -- no hull polygon).
+      # Typically more selective than train_ranges (especially with "fixed"
+      # constraints), so running it first lets us short-circuit before the
+      # train_ranges pass on the vertices it eliminates.
+      keep <- if (!is.null(set_filters)) {
+        .apply_actionability(Bx, x_obs_named, set_filters)
       } else {
         rep(TRUE, nrow(Bx))
       }
+      if (!any(keep)) next
 
-      # Actionability filter (Phase 3 only -- no hull polygon)
-      if (!is.null(set_filters)) {
-        keep <- keep & .apply_actionability(Bx, x_obs_named, set_filters)
+      # train_ranges feasibility filter -- only on survivors.
+      if (is.list(train_ranges)) {
+        in_range <- get_filter_logical_vector(Bx[keep, , drop = FALSE], train_ranges)
+        keep[keep] <- in_range
       }
 
       if (!any(keep)) next
@@ -496,20 +544,41 @@ bl_find_local_cf <- function(bl_result, bl_target,
     B_z_local <- all_Mi[idx[[1L]], , drop = FALSE]
     dist_z    <- sqrt(sum((Z_target - B_z_local)^2))
 
-    all_distances[pair_names[k]] <- dist_z
-    if (isTRUE(verbose))
-      message(sprintf("    Distance: %.4f", dist_z))
+    # Back-project counterfactual to X-space (needed for every pair when
+    # distance = "mahalanobis", since the selector uses X-space coordinates).
+    B_x_mat <- B_z_local %*% tVr_rot
+    if (isTRUE(standardise)) B_x_mat <- sweep(B_x_mat, 2L, X_sd, "*")
+    B_x_mat <- sweep(B_x_mat, 2L, X_center, "+")
+    B_x     <- as.data.frame(B_x_mat)
+    colnames(B_x) <- var_names
 
-    if (dist_z < best_dist) {
-      best_dist <- dist_z
+    # Squared Mahalanobis distance in X-space (using stored within-class
+    # metric W^-1). NA when metric_inv is unavailable (fallback handled above).
+    dist_mah <- if (!is.null(metric_inv)) {
+      v <- as.numeric(B_x[1L, var_names]) - x_obs
+      as.numeric(t(v) %*% metric_inv %*% v)
+    } else {
+      NA_real_
+    }
 
-      # Back-project counterfactual to X-space
-      B_x_mat <- B_z_local %*% tVr_rot
-      if (isTRUE(standardise)) B_x_mat <- sweep(B_x_mat, 2L, X_sd, "*")
-      B_x_mat <- sweep(B_x_mat, 2L, X_center, "+")
-      B_x     <- as.data.frame(B_x_mat)
-      colnames(B_x) <- var_names
+    all_distances[pair_names[k]]             <- dist_z
+    all_distances_mahalanobis[pair_names[k]] <- dist_mah
 
+    if (isTRUE(verbose)) {
+      if (distance == "mahalanobis") {
+        message(sprintf("    Distance: %.4f Z  |  %.4f Mahalanobis (sqrt)",
+                        dist_z, sqrt(dist_mah)))
+      } else {
+        message(sprintf("    Distance: %.4f Z", dist_z))
+      }
+    }
+
+    selector <- if (distance == "mahalanobis") dist_mah else dist_z
+    if (is.finite(selector) && selector < best_selector) {
+      best_selector <- selector
+
+      # Score the counterfactual through the model (only for the winning pair
+      # at any point in the loop -- cheap, but no need to do it for losers).
       B_pred <- .pred_function(
         model_use  = bl_result$model,
         model_type = bl_result$model_type,
@@ -522,23 +591,24 @@ bl_find_local_cf <- function(bl_result, bl_target,
       col_value <- col_vec[floor(grid_prob * 100) + 1L]
 
       best_result <- list(
-        B_z         = B_z_local,
-        B_x         = B_x,
-        B_pred      = B_pred[[1L]],
-        dist_z      = dist_z,
-        Z_target    = Z_target,
-        best_pair   = pair,
-        Vr_rot      = Vr_rot,
-        tVr_rot     = tVr_rot,
-        Z_train_rot = Z_train_rot,
-        Zgrid       = Zgrid,
-        grid_prob   = grid_prob,
-        col_value   = col_value,
-        ct_local    = ct_local,
-        xseq        = xseq,
-        yseq        = yseq,
-        min_val     = min_val,
-        max_val     = max_val
+        B_z              = B_z_local,
+        B_x              = B_x,
+        B_pred           = B_pred[[1L]],
+        dist_z           = dist_z,
+        dist_mahalanobis = dist_mah,
+        Z_target         = Z_target,
+        best_pair        = pair,
+        Vr_rot           = Vr_rot,
+        tVr_rot          = tVr_rot,
+        Z_train_rot      = Z_train_rot,
+        Zgrid            = Zgrid,
+        grid_prob        = grid_prob,
+        col_value        = col_value,
+        ct_local         = ct_local,
+        xseq             = xseq,
+        yseq             = yseq,
+        min_val          = min_val,
+        max_val          = max_val
       )
     }
   }
@@ -562,15 +632,25 @@ bl_find_local_cf <- function(bl_result, bl_target,
     message("bl_find_local_cf: ", blocking)
   } else {
     blocking <- NULL
-    if (isTRUE(verbose))
-      message(sprintf("Best pair: (%d, %d) | Distance: %.4f",
-                      best_result$best_pair[1L],
-                      best_result$best_pair[2L],
-                      best_result$dist_z))
+    if (isTRUE(verbose)) {
+      if (distance == "mahalanobis") {
+        message(sprintf(
+          "Best pair: (%d, %d) | Selector: Mahalanobis (sqrt) = %.4f | Z = %.4f",
+          best_result$best_pair[1L], best_result$best_pair[2L],
+          sqrt(best_result$dist_mahalanobis), best_result$dist_z
+        ))
+      } else {
+        message(sprintf("Best pair: (%d, %d) | Distance (Z): %.4f",
+                        best_result$best_pair[1L],
+                        best_result$best_pair[2L],
+                        best_result$dist_z))
+      }
+    }
   }
 
   null_pair_fields <- list(
-    B_z = NULL, B_x = NULL, B_pred = NA_real_, dist_z = NA_real_,
+    B_z = NULL, B_x = NULL, B_pred = NA_real_,
+    dist_z = NA_real_, dist_mahalanobis = NA_real_,
     Z_target = NULL, best_pair = NA_integer_, Vr_rot = NULL,
     tVr_rot = NULL, Z_train_rot = NULL, Zgrid = NULL,
     grid_prob = NULL, col_value = NULL, ct_local = NULL,
@@ -581,12 +661,14 @@ bl_find_local_cf <- function(bl_result, bl_target,
     c(
       if (solution_found) best_result else null_pair_fields,
       list(
-        all_distances       = all_distances,
-        solution_found      = solution_found,
-        blocking_constraint = blocking,
-        bl_target           = bl_target,
-        bl_result           = bl_result,
-        set_filters         = set_filters
+        all_distances             = all_distances,
+        all_distances_mahalanobis = all_distances_mahalanobis,
+        distance                  = distance,
+        solution_found            = solution_found,
+        blocking_constraint       = blocking,
+        bl_target                 = bl_target,
+        bl_result                 = bl_result,
+        set_filters               = set_filters
       )
     ),
     class = "bl_local_result"
@@ -848,7 +930,11 @@ plot.bl_local_result <- function(x,
     cat(sprintf("  Target         : %s\n",         row_label))
     cat(sprintf("  Pred prob      : %.4f  (class %d)\n", pred_prob, pred_class))
     cat(sprintf("  Best pair      : (%d, %d)\n",   best_pair[1L], best_pair[2L]))
+    cat(sprintf("  Selector       : %s\n",
+                if (!is.null(x$distance)) x$distance else "euclidean"))
     cat(sprintf("  Distance (Z)   : %.4f\n",       x$dist_z))
+    if (!is.na(x$dist_mahalanobis))
+      cat(sprintf("  Mahalanobis    : %.4f (sqrt)\n", sqrt(x$dist_mahalanobis)))
     cat(sprintf("  Boundary pred  : %.4f\n",       x$B_pred))
     cat("------------------------\n")
   }
@@ -868,17 +954,26 @@ print.bl_local_result <- function(x, ...) {
   if (x$solution_found) {
     cat(sprintf("  Best pair      : (%d, %d)\n",
                 x$best_pair[1L], x$best_pair[2L]))
+    cat(sprintf("  Selector       : %s\n",
+                if (!is.null(x$distance)) x$distance else "euclidean"))
     cat(sprintf("  Distance (Z)   : %.4f\n", x$dist_z))
+    if (!is.na(x$dist_mahalanobis))
+      cat(sprintf("  Mahalanobis    : %.4f (sqrt of squared d_M^2 = %.4f)\n",
+                  sqrt(x$dist_mahalanobis), x$dist_mahalanobis))
     cat(sprintf("  Boundary pred  : %.4f\n", x$B_pred))
   } else {
     cat(sprintf("  Reason         : %s\n", x$blocking_constraint))
   }
   cat("\n  Target:\n")
   print(x$bl_target)
-  cat("\n  All Z-distances by pair:\n")
-  ad <- x$all_distances
-  df <- data.frame(pair = names(ad), distance = ad, row.names = NULL,
-                   stringsAsFactors = FALSE)
+  cat("\n  Per-pair distances:\n")
+  df <- data.frame(
+    pair             = names(x$all_distances),
+    dist_z           = x$all_distances,
+    dist_mahalanobis = x$all_distances_mahalanobis,
+    row.names        = NULL,
+    stringsAsFactors = FALSE
+  )
   print(df, row.names = FALSE)
   invisible(x)
 }

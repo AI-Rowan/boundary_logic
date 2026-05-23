@@ -373,7 +373,7 @@ bl_results <- bl_build_result(
   bl_model = bl_mod,
   method   = "PCA",       # or "CVA" — see note below
   m        = 100L,        # grid resolution; use 200L for final analysis
-  rounding = 3L           # contour band width: cutoff ± 0.001
+  b_margin = 0.001        # contour band half-width: cutoff ± 0.001
 )
 
 print(bl_results)
@@ -403,21 +403,22 @@ bl_results <- bl_build_result(
 )
 ```
 
-**Contour band width: `rounding`**
+**Contour band width: `b_margin`**
 
-The `rounding` parameter controls only the width of the band used to
-extract decision boundary contour lines from the prediction grid:
+The `b_margin` parameter controls the half-width of the band used to
+extract decision boundary contour lines from the prediction grid.
+Contours are drawn at `cutoff - b_margin` and `cutoff + b_margin`:
 
-| `rounding` | `b_margin` | Contour levels    |
-|------------|------------|-------------------|
-| `2L`       | `0.01`     | `0.49` / `0.51`   |
-| `3L`       | `0.001`    | `0.499` / `0.501` |
+| `b_margin` | Contour levels    | When to use                          |
+|------------|-------------------|--------------------------------------|
+| `0.001`    | `0.499` / `0.501` | Default — tight band, precise boundary trace |
+| `0.01`     | `0.49` / `0.51`   | Wider band — smoother contours for gradual decision surfaces |
+| `0.05`     | `0.45` / `0.55`   | Very wide — coarse-output models                |
 
-A wider band (`rounding = 2L`) produces smoother, more continuous
-contours and is more robust when the model's decision surface is
-gradual. A narrower band (`rounding = 3L`) traces the boundary more
-precisely. All model predictions are always rounded to 3 decimal places
-regardless of this setting.
+Must satisfy `0 < b_margin < 0.5`. All model predictions are always
+rounded to 3 decimal places inside `.pred_function()` regardless of
+this setting — `b_margin` and prediction precision are independent
+concerns.
 
 **Exploratory biplot (no model yet):**
 

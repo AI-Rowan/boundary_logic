@@ -66,7 +66,7 @@ bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
 \item{\code{model}}{Fitted model object.}
 \item{\code{model_type}}{Character; model family.}
 \item{\code{cutoff}}{Decision threshold.}
-\item{\code{rounding}}{Rounding precision.}
+\item{\code{b_margin}}{Decision boundary contour band half-width.}
 \item{\code{V}}{Loading matrix (p x p).}
 \item{\code{tV}}{Inverse of V (p x p).}
 \item{\code{X_center}}{Column means.}
@@ -76,6 +76,11 @@ bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
 \item{\code{proj_dims}}{Integer vector of length 2; eigenvector indices used
 for the 2D projection plane.}
 \item{\code{biplot_obj}}{The biplotEZ object for Phase 2 plotting.}
+\item{\code{metric}}{Within-class covariance matrix \code{W} (p x p), or total
+covariance \code{Sigma} when no class info was available. Used as the
+Mahalanobis metric in \code{bl_find_local_cf()} and \code{plot.bl_boundary()}.}
+\item{\code{metric_inv}}{Inverse of \code{metric} via Cholesky (p x p).}
+\item{\code{metric_type}}{\code{"W_cva"}, \code{"W_binary"}, or \code{"Sigma"}.}
 \item{\code{polygon}}{Convex hull polygon (\code{SpatialPolygons} or \code{NULL}).}
 \item{\code{hull_fraction}}{Hull fraction used, or \code{NULL}.}
 \item{\code{biplot_grid}}{The full \code{bl_grid} list.}

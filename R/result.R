@@ -56,7 +56,7 @@
 #'   \item{`model`}{Fitted model object.}
 #'   \item{`model_type`}{Character; model family.}
 #'   \item{`cutoff`}{Decision threshold.}
-#'   \item{`rounding`}{Rounding precision.}
+#'   \item{`b_margin`}{Decision boundary contour band half-width.}
 #'   \item{`V`}{Loading matrix (p x p).}
 #'   \item{`tV`}{Inverse of V (p x p).}
 #'   \item{`X_center`}{Column means.}
@@ -66,6 +66,11 @@
 #'   \item{`proj_dims`}{Integer vector of length 2; eigenvector indices used
 #'     for the 2D projection plane.}
 #'   \item{`biplot_obj`}{The biplotEZ object for Phase 2 plotting.}
+#'   \item{`metric`}{Within-class covariance matrix `W` (p x p), or total
+#'     covariance `Sigma` when no class info was available. Used as the
+#'     Mahalanobis metric in `bl_find_local_cf()` and `plot.bl_boundary()`.}
+#'   \item{`metric_inv`}{Inverse of `metric` via Cholesky (p x p).}
+#'   \item{`metric_type`}{`"W_cva"`, `"W_binary"`, or `"Sigma"`.}
 #'   \item{`polygon`}{Convex hull polygon (`SpatialPolygons` or `NULL`).}
 #'   \item{`hull_fraction`}{Hull fraction used, or `NULL`.}
 #'   \item{`biplot_grid`}{The full `bl_grid` list.}
@@ -139,7 +144,7 @@ bl_assemble <- function(bl_data,
       model         = bl_model$model,
       model_type    = bl_model$model_type,
       cutoff        = bl_model$cutoff,
-      rounding      = bl_grid$rounding,
+      b_margin      = bl_grid$b_margin,
 
       # Projection
       V             = bl_projection$V,
@@ -150,6 +155,11 @@ bl_assemble <- function(bl_data,
       standardise   = standardise_eff,
       proj_dims     = bl_projection$proj_dims,
       biplot_obj    = bl_projection$biplot_obj,
+
+      # Mahalanobis metric (within-class covariance W or Sigma fallback)
+      metric        = bl_projection$metric,
+      metric_inv    = bl_projection$metric_inv,
+      metric_type   = bl_projection$metric_type,
 
       # Filtering
       polygon       = polygon,
@@ -234,10 +244,12 @@ bl_assemble <- function(bl_data,
 #' @param calc_hull     Logical; trim the prediction surface to the training
 #'   hull. Visual only — does not affect counterfactual search. Default
 #'   `TRUE`. Ignored when `bl_model = NULL`.
-#' @param rounding      Integer; controls the decision boundary contour band
-#'   width only — `b_margin = 1 / (10^rounding)`. Default `3L` gives contours
-#'   at `cutoff ± 0.001`. All prediction scores are always floor-rounded to
-#'   3 decimal places regardless of this setting.
+#' @param b_margin      Numeric scalar; half-width of the band around
+#'   `cutoff` used to extract the decision boundary contour. Default
+#'   `0.001` (contours at `cutoff +/- 0.001`). Must satisfy
+#'   `0 < b_margin < 0.5`. Independent of prediction precision: all
+#'   prediction scores are always floor-rounded to 3 decimal places inside
+#'   `.pred_function()` regardless of `b_margin`.
 #'   Ignored when `bl_model = NULL`.
 #'
 #' @return A `"bl_result"` object (when `bl_model` is supplied) or a
@@ -256,7 +268,7 @@ bl_build_result <- function(bl_data     = NULL,
                              m           = 200L,
                              outlie      = 1,
                              calc_hull   = TRUE,
-                             rounding    = 3L) {
+                             b_margin    = 0.001) {
 
   # ---- Safely resolve bl_model (lazy promise) ---------------------------
   # If the caller wrote bl_model = bl_mod and bl_mod does not yet exist,
@@ -322,7 +334,7 @@ bl_build_result <- function(bl_data     = NULL,
       m             = m,
       outlie        = outlie,
       calc_hull     = calc_hull,
-      rounding      = rounding
+      b_margin      = b_margin
     )
   } else {
     NULL

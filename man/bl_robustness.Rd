@@ -4,16 +4,22 @@
 \alias{bl_robustness}
 \title{Global robustness score: total distance to boundary}
 \usage{
-bl_robustness(bl_boundary)
+bl_robustness(bl_boundary, distance = c("mahalanobis", "euclidean"))
 }
 \arguments{
 \item{bl_boundary}{A \code{"bl_boundary"} object from \code{bl_find_boundary()}.}
+
+\item{distance}{Character; per-feature standardisation metric. One of
+\code{"mahalanobis"} (default; uses \code{sqrt(diag(W))} from
+\code{bl_result$metric}) or \code{"euclidean"} (legacy; uses \code{X_sd}). See
+\code{\link[=plot.bl_boundary]{plot.bl_boundary()}} for full details.}
 }
 \value{
 Named list with:
 \describe{
 \item{\code{sum_of_distance}}{Named numeric vector; per-variable totals.}
 \item{\code{robustness}}{Numeric scalar; \code{sum(sum_of_distance)}.}
+\item{\code{distance}}{Character; the metric used.}
 }
 }
 \description{

@@ -168,8 +168,8 @@
     bl_data  = bl_filt,
     bl_model = bl_mod,
     method   = "CVA",
-    title    = "Loan default — custom XGB, CVA biplot",
-    rounding = 3L
+    title    = "Loan default -- custom XGB, CVA biplot",
+    b_margin = 0.001
   )
   print(bl_results)
 
@@ -285,8 +285,8 @@
     bl_data  = bl_filt_v2,
     bl_model = bl_mod_v2,
     method   = "CVA",
-    title    = "Loan default — custom XGB, reduced features, CVA biplot",
-    rounding = 2L
+    title    = "Loan default -- custom XGB, reduced features, CVA biplot",
+    b_margin = 0.01
   )
   print(bl_results_v2)
 

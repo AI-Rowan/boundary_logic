@@ -28,10 +28,23 @@
 #' @section Distance computation:
 #' The distance vector per observation is computed in biplot Z-space
 #' (`Z_obs - Z_boundary`), back-projected to X-space via the 2 x p block
-#' of `tV`, then standardised by `X_sd` so that variables are comparable
-#' regardless of their original scale. If the projection was standardised
-#' (PCA with `standardise = TRUE`), the X-space vector is first
-#' unstandardised by multiplying by `X_sd` before the final division.
+#' of `tV`, then standardised so variables are comparable regardless of
+#' their original scale. The denominator depends on `distance`:
+#' \describe{
+#'   \item{`"mahalanobis"` (default)}{`sqrt(diag(W))` — within-class
+#'     standard deviation per feature. This is the diagonal of the
+#'     Mahalanobis metric matrix stored on `bl_result$metric`. Features
+#'     that are good class separators (large between-class variance, small
+#'     within-class variance) are correctly *amplified* in the importance
+#'     measure. A cross-correlation diagnostic is printed to the console
+#'     so users can judge whether the diagonal approximation captures
+#'     enough of the full Mahalanobis distance for their data.}
+#'   \item{`"euclidean"`}{`X_sd` — total per-feature standard deviation
+#'     (legacy behaviour). Conflates within- and between-class variance.}
+#' }
+#' If the projection was standardised (PCA with `standardise = TRUE`),
+#' the X-space vector is first unstandardised by multiplying by `X_sd`
+#' before the final division.
 #'
 #' The sign indicates which side of the boundary the observation lies on:
 #' positive values indicate the observation is above the boundary in that
@@ -42,9 +55,20 @@
 #' variable-level importance proxy. Use `bl_robustness()` for the scalar
 #' total across all variables.
 #'
-#' @param x    A `"bl_boundary"` object from `bl_find_boundary()`.
-#' @param type Character; `"jitter"` (default) or `"boxplot"`.
-#' @param ...  Unused; for S3 compatibility.
+#' @section Why not full Mahalanobis with per-feature decomposition:
+#' Full Mahalanobis distance `v' W^{-1} v` is a quadratic form with cross-terms
+#' that do not decompose cleanly per feature. The theoretically correct
+#' per-feature attribution is the Shapley value decomposition of the full
+#' Mahalanobis distance, but its computational cost is `O(n * 2^p)`, which is
+#' infeasible for the global Phase 2 use case. See
+#' `2 implementation_summary.txt` Section 4.6.1 for the full discussion.
+#'
+#' @param x        A `"bl_boundary"` object from `bl_find_boundary()`.
+#' @param type     Character; `"jitter"` (default) or `"boxplot"`.
+#' @param distance Character; per-feature standardisation metric. One of
+#'   `"mahalanobis"` (default; uses `sqrt(diag(W))`) or `"euclidean"` (legacy;
+#'   uses `X_sd`).
+#' @param ...      Unused; for S3 compatibility.
 #'
 #' @return Invisibly returns a named list with:
 #' \describe{
@@ -60,9 +84,11 @@
 #'   scale_color_manual scale_fill_manual theme_light theme element_text
 #'   position_dodge
 #' @export
-plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
+plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
+                              distance = c("mahalanobis", "euclidean"), ...) {
 
-  type <- match.arg(type)
+  type     <- match.arg(type)
+  distance <- match.arg(distance)
 
   bl_result   <- x$bl_result
   var_names   <- bl_result$var_names
@@ -70,6 +96,18 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
   tV          <- bl_result$tV
   X_sd        <- bl_result$X_sd
   standardise <- bl_result$standardise
+  metric      <- bl_result$metric
+  metric_inv  <- bl_result$metric_inv
+
+  # Fall back to Euclidean if metric is missing (older bl_result objects)
+  if (distance == "mahalanobis" && is.null(metric)) {
+    warning(
+      "bl_result$metric not found; falling back to distance = 'euclidean'. ",
+      "Rebuild bl_result with the current package version to enable Mahalanobis.",
+      call. = FALSE
+    )
+    distance <- "euclidean"
+  }
 
   tVr <- tV[proj_dims, , drop = FALSE]   # 2 x p
 
@@ -81,7 +119,9 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
   if (isTRUE(standardise)) {
     vec_to_boundary <- sweep(vec_to_boundary, 2L, X_sd, "*")
   }
-  vec_to_boundary_sd <- sweep(vec_to_boundary, 2L, X_sd, "/")
+
+  denom <- if (distance == "mahalanobis") sqrt(diag(metric)) else X_sd
+  vec_to_boundary_sd <- sweep(vec_to_boundary, 2L, denom, "/")
 
   # ---- Per-variable total absolute distance ------------------------
   sum_of_distance <- colSums(abs(vec_to_boundary_sd), na.rm = TRUE)
@@ -160,15 +200,41 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
 
   # ---- Console summary ---------------------------------------------
   robustness <- sum(sum_of_distance, na.rm = TRUE)
-  cat(sprintf("\nRobustness (total distance): %.2f\n", robustness))
+  cat(sprintf("\nDistance metric: %s\n", distance))
+  cat(sprintf("Robustness (total distance): %.2f\n", robustness))
   cat("\nPer-variable totals (descending):\n")
   print(round(sort(sum_of_distance, decreasing = TRUE), 2L))
+
+  # ---- Cross-correlation diagnostic (Mahalanobis only) -----------
+  # Tells the user how much of the full squared Mahalanobis distance is
+  # captured by the diagonal-only approximation. Small cross-term =>
+  # diagonal approximation is essentially lossless.
+  if (distance == "mahalanobis" && !is.null(metric_inv)) {
+    # Per-row full d_M^2 = rowSums(vec %*% W_inv * vec); diagonal d_M^2
+    # uses only the diagonal of W_inv.
+    full_per_row <- rowSums((vec_to_boundary %*% metric_inv) * vec_to_boundary)
+    diag_per_row <- rowSums(sweep(vec_to_boundary^2, 2L, diag(metric_inv), "*"))
+    total_full   <- sum(full_per_row, na.rm = TRUE)
+    total_diag   <- sum(diag_per_row, na.rm = TRUE)
+    cross        <- total_full - total_diag
+    pct          <- if (total_full != 0) 100 * cross / total_full else 0
+    cat(sprintf(
+      "\nMahalanobis decomposition (sum across obs):\n  diagonal = %.2f | cross-correlation = %.2f (%+.1f%% of total d_M^2)\n",
+      total_diag, cross, pct
+    ))
+    if (abs(pct) >= 25) {
+      cat("  Note: |cross-correlation| >= 25%% -- the diagonal approximation\n")
+      cat("        is meaningfully lossy for this data. See implementation_summary.txt\n")
+      cat("        Section 4.6.1 for theoretical alternatives.\n")
+    }
+  }
 
   invisible(list(
     plot               = p,
     sum_of_distance    = sum_of_distance,
     robustness         = robustness,
-    vec_to_boundary_sd = vec_to_boundary_sd
+    vec_to_boundary_sd = vec_to_boundary_sd,
+    distance           = distance
   ))
 }
 
@@ -180,19 +246,26 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"), ...) {
 #' the population is, on average, further from the boundary.
 #'
 #' @param bl_boundary A `"bl_boundary"` object from `bl_find_boundary()`.
+#' @param distance    Character; per-feature standardisation metric. One of
+#'   `"mahalanobis"` (default; uses `sqrt(diag(W))` from
+#'   `bl_result$metric`) or `"euclidean"` (legacy; uses `X_sd`). See
+#'   [plot.bl_boundary()] for full details.
 #'
 #' @return Named list with:
 #' \describe{
 #'   \item{`sum_of_distance`}{Named numeric vector; per-variable totals.}
 #'   \item{`robustness`}{Numeric scalar; `sum(sum_of_distance)`.}
+#'   \item{`distance`}{Character; the metric used.}
 #' }
 #'
 #' @export
-bl_robustness <- function(bl_boundary) {
+bl_robustness <- function(bl_boundary,
+                           distance = c("mahalanobis", "euclidean")) {
 
   if (!inherits(bl_boundary, "bl_boundary"))
     stop("'bl_boundary' must be a 'bl_boundary' object from bl_find_boundary().",
          call. = FALSE)
+  distance <- match.arg(distance)
 
   bl_result   <- bl_boundary$bl_result
   var_names   <- bl_result$var_names
@@ -200,6 +273,16 @@ bl_robustness <- function(bl_boundary) {
   tV          <- bl_result$tV
   X_sd        <- bl_result$X_sd
   standardise <- bl_result$standardise
+  metric      <- bl_result$metric
+
+  if (distance == "mahalanobis" && is.null(metric)) {
+    warning(
+      "bl_result$metric not found; falling back to distance = 'euclidean'. ",
+      "Rebuild bl_result with the current package version to enable Mahalanobis.",
+      call. = FALSE
+    )
+    distance <- "euclidean"
+  }
 
   tVr <- tV[proj_dims, , drop = FALSE]
 
@@ -210,11 +293,13 @@ bl_robustness <- function(bl_boundary) {
   if (isTRUE(standardise)) {
     vec_to_boundary <- sweep(vec_to_boundary, 2L, X_sd, "*")
   }
-  vec_to_boundary_sd <- sweep(vec_to_boundary, 2L, X_sd, "/")
+  denom              <- if (distance == "mahalanobis") sqrt(diag(metric)) else X_sd
+  vec_to_boundary_sd <- sweep(vec_to_boundary, 2L, denom, "/")
   sum_of_distance    <- colSums(abs(vec_to_boundary_sd), na.rm = TRUE)
 
   list(
     sum_of_distance = sum_of_distance,
-    robustness      = sum(sum_of_distance, na.rm = TRUE)
+    robustness      = sum(sum_of_distance, na.rm = TRUE),
+    distance        = distance
   )
 }

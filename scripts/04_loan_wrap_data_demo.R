@@ -165,8 +165,8 @@
     bl_data  = bl_filt,
     bl_model = bl_mod,
     method   = "CVA",
-    title    = "Loan default — bl_wrap_data() demo, XGB + CVA biplot",
-    rounding = 3L
+    title    = "Loan default -- bl_wrap_data() demo, XGB + CVA biplot",
+    b_margin = 0.001
   )
   print(bl_results)
 

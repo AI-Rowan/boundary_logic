@@ -56,6 +56,17 @@ CVA override.}
 \item{\code{proj_dims}}{Integer vector; the eigenvector indices used.}
 \item{\code{biplot_obj}}{The \code{biplotEZ} S3 object; used for plotting in
 Phase 2.}
+\item{\code{metric}}{Numeric matrix (p x p); the within-class covariance
+\code{W} (or total covariance \code{Sigma} when no class info is supplied) used
+as the Mahalanobis metric by \code{bl_find_local_cf()} and
+\code{plot.bl_boundary()}.}
+\item{\code{metric_inv}}{Numeric matrix (p x p); \code{solve(metric)} computed via
+\code{chol2inv(chol(.))} for numerical stability on SPD matrices, with
+ridge fallback when singular.}
+\item{\code{metric_type}}{Character; one of \code{"W_cva"} (pooled within-class
+covariance from CVA class factor), \code{"W_binary"} (pooled within-class
+covariance from binary 0/1 class column), or \code{"Sigma"} (total
+covariance fallback).}
 }
 }
 \description{
@@ -85,6 +96,16 @@ categories (TP, TN, FP, FN) are used as the class labels, satisfying
 the 3-class requirement. As a simpler alternative, pass
 \code{cva_classes = as.factor(train_data$class)} directly (2 levels only).
 }
+}
+
+\section{Mahalanobis metric}{
+
+The within-class covariance matrix \code{W} is computed and stored at projection
+time so that downstream distance measures can use it without recomputation.
+The metric is the same one CVA optimises against -- \code{V} is \code{W}-orthonormal
+under exactly this \code{W} -- which keeps distance comparisons internally
+consistent. See \verb{2 implementation_summary.txt} Section 4.2.1 for details on
+the Cholesky-based inversion and singularity safeguards.
 }
 
 \examples{

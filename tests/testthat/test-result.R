@@ -14,7 +14,7 @@ test_that("bl_assemble returns bl_result class", {
 test_that("all required fields are present", {
   result   <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   required <- c("train_data", "test_data", "var_names", "num_vars",
-                "model", "model_type", "cutoff", "rounding",
+                "model", "model_type", "cutoff", "b_margin",
                 "V", "tV", "X_center", "X_sd",
                 "method", "standardise", "biplot_obj",
                 "polygon", "hull_fraction", "biplot_grid",

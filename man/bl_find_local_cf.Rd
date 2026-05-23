@@ -10,6 +10,7 @@ bl_find_local_cf(
   set_filters = NULL,
   max_pairs = 10L,
   m = 200L,
+  distance = c("mahalanobis", "euclidean"),
   verbose = TRUE
 )
 }
@@ -28,6 +29,10 @@ Default \code{10L}.}
 \item{m}{Integer; grid resolution along each axis. Default
 \code{200L}.}
 
+\item{distance}{Character; cross-pair selection metric. One of
+\code{"mahalanobis"} (default) or \code{"euclidean"}. See \strong{Cross-pair
+selection criterion} section above.}
+
 \item{verbose}{Logical; print progress messages. Default \code{TRUE}.}
 }
 \value{
@@ -36,7 +41,12 @@ A list of class \code{"bl_local_result"} with the following fields:
 \item{B_z}{1 x 2 matrix; best boundary point in rotated Z-space.}
 \item{B_x}{Data frame (1 row); back-projected boundary in X-space.}
 \item{B_pred}{Scalar predicted probability at the boundary.}
-\item{dist_z}{Euclidean distance from target to boundary in Z-space.}
+\item{dist_z}{Euclidean distance from target to boundary in Z-space
+(reported for all pairs).}
+\item{dist_mahalanobis}{Squared Mahalanobis distance from target to
+boundary in X-space (reported for all pairs).}
+\item{distance}{Character; the selection metric used (\code{"mahalanobis"}
+or \code{"euclidean"}).}
 \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
 \item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
 \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
@@ -48,7 +58,9 @@ A list of class \code{"bl_local_result"} with the following fields:
 \item{ct_local}{Raw contour list from \code{grDevices::contourLines}.}
 \item{xseq, yseq}{Grid axis sequences.}
 \item{min_val, max_val}{Grid axis limits.}
-\item{all_distances}{Named numeric vector; best Z-distance per pair.}
+\item{all_distances}{Named numeric vector; Z-distance per pair tried.}
+\item{all_distances_mahalanobis}{Named numeric vector; squared
+Mahalanobis distance per pair tried.}
 \item{solution_found}{Logical.}
 \item{blocking_constraint}{Character message if no solution, else NULL.}
 \item{bl_target}{The \code{"bl_target"} object.}
@@ -86,5 +98,27 @@ per-variable ranges observed in the training data.}
 \item{set_filters}{Actionability constraints supplied via
 \code{\link{set_filters}}.}
 }
+}
+
+\section{Cross-pair selection criterion}{
+
+The best eigenvector pair is selected by minimum distance from the target
+to the nearest valid boundary vertex. Two distance metrics are available:
+\describe{
+\item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
+original X-space using the within-class covariance matrix \eqn{W} stored
+on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
+\eqn{v = B_x - x_{obs}}. This is invariant to the eigenvector pair
+chosen and is the mathematically sound default -- it measures
+within-class noise units regardless of which 2D rotated slice produced
+the counterfactual.}
+\item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
+Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}. Not comparable across
+pairs (each pair captures a different amount of variance), but
+preserves the pre-Mahalanobis behaviour for reproducibility.}
+}
+Within-pair selection (the nearest valid contour vertex) always uses 2D
+Euclidean distance in the rotated Z-space; only the cross-pair comparison
+is affected by \code{distance}.
 }
 

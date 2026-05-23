@@ -134,7 +134,32 @@ Constructs the loading matrix `V` (p × p) and its inverse `tV` (p × p) for eit
 
 **`R/local_cf.R` — rotation (Phase 3 extension of Module B)**
 
-The private function `.bl_rotate(x_target_st, V, proj_pair)` adapts the `Biplot_rotation()` logic from the research script `1.3 Optimal Rotation.R`. Given a standardised target point and an eigenvector pair, it computes an SVD-based orthogonal rotation matrix `A` such that the rotated loading matrix `Vrho = V %*% t(A)` aligns the target with the chosen projection plane. Returns `Vr_rot` (p × 2) and `tVr_rot` (2 × p) for the selected pair.
+The private function `.bl_rotate(x_target_st, V, proj_pair)` adapts the `Biplot_rotation()` logic from the research script `1.3 Optimal Rotation.R`. Given a standardised target point and an eigenvector pair, it computes an SVD-based orthogonal rotation matrix `A` such that the rotated loading matrix `Vrho = V %*% t(A)` aligns the target with the chosen projection plane. The SVD construction (`YVr_padded` has non-zero values only in its first two columns) guarantees that the target's information concentrates in columns 1 and 2 of `Vrho` regardless of `proj_pair`. Returns `Vr_rot = Vrho[, c(1, 2)]` (p x 2) and `tVr_rot = tVrho[c(1, 2), ]` (2 x p). Note: `proj_pair` selects which eigenvectors feed into the rotation via `Vr = V[, proj_pair]`, but the *output* columns are always 1-2 of the rotated matrix.
+
+#### 4.2.1 The within-class metric matrix W and Cholesky inversion
+
+`bl_build_projection()` computes and stores a metric matrix `M` and its inverse `M_inv` for use by Phase 2 and Phase 3 distance measures. The matrix is:
+
+- `W` (pooled within-class covariance) when `cva_classes` or `train_data$class` is available -- the standard CVA scatter matrix `W = sum_k (X_k - mu_k)^T (X_k - mu_k) / (n - g)` where `g` is the number of class levels and `mu_k` is the per-class feature mean.
+- `Sigma` (total covariance, `cov(X)`) as a fallback when no class information is supplied (rare in this package; `bl_data` almost always has classes).
+
+The metric is the same one CVA itself optimises against (V is `W`-orthonormal under exactly this `W`). Storing it makes the projection-to-distance pipeline internally consistent: distances measured in Phase 2 or Phase 3 use the same `W` that defined the biplot axes in Phase 1.
+
+The original source of the within-class metric in the PhD research scripts is `scripts/1 Functions for biplot.R` (research-branch helper), which constructed `Wmat` at the same point as the CVA loading matrix and reused it for per-pair distance comparisons in `1.3 Optimal Rotation.R`. The current package delegates the CVA computation entirely to `biplotEZ::CVA()`, which does not expose `Wmat` on its return object; the package therefore reconstructs `W` independently from the training data and the same class factor.
+
+**Cholesky decomposition for the inverse.** `W` is symmetric and positive-definite by construction, so it admits a unique factorisation `W = L L^T` where `L` is lower triangular with positive diagonal entries. This is the Cholesky decomposition -- the matrix equivalent of taking a square root. Geometrically, `L^{-1}` is the whitening transform that sends correlated data into an uncorrelated unit-variance frame, so that Euclidean distance in the whitened frame equals Mahalanobis distance under `W` in the original frame.
+
+The package inverts `W` using the idiom `chol2inv(chol(W))` rather than `solve(W)`, for three reasons:
+
+1. **Numerical stability.** Cholesky exploits the symmetric positive-definite structure that `solve()` cannot use; it propagates less round-off error and avoids producing a non-positive `v^T W^{-1} v` (which would silently corrupt distance measures) when `W` is near-singular.
+2. **Singularity detection.** `chol()` errors immediately if `W` is not positive-definite -- giving a clean trigger to apply the ridge fallback `W + lambda * I` (with `lambda = 10^-6 * mean(diag(W))`). `solve()` would return a meaningless inverse without warning.
+3. **Speed.** `chol2inv()` is roughly 2x faster than `solve()` for SPD matrices; not the primary reason but a free benefit.
+
+The `chol(W)` factor itself is not retained -- only `W` (as `metric`) and `W^{-1}` (as `metric_inv`) are stored on `bl_projection` (and propagated to `bl_result`). The Cholesky step is purely an internal numerical detail of the inversion. Downstream code multiplies vectors by `metric_inv` directly.
+
+**Singular-W safeguard.** When `n - g < p` (more features than effective sample size after class adjustment), `W` is rank-deficient and Cholesky fails. The package applies a ridge-regularised fallback `chol2inv(chol(W + lambda * I))` so the distance measures remain well-defined. The `metric_type` attribute is unchanged; the regularisation is transparent to the user.
+
+The helper that performs this computation is the private `.compute_metric_inverse()` in `R/projection.R`. The three fields it produces (`metric`, `metric_inv`, `metric_type`) are stored on `bl_projection` and propagated through `bl_assemble()` into `bl_result`.
 
 ---
 
@@ -145,7 +170,7 @@ The private function `.bl_rotate(x_target_st, V, proj_pair)` adapts the `Biplot_
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_build_grid()` | `(train_data, bl_projection, bl_model, m=200L, cutoff=0.5, b_margin=NULL, rounding=3L, polygon=NULL, outlie=1, calc_hull=TRUE)` | `bl_grid` |
+| `bl_build_grid()` | `(train_data, bl_projection, bl_model, m=200L, cutoff=0.5, b_margin=0.001, polygon=NULL, outlie=1, calc_hull=TRUE)` | `bl_grid` |
 
 Builds an `m × m` regular grid over the Z-space, back-projects each grid point to X-space using `tV`, scores it through the model, and extracts contour lines at `cutoff ± b_margin` using `grDevices::contourLines`. Scores in chunks of 50,000 for memory safety. Stores:
 
@@ -166,9 +191,9 @@ The hull polygon (`calc_hull = TRUE` by default) is visual-only and does not aff
 | Function | Signature | Returns |
 |---|---|---|
 | `bl_assemble()` | `(bl_data, bl_filter_result=NULL, bl_model, bl_projection, bl_grid)` | `bl_result` |
-| `bl_build_result()` | `(bl_data=NULL, bl_model=NULL, method="PCA", proj_dims=c(1L,2L), standardise=TRUE, cva_classes=NULL, title="", m=200L, outlie=1, calc_hull=TRUE, rounding=3L)` | `bl_result` or `bl_projection` |
+| `bl_build_result()` | `(bl_data=NULL, bl_model=NULL, method="PCA", proj_dims=c(1L,2L), standardise=TRUE, cva_classes=NULL, title="", m=200L, outlie=1, calc_hull=TRUE, b_margin=0.001)` | `bl_result` or `bl_projection` |
 
-The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, and `rounding`. The `biplot_obj` from `bl_projection` is carried forward for plotting.
+The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, and `b_margin`. The `biplot_obj` from `bl_projection` is carried forward for plotting.
 
 **`bl_build_result()` early-return behaviour:** When `bl_model = NULL`, the grid and assembly steps are skipped and a `bl_projection` object is returned instead of a `bl_result`. This allows projection-only exploration before a model is fitted.
 
@@ -224,10 +249,31 @@ Searches for the nearest decision boundary point for each observation in `data`.
 
 | Function | Signature | Returns |
 |---|---|---|
-| `plot.bl_boundary()` | `(x, type=c("jitter","boxplot"), ...)` | list (invisible) |
-| `bl_robustness()` | `(bl_boundary)` | list |
+| `plot.bl_boundary()` | `(x, type=c("jitter","boxplot"), distance=c("mahalanobis","euclidean"), ...)` | list (invisible) |
+| `bl_robustness()` | `(bl_boundary, distance=c("mahalanobis","euclidean"))` | list |
 
 `plot.bl_boundary()` visualises the per-variable distance from each observation to its boundary counterfactual, using ggplot2 jitter or boxplot. Points are coloured by confusion type (TP/TN/FP/FN). `bl_robustness()` returns a per-variable distance summary and a scalar total robustness score.
+
+**Per-feature standardisation denominator (`distance` parameter):**
+
+| Value | Denominator | Interpretation |
+|---|---|---|
+| `"mahalanobis"` (default) | `sqrt(diag(W))` from `bl_result$metric` | Within-class SD per feature. Features that are good class separators (large between-class variance, small within-class variance) are correctly amplified in the importance measure. |
+| `"euclidean"` | `X_sd` (legacy) | Total SD per feature. Conflates within- and between-class variance. |
+
+When `distance = "mahalanobis"`, `plot.bl_boundary()` prints a cross-correlation diagnostic showing what fraction of the full squared Mahalanobis distance is captured by the diagonal-only approximation. Small fractions indicate the diagonal approximation is essentially lossless; large fractions (|cross| >= 25%) trigger a note pointing to Section 4.6.1 for theoretical alternatives.
+
+#### 4.6.1 Shapley attribution: theoretical correctness vs. computational cost
+
+The per-variable importance measure produced by `bl_robustness()` and `plot.bl_boundary()` uses the *diagonal* of the within-class covariance matrix `W` to standardise per-feature distances to the boundary. This diagonal approximation preserves a clean per-feature interpretation but ignores cross-feature correlations encoded in the off-diagonal of `W^{-1}`.
+
+The **theoretically correct** decomposition of the full squared Mahalanobis distance `d_M^2(v) = v^T W^{-1} v` into per-feature contributions is the **Shapley value attribution** from cooperative game theory: treat the p features as players and `d_M^2` as the value function, then compute each feature's Shapley value as its average marginal contribution across all `2^p` subsets. The resulting per-feature attributions `phi_j` satisfy the efficiency axiom `sum_j phi_j = d_M^2(v)`, distribute the cross-correlation structure of `W^{-1}` across features in a uniquely fair way, and respect linearity, symmetry, and null-player axioms.
+
+This was identified in the PhD research as the methodologically correct per-feature attribution. It is **not implemented in the package** because the computational cost is prohibitive for the global Phase 2 use case: exact Shapley requires `2^p` subset evaluations per observation, and Phase 2 distance-to-boundary measures aggregate across all training/test observations -- so the total cost is `O(n * 2^p)` model evaluations. For the loan dataset (`n` ~ 30,000, `p = 6` after pruning), this is `n * 64` ~ 2,000,000 model scorings just to build the importance plot. For larger feature sets (`p > 14`) the cost becomes infeasible even with the permutation approximation used elsewhere in the package (`R/shapley.R`).
+
+The diagonal approximation was chosen instead as a deliberate trade-off: linear cost (`O(n)` model evaluations), preserved per-variable interpretation, and the main methodological correction (within-class noise instead of total variance) achieved without the combinatorial expense. A cross-correlation diagnostic (printed by `plot.bl_boundary()` when `distance = "mahalanobis"`) reports what fraction of `d_M^2` is captured by the diagonal -- giving users a direct measure of how much information is foregone for their specific data. Where this fraction is small, the diagonal approximation is essentially lossless and the cost saving is "free".
+
+Phase 3 (`bl_shapley`) does use the exact Shapley formulation, but only for a single observation at a time -- the cost is `2^p` rather than `n * 2^p`, which is tractable for the local interpretation use case.
 
 ---
 
@@ -253,7 +299,7 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 |---|---|---|
 | `bl_select_target()` | `(bl_result, target, data=NULL)` | `bl_target` |
 | `set_filters()` | `(bl_target, ...)` | `bl_filters` |
-| `bl_find_local_cf()` | `(bl_result, bl_target, set_filters=NULL, max_pairs=10L, m=200L, verbose=TRUE)` | `bl_local_result` |
+| `bl_find_local_cf()` | `(bl_result, bl_target, set_filters=NULL, max_pairs=10L, m=200L, distance=c("mahalanobis","euclidean"), verbose=TRUE)` | `bl_local_result` |
 
 **`bl_select_target()`** wraps a single observation (integer row index or single-row data frame) into a `bl_target` object, projecting it into Z-space and scoring it through the model. External data frames (no class column, not in train/test) are fully supported.
 
@@ -273,19 +319,45 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 3. Builds an `m × m` grid, scores through the model (chunked for memory)
 4. Extracts contour lines at `cutoff ± b_margin`
 5. Back-projects contour segments to X-space
-6. Applies `train_ranges` (feasibility) and `set_filters` (actionability)
-7. Verifies model consistency at retained contour points
-8. Finds the nearest valid boundary point
+6. Filters contour vertices through a four-stage cascade:
+   a. Opposing-class contour level only (cheap, pre-back-projection).
+   b. **`set_filters` actionability first** (when supplied) -- the
+      "fixed", "decrease", "increase", `c(min,max)` constraints. Often
+      the most selective filter; running it first with an early-exit
+      check on `any(keep)` short-circuits the rest of the cascade on
+      vertices it rejects.
+   c. **`train_ranges` feasibility second** -- per-feature [min, max]
+      bounds from training data, applied only to vertices that
+      survived (b).
+   d. **Model-consistency re-scoring** -- the surviving vertices are
+      passed back through `.pred_function()` and dropped if the model's
+      actual probability disagrees with the contour level's side of
+      `cutoff`. This is the most expensive stage; the ordering of
+      (b)-(c) is chosen so it sees the smallest possible set.
+7. Finds the nearest valid boundary point among the survivors of (d).
 
-The pair producing the globally minimum Z-space distance is selected. The result stores the full grid, contours, rotation matrices (`Vr_rot`, `tVr_rot`), and the `set_filters` object (needed by `bl_find_sparse_cf()`).
+**Cross-pair selection metric (`distance` parameter):**
+
+| Value | Selector | Notes |
+|---|---|---|
+| `"mahalanobis"` (default) | Squared Mahalanobis distance in X-space: `d_M^2 = (B_x - x_obs)^T W^{-1} (B_x - x_obs)` using `bl_result$metric_inv` | Pair-invariant, mathematically sound across rotations. Matches the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` formula. |
+| `"euclidean"` | Z-space Euclidean: `sqrt(sum((Z_target - B_z)^2))` | Legacy behaviour. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice. |
+
+Within-pair selection (the nearest valid contour vertex) always uses 2D Euclidean distance; only the cross-pair comparison is governed by `distance`. The `bl_local_result` object reports both `dist_z` and `dist_mahalanobis` for the winning pair, plus `all_distances` and `all_distances_mahalanobis` per pair tried.
+
+The pair producing the globally minimum value of the chosen selector is selected. The result stores the full grid, contours, rotation matrices (`Vr_rot`, `tVr_rot`), and the `set_filters` object (needed by `bl_find_sparse_cf()`).
 
 **Important constraint difference from global search:**
 
 | Constraint | Global (`bl_find_boundary`) | Local (`bl_find_local_cf`) |
 |---|---|---|
 | Z-space hull polygon | Applied | **Not applied** — rotation invalidates it |
-| `train_ranges` | Applied (post-selection) | Applied |
+| `train_ranges` | Reported only (post-selection, no exclusion) | Applied as hard in-loop filter |
 | Actionability filters | Not available | Applied via `set_filters` |
+
+**Why Filter (d) is not batched across segments.** The model re-scoring inside the per-pair loop is the dominant computational cost, and a meaningful wall-clock saving is available by collecting all surviving vertices across all opposing-class segments and scoring them in a single `.pred_function()` call (especially for XGBoost, where each call has DMatrix-construction overhead). The current per-segment call is retained deliberately: the bookkeeping required to split a batched prediction back to its source segments adds complexity that obscures the search logic, and the per-pair cost is already small enough (typically sub-second on a 100x100 grid) that the saving doesn't justify the trade. If a future use case pushes `m` high enough that this dominates, the batch is the right next optimisation; the segment loop is structured to make that refactor local.
+
+**`train_ranges` enforcement asymmetry between global and local search.** On the **default global path** (`bl_find_boundary()` followed by `bl_project_points(..., filter_to_train_ranges = FALSE)`), `train_ranges` is never used to exclude points. `bl_find_boundary()` only reports out-of-range counterfactuals as a console message (`R/boundary.R:401-419`) -- it does not discard them, because doing so would select a geometrically incorrect (farther) boundary point. `bl_project_points()` enforces `train_ranges` only when the caller opts in via `filter_to_train_ranges = TRUE`. The local search, by contrast, applies it as a hard in-loop filter (per the cascade above) -- not because feasibility matters more in Phase 3, but because the SVD rotation invalidates the Z-space hull polygon and `train_ranges` is the only feasibility constraint that survives the rotation. If a future requirement asks the global search to enforce actionability and feasibility (e.g. to surface only realistic counterfactuals in `bl_find_boundary()` rather than reporting them post-hoc), the local cascade above is the template -- introduce a `set_filters` argument and the four-stage cascade into the segment loop of `bl_find_boundary()`.
 
 **`plot.bl_local_result()`** renders using the same biplotEZ pipeline as `plot_biplotEZ()`. The biplotEZ object from `bl_result` is patched in-place with the rotated local coordinates before rendering:
 
@@ -373,7 +445,7 @@ Input validation functions used by all exported functions: `stop_if_not_data_fra
 `.fit_model()` dispatches to the appropriate fitting backend by `model_type`: GLM/GAM/SVM/LDA/NNET/rpart via parsnip workflows; GBM via direct `gbm::gbm()` call; XGBoost via `xgboost`. Returns a fitted model object wrapped in a tidymodels workflow where applicable.
 
 ### `R/predict_utils.R`
-`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict()`, `gbm::predict.gbm()`, `e1071` SVM probability extraction, or a user-supplied `predict_fn`. Always returns a numeric vector in [0, 1], floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. The `rounding` parameter stored in `bl_result` controls only the contour band width (`b_margin`) and is never passed to `.pred_function()`.
+`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict()`, `gbm::predict.gbm()`, `e1071` SVM probability extraction, or a user-supplied `predict_fn`. Always returns a numeric vector in [0, 1], floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.
 
 ---
 

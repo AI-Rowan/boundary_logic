@@ -200,7 +200,7 @@ bl_results <- bl_build_result(
   bl_model = bl_mod,
   method   = "CVA",
   title    = "Loan default (prior defaulters) — XGB, CVA biplot",
-  rounding = 2L
+  b_margin = 0.01
 )
 ```
 
@@ -274,12 +274,12 @@ This is the **Phase 1 anchor function**. It orchestrates three sub-steps and ret
 8. **Assigns colours** for the grid: a 101-colour ramp (blue → white → red) indexed by `floor(grid_prob * 100) + 1`.
 
 9. **Extracts contour lines** at `cutoff ± b_margin`:
-   - `b_margin = 1 / 10^rounding = 1 / 10^2 = 0.01` (because `rounding = 2L`)
+   - `b_margin = 0.01` (set directly via the `b_margin` parameter)
    - `ct`: contours at `[0.49, 0.51]` — used for boundary search in Phase 2
    - `ct_surrogate`: hull-clipped contours at `[0.49, 0.50, 0.51]` — used only by `bl_surrogate()`
 
 **`bl_grid` fields (not returned to user directly, assembled into `bl_results`):**
-`Zgrid`, `Xgrid`, `grid_prob`, `col_value`, `min_val`, `max_val`, `polygon`, `hull_fraction`, `ct`, `ct_surrogate`, `xseq`, `yseq`, `rounding`
+`Zgrid`, `Xgrid`, `grid_prob`, `col_value`, `min_val`, `max_val`, `polygon`, `hull_fraction`, `ct`, `ct_surrogate`, `xseq`, `yseq`, `b_margin`
 
 ---
 
@@ -314,7 +314,7 @@ Combines all artifacts into the final `bl_result` object.
 | **Grid** | `biplot_grid` | Full `bl_grid` list (Zgrid, Xgrid, grid_prob, ct, ct_surrogate, ...) |
 | **Performance** | `accuracy` | Training accuracy |
 | | `gini` | Training Gini |
-| | `rounding` | `2L` |
+| | `b_margin` | `0.01` |
 | **Metadata** | `call` | The `bl_build_result()` call expression |
 | | `created_at` | Timestamp |
 
@@ -392,6 +392,25 @@ test_pts <- bl_project_points(bl_results$test_data, bl_results)
 | `class` | numeric vector (0/1) | True loan status labels |
 | `inside_polygon` | logical vector | TRUE if obs falls inside training hull |
 
+**Where `bl_project_points()` is called from:**
+
+Internal callers (in package `R/`):
+
+| Caller | Location | Trigger |
+|---|---|---|
+| `bl_predict()` | `R/project_points.R` | Always — `bl_predict()` is a tabular wrapper that calls `bl_project_points()` and reshapes the result into a data frame |
+| `plot_biplotEZ()` | `R/plot_biplot.R` | When the user does not pass `points = ...` — auto-projects `bl_result$train_data` so `plot(bl_results)` works without explicit projection |
+| `bl_pick_point()` | `R/pick_point.R` | Once at startup, before the interactive click loop matches click coordinates against the projected `Z` |
+
+External (user-facing) callers — the canonical pattern is to overlay non-training data on the biplot:
+
+```r
+test_pts <- bl_project_points(bl_results$test_data, bl_results)
+plot_biplotEZ(bl_results, points = test_pts)
+```
+
+Used this way in all loan scripts (03–06), the iris and Pima scripts, both vignettes, and the README. Variants: `filter_to_polygon = TRUE` (only one explicit use, in script 03 line 185) drops out-of-hull observations before plotting; `filter_to_train_ranges = TRUE` (no current scripted use) drops X-space-extrapolated rows. Without an explicit `bl_project_points()` call, `plot_biplotEZ()` only ever shows training data because of the auto-project on line ~145 of `plot_biplot.R`.
+
 ---
 
 ### 9 — `plot_biplotEZ(bl_results, points = test_pts)` — overlays test data
@@ -436,7 +455,7 @@ bl_mod  [bl_model]
   ├── accuracy    (e.g. 0.90)
   └── gini        (e.g. 0.84)
      │
-     │  bl_build_result(method = "CVA", rounding = 2L)
+     │  bl_build_result(method = "CVA", b_margin = 0.01)
      │  → bl_build_projection() → V, tV, biplot_obj
      │  → bl_build_grid()       → 200×200 grid, scored, contours
      │  → bl_assemble()         → combines all
@@ -449,7 +468,7 @@ bl_results  [bl_result]              ← THE CENTRAL ANCHOR OBJECT
   ├── train_ranges     (min/max per feature)
   ├── polygon          (hull in CVA Z-space)
   ├── biplot_grid      (Zgrid, Xgrid, grid_prob, ct, ct_surrogate)
-  ├── accuracy, gini, rounding=2L
+  ├── accuracy, gini, b_margin=0.01
   └── call, created_at
      │
      │  plot_biplotEZ(bl_results)   → renders training biplot
@@ -482,4 +501,4 @@ test_pts  [bl_points]
 
 4. **CVA vs PCA:** CVA (`method = "CVA"`) maximises separation between the four confusion categories (TP/TN/FP/FN), producing a biplot where the decision boundary is most clearly visible. PCA would instead maximise total variance, which may not align with the class boundary.
 
-5. **`rounding` controls only the contour band**, not the predictions themselves. `rounding = 2L` means the boundary search looks for contour lines at probability 0.49 and 0.51 (a 0.02-wide band). All predicted values are always stored at 3 d.p. regardless.
+5. **`b_margin` controls the contour band half-width**, not the predictions themselves. `b_margin = 0.01` means the boundary search looks for contour lines at probability 0.49 and 0.51 (a 0.02-wide band total). All predicted values are always stored at 3 d.p. regardless.

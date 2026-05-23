@@ -38,6 +38,20 @@ pred_summary <- bl_predict(bl_results_v2)
 
 **Purpose:** The analyst reads this table to identify a target row — typically a False Negative (predicted 0, true 1: the model clears an applicant who will actually default).
 
+**Where `bl_predict()` is called from:**
+
+No internal callers — `bl_predict()` is purely a user-facing convenience wrapper. Nothing in the package consumes its output; it exists solely for analyst inspection at the "pick a target" step.
+
+External callers — the canonical workflow pattern (per README and `1 Foundation intro documents.txt`) places `bl_predict()` immediately before `bl_select_target()`:
+
+```
+... → bl_assemble() → bl_predict() → bl_select_target() → set_filters() → bl_find_local_cf() → ...
+```
+
+Used this way in scripts 00, 01, 03, 05, 06 and both vignettes. The analyst reads the returned `pred_summary` data frame, picks an interesting row (often a False Negative), and passes that row index to `bl_select_target()`. One non-target use exists: `scripts/02_contour_inspection.R:60` calls `bl_predict(bl_results, data = X_orig)` to score back-projected contour points for an inspection table.
+
+`bl_project_points()` vs `bl_predict()` — same projection + scoring under the hood; the only difference is the return shape. Use `bl_project_points()` when you want a `bl_points` object for plotting; use `bl_predict()` when you want a tidy data frame for table-style inspection. (`bl_predict()` literally calls `bl_project_points()` at `R/project_points.R:229`.)
+
 ---
 
 ### 11b — `bl_select_target()` → `tgt`
@@ -222,11 +236,13 @@ A       = svd_res$v %*% t(svd_res$u)   # p × p orthogonal rotation matrix
 Vrho  = V %*% t(A)        # Rotated full loading matrix
 tVrho = solve(Vrho)        # Its inverse
 
-Vr_rot  = Vrho[, pair]    # p × 2 reduced loading for this pair (rotated)
-tVr_rot = tVrho[pair, ]   # 2 × p inverse (for back-projection)
+Vr_rot  = Vrho[, c(1, 2)]    # p x 2 -- always cols 1-2; SVD concentrates target info here
+tVr_rot = tVrho[c(1, 2), ]   # 2 x p inverse (for back-projection)
 ```
 
 **Why:** By constructing Y from `[-target, 0, target]` and finding the rotation that maps the pair-space projection of Y onto its full-space projection, we ensure the target observation aligns with the first axis of the rotated biplot. This places the target at a known position and makes boundary search more reliable.
+
+**Key invariant:** `YVr_padded` is non-zero only in its first two columns, so the SVD rotation `A` always concentrates the target's information in columns 1 and 2 of `Vrho = V %*% t(A)` -- regardless of which `proj_pair` was used to build `Vr`. The return therefore always selects `Vrho[, c(1, 2)]`, not `Vrho[, proj_pair]`. Selecting `proj_pair` columns (the former bug) would return near-zero columns for any pair other than `c(1, 2)`, placing the target at approximately the biplot origin in `plot(bl_local)`.
 
 #### Stage B — Build m×m grid in rotated Z-space
 
@@ -239,6 +255,8 @@ z_pad   = diff(z_range) * 0.10             # 10% padding
 xseq    = seq(z_range[1]-pad, z_range[2]+pad, length.out = m)
 Zgrid   = expand.grid(xseq, xseq)          # m² × 2
 ```
+
+The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The same rationale applies to the global grid built in `bl_build_grid()`.
 
 #### Stage C — Back-project grid and score
 
@@ -253,7 +271,7 @@ grid_prob = .pred_function(model, "XGB", Xgrid)   # chunked, 50 000 rows at a ti
 ct_local = contourLines(xseq, yseq, matrix(grid_prob, ncol=m),
                          levels = c(cutoff - b_margin, cutoff + b_margin))
 ```
-`b_margin = 1/10^2 = 0.01` (because `rounding = 2L`), so contours at 0.49 and 0.51.
+`b_margin = 0.01` (set directly via the `b_margin` parameter), so contours at 0.49 and 0.51.
 
 #### Stage E — Filter contour segments (three successive filters)
 
@@ -277,7 +295,21 @@ All surviving contour rows are combined into `all_Mi`. The nearest to `Z_target`
 
 #### Stage G — Update best result
 
-If `dist_z < best_dist`, save everything for this pair as the new best result. The loop continues through all 10 pairs, keeping the global minimum.
+For every pair (whether or not it wins), the back-projection from `B_z_local` to `B_x` is computed and the **squared Mahalanobis distance in X-space** is calculated:
+
+```
+v        = B_x - x_obs                              # 1 x p in X-space
+dist_mah = as.numeric(t(v) %*% metric_inv %*% v)    # scalar squared Mahalanobis
+```
+
+where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance matrix stored on `bl_result$metric_inv` (added in 2026-05-20). The Cholesky decomposition is used for the inversion -- see `2 implementation_summary.txt` Section 4.2.1 for the maths and singularity safeguards.
+
+The pair selector then depends on the `distance` argument of `bl_find_local_cf()`:
+
+- `distance = "mahalanobis"` (default): pair selected by minimum `dist_mah`. Pair-invariant; matches the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` formula.
+- `distance = "euclidean"` (legacy): pair selected by minimum `dist_z`. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice.
+
+If the chosen selector for this pair beats the running `best_selector`, save everything for this pair as the new best result. The loop continues through all configured pairs, keeping the global minimum. Both `dist_z` and `dist_mah` are reported for the winning pair, plus per-pair tables `all_distances` and `all_distances_mahalanobis`.
 
 ---
 

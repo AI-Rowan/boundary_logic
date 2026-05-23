@@ -27,7 +27,7 @@ ct <- bl_results$biplot_grid$ct
 
 cat("Contour segments :", length(ct), "\n")
 cat("Contour levels   :", unique(sapply(ct, `[[`, "level")), "\n")
-# levels will be e.g. 0.49 / 0.51 for rounding = 2L
+# levels will be e.g. 0.49 / 0.51 for b_margin = 0.01
 
 # Points per segment
 sapply(ct, function(cl) length(cl$x))

@@ -3,6 +3,68 @@
 # Refactored from: scripts/1 Functions for biplot.R (biplot_input_calc)
 ############################################################
 
+
+# --------------------------------------------------------------------------
+# Private helper: pooled within-class covariance W (or total cov fallback)
+# --------------------------------------------------------------------------
+
+#' Compute metric matrix and its inverse for Mahalanobis distance
+#'
+#' Returns the metric matrix M and its inverse M_inv for use by
+#' \code{bl_find_local_cf()} (cross-pair selection) and
+#' \code{plot.bl_boundary()} / \code{bl_robustness()} (per-variable
+#' standardisation). Priority order for choosing M:
+#'   1. \code{W} from \code{cva_classes} (CVA-consistent)
+#'   2. \code{W} from binary 0/1 class column (PCA with classification)
+#'   3. \code{Sigma = cov(X)} (no class info; PCA exploratory)
+#'
+#' Inversion uses \code{chol2inv(chol(M))} for SPD matrices; falls back to
+#' ridge-regularised inverse when M is singular.
+#'
+#' @param X            n x p numeric matrix of training features.
+#' @param cva_classes  Factor or NULL.
+#' @param binary_class Numeric/integer 0/1 vector or NULL.
+#' @return Named list with \code{metric} (p x p), \code{metric_inv} (p x p),
+#'   and \code{metric_type} (character: "W_cva", "W_binary", or "Sigma").
+#' @noRd
+.compute_metric_inverse <- function(X, cva_classes = NULL, binary_class = NULL) {
+  classes <- NULL
+  type    <- NULL
+  if (!is.null(cva_classes)) {
+    classes <- as.factor(cva_classes); type <- "W_cva"
+  } else if (!is.null(binary_class)) {
+    classes <- as.factor(binary_class); type <- "W_binary"
+  }
+
+  if (is.null(classes)) {
+    M    <- stats::cov(X)
+    type <- "Sigma"
+  } else {
+    n <- nrow(X); g <- nlevels(classes); p <- ncol(X)
+    W <- matrix(0, p, p)
+    for (lvl in levels(classes)) {
+      Xk <- X[classes == lvl, , drop = FALSE]
+      if (nrow(Xk) < 2L) next
+      Xc <- sweep(Xk, 2L, colMeans(Xk))
+      W  <- W + crossprod(Xc)
+    }
+    denom <- max(n - g, 1L)
+    M     <- W / denom
+  }
+
+  # Cholesky inverse with ridge fallback when M is rank-deficient
+  M_inv <- tryCatch(
+    chol2inv(chol(M)),
+    error = function(e) {
+      lambda <- 1e-6 * mean(diag(M))
+      chol2inv(chol(M + lambda * diag(nrow(M))))
+    }
+  )
+
+  list(metric = M, metric_inv = M_inv, metric_type = type)
+}
+
+
 #' Build a PCA or CVA projection matrix for boundary logic analysis
 #'
 #' Computes the loading matrix V, its inverse tV, and centering/scaling
@@ -59,7 +121,26 @@
 #'   \item{`proj_dims`}{Integer vector; the eigenvector indices used.}
 #'   \item{`biplot_obj`}{The `biplotEZ` S3 object; used for plotting in
 #'     Phase 2.}
+#'   \item{`metric`}{Numeric matrix (p x p); the within-class covariance
+#'     `W` (or total covariance `Sigma` when no class info is supplied) used
+#'     as the Mahalanobis metric by `bl_find_local_cf()` and
+#'     `plot.bl_boundary()`.}
+#'   \item{`metric_inv`}{Numeric matrix (p x p); `solve(metric)` computed via
+#'     `chol2inv(chol(.))` for numerical stability on SPD matrices, with
+#'     ridge fallback when singular.}
+#'   \item{`metric_type`}{Character; one of `"W_cva"` (pooled within-class
+#'     covariance from CVA class factor), `"W_binary"` (pooled within-class
+#'     covariance from binary 0/1 class column), or `"Sigma"` (total
+#'     covariance fallback).}
 #' }
+#'
+#' @section Mahalanobis metric:
+#' The within-class covariance matrix `W` is computed and stored at projection
+#' time so that downstream distance measures can use it without recomputation.
+#' The metric is the same one CVA optimises against -- `V` is `W`-orthonormal
+#' under exactly this `W` -- which keeps distance comparisons internally
+#' consistent. See `2 implementation_summary.txt` Section 4.2.1 for details on
+#' the Cholesky-based inversion and singularity safeguards.
 #'
 #' @examples
 #' bl_dat  <- bl_prepare_data(datasets::iris,
@@ -206,6 +287,15 @@ bl_build_projection <- function(train_data,
   # ---- Training variable ranges (min/max per feature) ------------------
   train_ranges <- get_variable_ranges(train_data[, var_names, drop = FALSE])
 
+  # ---- Within-class metric matrix (W) for Mahalanobis distance --------
+  # Priority: cva_classes -> train_data$class -> Sigma fallback.
+  binary_class <- if ("class" %in% names(train_data)) train_data[["class"]] else NULL
+  metric_info  <- .compute_metric_inverse(
+    X            = X,
+    cva_classes  = cva_classes,
+    binary_class = binary_class
+  )
+
   # ---- Return ----------------------------------------------------------
   structure(
     list(
@@ -219,7 +309,10 @@ bl_build_projection <- function(train_data,
       biplot_obj   = bp,
       cva_classes  = cva_classes,
       point_col    = point_col,
-      train_ranges = train_ranges
+      train_ranges = train_ranges,
+      metric       = metric_info$metric,
+      metric_inv   = metric_info$metric_inv,
+      metric_type  = metric_info$metric_type
     ),
     class = "bl_projection"
   )

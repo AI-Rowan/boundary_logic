@@ -63,7 +63,7 @@ Mi_clipped = rows of Mi where sp::point.in.polygon(Mi, polygon) > 0
 ```
 This is done via `.poly_clip()` (defined in `R/boundary.R`), which uses `sp::point.in.polygon()` to test each contour vertex against the polygon.
 
-Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_type` — the probability level of each contour (either `cutoff - b_margin` = 0.49 or `cutoff + b_margin` = 0.51, because `rounding = 2L`).
+Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_type` — the probability level of each contour (either `cutoff - b_margin` = 0.49 or `cutoff + b_margin` = 0.51, because `b_margin = 0.01`).
 
 ---
 
@@ -260,12 +260,21 @@ vec_to_boundary    = vec_to_boundary_Z %*% tVr   # n × p — back-project to X-
 
 Because CVA has `standardise = FALSE`, no `X_sd` multiplication is needed here.
 
-Then standardise by dividing by training SDs so all features are on the same scale:
+Then standardise by dividing by a per-feature denominator so all features are on the same scale. The denominator depends on the `distance` argument:
 ```
-vec_to_boundary_sd = vec_to_boundary / X_sd   # n × p — signed standardised distances
+# distance = "mahalanobis" (default, new):
+denom              = sqrt(diag(bl_results$metric))    # within-class SD per feature
+vec_to_boundary_sd = vec_to_boundary / denom          # n x p signed standardised distances
+
+# distance = "euclidean" (legacy):
+vec_to_boundary_sd = vec_to_boundary / X_sd           # n x p, total SD denominator
 ```
 
 Each cell `[i, j]` is the **signed standardised distance** from observation `i` to its counterfactual in the direction of feature `j`. The sign indicates which side of the boundary the observation is on for that feature.
+
+**Why within-class SD (the new default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the new default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
+
+A cross-correlation diagnostic is printed to the console when `distance = "mahalanobis"`, comparing the diagonal d_M^2 contribution to the full d_M^2: small cross-correlation percentage means the diagonal approximation is essentially lossless. See `2 implementation_summary.txt` Section 4.6.1 for why the full Shapley decomposition is theoretically more correct but is not used (`O(n * 2^p)` cost).
 
 **Step 2 — Compute per-variable importance**
 

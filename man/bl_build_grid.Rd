@@ -10,8 +10,7 @@ bl_build_grid(
   bl_model,
   m = 200L,
   cutoff = 0.5,
-  b_margin = NULL,
-  rounding = 3L,
+  b_margin = 0.001,
   polygon = NULL,
   outlie = 1,
   calc_hull = TRUE
@@ -33,14 +32,13 @@ computation time.}
 
 \item{cutoff}{Numeric; the decision threshold. Default \code{0.5}.}
 
-\item{b_margin}{Numeric; half-width of the band around \code{cutoff} used
-to extract contour lines. Default \code{NULL}, which resolves to
-\code{1 / (10^rounding)}.}
-
-\item{rounding}{Integer; controls the contour band width only —
-\code{b_margin = 1 / (10^rounding)}. Default \code{3L} gives contours at
-\verb{cutoff ± 0.001}. All prediction scores are always floor-rounded to
-3 decimal places regardless of this setting.}
+\item{b_margin}{Numeric scalar; half-width of the band around
+\code{cutoff} used to extract contour lines. Default \code{0.001} (contours at
+\verb{cutoff +/- 0.001}). Must satisfy \verb{0 < b_margin < 0.5} so that both
+\code{cutoff - b_margin} and \code{cutoff + b_margin} stay strictly inside
+\verb{[0, 1]} for the default \code{cutoff = 0.5}. Independent of prediction
+precision: all prediction scores are always floor-rounded to 3 decimal
+places inside \code{.pred_function()} regardless of \code{b_margin}.}
 
 \item{polygon}{An \code{sp::SpatialPolygons} object to use as the hull
 boundary. If \code{NULL} (default), a new polygon is computed from

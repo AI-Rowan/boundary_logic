@@ -66,7 +66,7 @@ print(bl_mod)
 # ---- Steps 4-6: Build projection, grid, and assemble ------------------
 # method = "PCA" — variance-based projection.
 # m = 50L        — 50 x 50 prediction grid.
-# rounding = 2L  — contour band = cutoff ± 0.01
+# b_margin = 0.01 -- contour band = cutoff +/- 0.01
 
 bl_results <- bl_build_result(
   bl_data  = bl_filt,
@@ -77,7 +77,7 @@ bl_results <- bl_build_result(
   calc_hull = T,
   outlie = 1,
   #title    = "Iris — SVM, PCA biplot",
-  rounding = 2L
+  b_margin = 0.01
 )
 
 

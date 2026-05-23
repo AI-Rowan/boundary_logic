@@ -1,0 +1,71 @@
+Subject: boundarylogic R package — macOS installation instructions
+
+Hi,
+
+Thank you for agreeing to test the boundarylogic package on macOS.
+Please follow the steps below in order before opening R or RStudio.
+
+---
+
+STEP 1 — Install XQuartz (required for interactive graphics on macOS)
+
+1. Go to: https://www.xquartz.org
+2. Download and install the latest .pkg file.
+3. IMPORTANT: Log out of macOS and log back in after installation.
+   XQuartz does not activate until you restart your session.
+
+---
+
+STEP 2 — Install the package from GitHub
+
+Open R or RStudio and run the following:
+
+    install.packages("remotes")
+
+    remotes::install_github(
+      "AI-Rowan/boundary_logic",
+      ref          = "method_developments",
+      dependencies = TRUE
+    )
+
+This will install the package and all required dependencies.
+It may take a few minutes the first time.
+
+---
+
+STEP 3 — Verify the installation
+
+Run this quick check to confirm everything loaded correctly:
+
+    library(boundarylogic)
+
+    bl_dat  <- bl_prepare_data(datasets::iris,
+                                class_col    = "Species",
+                                target_class = "versicolor")
+    bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names)
+    bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names)
+    bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 80L)
+    result  <- bl_assemble(bl_dat, bl_model = bl_mod,
+                            bl_projection = bl_proj, bl_grid = bl_grid)
+
+    plot_biplotEZ(result)
+
+A biplot window should open automatically. If it opens and renders
+without errors, the installation is successful.
+
+---
+
+KNOWN ISSUE — If you see "unable to open X11 device"
+
+This means XQuartz is not active. Try the following:
+  1. Confirm XQuartz is installed (check Applications > Utilities).
+  2. Log out and log back in to macOS (required after first install).
+  3. If the problem persists, open XQuartz manually from Applications
+     before launching R, then try again.
+
+---
+
+Please let me know if you run into any issues and I will assist.
+
+Kind regards,
+Adriaan
