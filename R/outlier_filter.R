@@ -6,15 +6,14 @@
 
 #' Remove outliers from training data using a convex hull polygon filter
 #'
+#' In the standard workflow, outlier filtering is handled automatically by
+#' `bl_prepare_data(hull_fraction = ...)`. Use `bl_filter_outliers()` directly
+#' only when you need to iterate on hull fractions without re-splitting the
+#' data (e.g., after `bl_wrap_data()`), or for other advanced use cases.
+#'
 #' Projects training data into a lightweight 2-PC space, builds a convex hull
 #' enclosing `hull_fraction` of the points, removes observations outside the
 #' hull, and reports the number and percentage of rows retained and removed.
-#'
-#' This function implements the polygon filter step of Phase 1. Call it
-#' multiple times with different `hull_fraction` values to explore the
-#' trade-off between data coverage and outlier removal. Once satisfied, fit
-#' the final model using `bl_fit_model()` or `bl_wrap_model()` and then
-#' pass the filtered data to `bl_build_projection()` and `bl_build_grid()`.
 #'
 #' @section How the polygon filter works:
 #' The polygon is constructed in the standardised feature space (all variables
@@ -46,11 +45,12 @@
 #' }
 #'
 #' @examples
-#' bl_dat  <- bl_prepare_data(datasets::iris,
-#'                             class_col    = "Species",
-#'                             target_class = "versicolor")
-#' bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-#' print(bl_filt)
+#' # Standard workflow -- hull filtering integrated into bl_prepare_data()
+#' bl_dat <- bl_prepare_data(datasets::iris,
+#'                            class_col    = "Species",
+#'                            target_class = "versicolor",
+#'                            hull_fraction = 0.9)
+#' print(bl_dat)
 #'
 #' @export
 bl_filter_outliers <- function(bl_data,

@@ -410,7 +410,7 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
     n_out <- sum(!is.na(B_z[, 1L]) & !in_range)
     if (n_out > 0L)
       message(sprintf(
-        "bl_find_boundary(): %d counterfactual(s) back-project outside training feature ranges.",
+        "bl_find_boundary(): %d identified counterfactual(s) are outside the training feature ranges, but are retained.",
         n_out
       ))
   }

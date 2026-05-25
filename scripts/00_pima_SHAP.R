@@ -46,21 +46,20 @@ pima_raw <- read.csv(
 pima_raw <- pima_raw %>%
   filter(Insulin > 0, SkinThickness > 0) #%>%  mutate(Age = 90 - Age)
 
-# Use bl_prepare_data() and bl_filter_outliers() so the training split
+# Use bl_prepare_data() with hull_fraction so the training split
 # and hull filter are identical to the boundary logic workflow.
 bl_dat <- bl_prepare_data(
   data           = pima_raw,
   class_col      = "Outcome",
   target_class   = NULL,
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 0.9
 )
 
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-
-var_names  <- bl_filt$var_names
-train_data <- bl_filt$train_data
-test_data  <- bl_filt$test_data
+var_names  <- bl_dat$var_names
+train_data <- bl_dat$train_data
+test_data  <- bl_dat$test_data
 
 X_train <- train_data[, var_names]
 X_test  <- test_data[,  var_names]

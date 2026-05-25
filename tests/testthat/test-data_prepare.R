@@ -1,7 +1,7 @@
-test_that("bl_prepare_data returns bl_data class", {
+test_that("bl_prepare_data returns bl_filter_result class", {
   result <- bl_prepare_data(iris, class_col = "Species",
                             target_class = "versicolor")
-  expect_s3_class(result, "bl_data")
+  expect_s3_class(result, "bl_filter_result")
 })
 
 test_that("class column is binary 0/1 after multiclass conversion", {
@@ -40,10 +40,10 @@ test_that("custom feature_cols is respected", {
 test_that("train_fraction produces correct split sizes", {
   result <- bl_prepare_data(iris, class_col = "Species",
                             target_class = "versicolor",
-                            train_fraction = 0.8)
-  total <- nrow(result$train_data) + nrow(result$test_data)
+                            train_fraction = 0.8, hull_fraction = 1)
+  total <- result$n_retained + result$n_removed + nrow(result$test_data)
   expect_equal(total, nrow(iris))
-  expect_equal(nrow(result$train_data), floor(0.8 * nrow(iris)))
+  expect_equal(result$n_retained + result$n_removed, floor(0.8 * nrow(iris)))
 })
 
 test_that("same seed produces identical splits", {
@@ -79,8 +79,25 @@ test_that("error when train_fraction outside (0,1)", {
   )
 })
 
-test_that("print.bl_data runs without error", {
+test_that("print.bl_filter_result runs without error", {
   result <- bl_prepare_data(iris, class_col = "Species",
                             target_class = "versicolor")
-  expect_output(print(result), "<bl_data>")
+  expect_output(print(result), "<bl_filter_result>")
+})
+
+test_that("hull_fraction = 1 retains all training rows", {
+  result <- bl_prepare_data(iris, class_col = "Species",
+                            target_class = "versicolor",
+                            hull_fraction = 1)
+  expect_equal(result$n_removed, 0L)
+  expect_equal(result$hull_fraction, 1)
+  expect_s3_class(result, "bl_filter_result")
+})
+
+test_that("hull_fraction < 1 may remove some training rows", {
+  result <- bl_prepare_data(iris, class_col = "Species",
+                            target_class = "versicolor",
+                            hull_fraction = 0.9)
+  expect_true(result$n_retained <= floor(0.8 * nrow(iris)))
+  expect_s3_class(result, "bl_filter_result")
 })

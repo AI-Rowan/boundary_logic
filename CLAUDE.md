@@ -35,6 +35,8 @@ The repo has three places for narrative documentation; each has a specific role.
 | `documentation/` | Methodological technical notes, the PhD thesis PDF, workflow HTML exports, presentations. | When you implement a methodologically significant change, write a technical note here explaining *why* (use plain, un-numbered filenames). |
 | `.claude/reference/` | Code walkthrough docs (per source-file or per-script) and archived implementation plans (after approval + execution). Tracked by git. | When a plan from `.claude/plans/` has been implemented, copy it here with an IMPLEMENTED banner. |
 
+**Memory-to-reference sync rule:** Reference documents that also exist in the auto-memory folder (`~/.claude/projects/.../memory/`) must be kept in sync. Whenever a reference document in `.claude/reference/` is updated, apply the same changes to the corresponding memory file, and vice versa. The two copies must always match.
+
 For methodologically significant changes, the standard triplet is:
 1. **Technical note** in `documentation/` — explains *why* (theory, derivation, trade-offs).
 2. **Plan archive** in `.claude/reference/` — explains *what was done* (the approved plan, verbatim).
@@ -106,6 +108,7 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 
 ## 6. Key Architectural Facts
 
+- **Two data entry paths are distinct:** `bl_prepare_data()` is for the in-package model-building workflow — it handles the train/test split and runs `bl_filter_outliers()` internally (via the `hull_fraction` parameter), returning `"bl_filter_result"`. `bl_wrap_data()` is for users with an already-prepared dataset and externally trained model who want boundary logic purely for visualisation and explanation — it does not filter, returning `"bl_data"`. Both classes are accepted by `bl_assemble()` and `bl_build_result()`.
 - `b_margin` controls the decision boundary contour band half-width directly (default `0.001`, valid range `(0, 0.5)`). It is stored on `bl_grid$b_margin` and propagates to `bl_result$b_margin`. Predictions are independently stored at 3 d.p. via `floor(x * 1000) / 1000` in `.pred_function()`. These are separate concerns.
 - The hull polygon in `bl_result` always comes from `bl_grid` (final Z-space), never from `bl_filter_result` (raw PCA space).
 - CVA forces `standardise = FALSE` internally inside `bl_build_projection()`, regardless of the user-supplied value.
@@ -139,6 +142,7 @@ Two distinct paths depending on where the type should be supported.
 - `calc_hull` parameter in `bl_build_grid()` — visual-only
 - `bl_robustness()` called after `plot(bl_bnd)` — redundant; `plot(bl_bnd)` already prints the robustness summary to the console
 - `boundary =` in `plot_biplotEZ()` — this parameter no longer exists; the correct pattern is `bl_pick_point(bl_results, bl_boundary = bl_bnd)` in an interactive session (shown with `eval=FALSE` in vignettes)
+- `bl_filter_outliers()` as an explicit sequential step — outlier filtering is now integrated into `bl_prepare_data(hull_fraction = ...)`. Mention `bl_filter_outliers()` only in prose as a power-user tool for iterating on hull fractions after `bl_wrap_data()`. Never show it as a numbered workflow step.
 
 ## 9. Deferred / Future Work
 

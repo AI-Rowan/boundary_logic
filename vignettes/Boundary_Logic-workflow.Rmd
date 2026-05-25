@@ -115,15 +115,10 @@ one or more **alternative routes** depending on your starting point.
 
 ```         
  DATA ENTRY
- ┌─────────────────────────────────────────────────────────┐
- │ Option A  bl_prepare_data()   raw data frame → bl_data  │
- │ Option B  bl_wrap_data()      pre-split data → bl_data  │
- └─────────────────────────────────────────────────────────┘
-                          ↓
- OUTLIER FILTER  [optional]
- ┌──────────────────────────────────────────────────────────────────────┐
- │ bl_filter_outliers()   reports % of data retained / removed          │
- └──────────────────────────────────────────────────────────────────────┘
+ ┌────────────────────────────────────────────────────────────────────────────────┐
+ │ Option A  bl_prepare_data()   raw data frame → bl_dater_result (hull filter)  │
+ │ Option B  bl_wrap_data()      pre-split data → bl_data (no filter)             │
+ └────────────────────────────────────────────────────────────────────────────────┘
                           ↓
  MODEL
  ┌──────────────────────────────────────────────────────────────────────┐
@@ -146,7 +141,11 @@ one or more **alternative routes** depending on your starting point.
 #### Option A: `bl_prepare_data()` — raw data frame
 
 `bl_prepare_data()` converts a raw data frame into a binary-class data
-frame and produces a reproducible train/test split.
+frame, produces a reproducible train/test split, and removes outliers
+from the training set via a convex hull polygon filter. The
+`hull_fraction` parameter controls how aggressively the hull trims
+the outermost training points (default `0.9` removes approximately
+the outermost 10%; use `hull_fraction = 1` to retain all points).
 
 The iris dataset has three species. We treat `"versicolor"` as the
 positive class (coded `1`); all other species become `0`.
@@ -159,7 +158,8 @@ bl_dat <- bl_prepare_data(
   class_col      = "Species",
   target_class   = "versicolor",
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 0.91
 )
 
 print(bl_dat)
@@ -167,10 +167,11 @@ print(bl_dat)
 
 **What to check:**
 
+-   `Hull fraction / Retained / Removed` — rows and percentages trimmed
+    by the filter.
 -   `Features` — the four iris measurement columns are selected
     automatically.
 -   `Target` — confirms the 1/0 coding rule.
--   `Train rows / Test rows` — should be close to 80/20 of 150 = 120/30.
 
 ```{r step1-check}
 # Class balance in the training set
@@ -184,7 +185,8 @@ head(bl_dat$train_data)
 
 If your data is already split into training and test sets and your class
 column is already coded as numeric 0/1, use `bl_wrap_data()` to bypass
-the splitting and conversion steps:
+the splitting and conversion steps. `bl_wrap_data()` does not apply
+outlier filtering — the data is used as-is.
 
 ``` r
 # Example: data already prepared externally
@@ -200,40 +202,8 @@ bl_dat <- bl_wrap_data(
 print(bl_dat)
 ```
 
-`bl_wrap_data()` returns the same `bl_data` object as
-`bl_prepare_data()`, so all downstream functions work identically.
-
-------------------------------------------------------------------------
-
-### Step 2 — Filter outliers (optional)
-
-`bl_filter_outliers()` projects the training data to a lightweight 2-PC
-space, builds a convex hull enclosing `hull_fraction` of the points,
-removes observations outside the hull, and reports the number and
-percentage of rows retained and removed.
-
-Model fitting is done separately in Step 3. This step is **optional** —
-skip it if you want to use all training data.
-
-```{r step2}
-bl_filt <- bl_filter_outliers(
-  bl_data       = bl_dat,
-  hull_fraction = 0.91,
-  verbose       = TRUE
-)
-
-print(bl_filt)
-```
-
-**What to check:**
-
--   `Retained / Removed` — rows and percentages trimmed by the filter.
--   Try `hull_fraction = 1.0` to keep all points (no filtering).
--   Try `hull_fraction = 0.8` for more aggressive trimming.
-
-Call `bl_filter_outliers()` multiple times with different
-`hull_fraction` values to find the best setting, then proceed to Step 3
-to fit the model on the retained data.
+`bl_wrap_data()` returns a `bl_data` object compatible with all
+downstream functions.
 
 ------------------------------------------------------------------------
 
@@ -246,8 +216,8 @@ data and records training accuracy and Gini coefficient.
 
 ```{r step3}
 bl_mod <- bl_fit_model(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
+  train_data = bl_dat$train_data,
+  var_names  = bl_dat$var_names,
   model_type = "GLM",   # logistic regression
   cutoff     = 0.5
 )
@@ -313,15 +283,15 @@ settings):**
 
 ``` r
 # Fit the model yourself with any settings you need
-my_glm <- glm(class ~ ., data = bl_filt$train_data,
+my_glm <- glm(class ~ ., data = bl_dat$train_data,
               family = binomial(link = "logit"))
 
 # Register it as a bl_model
 bl_mod <- bl_wrap_model(
   model      = my_glm,
   model_type = "GLM",                  # tells the package how to call predict()
-  var_names  = bl_filt$var_names,
-  train_data = bl_filt$train_data      # optional: compute accuracy/Gini
+  var_names  = bl_dat$var_names,
+  train_data = bl_dat$train_data      # optional: compute accuracy/Gini
 )
 
 print(bl_mod)
@@ -342,9 +312,9 @@ my_fn <- function(m, new_data) {
 bl_mod <- bl_wrap_model(
   model      = my_custom_model,
   model_type = "custom",
-  var_names  = bl_filt$var_names,
+  var_names  = bl_dat$var_names,
   predict_fn = my_fn,
-  train_data = bl_filt$train_data
+  train_data = bl_dat$train_data
 )
 ```
 
@@ -358,9 +328,8 @@ The returned `bl_model` object is fully compatible with
 #### Quick route: `bl_build_result()`
 
 `bl_build_result()` combines the projection, grid, and assembly steps
-into a single call. Pass the output of `bl_filter_outliers()` (or
-`bl_prepare_data()` if no filtering was applied) and the fitted model;
-the function handles everything else.
+into a single call. Pass the `bl_dat` object from `bl_prepare_data()` or
+`bl_wrap_data()` and the fitted model; the function handles everything else.
 
 > **Note:** `bl_build_result()` always builds the projection matrix V
 > from the training data of the supplied object. If you need to build V
@@ -369,7 +338,7 @@ the function handles everything else.
 
 ```{r steps4-6}
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,     # pass bl_dat here if Step 2 was skipped
+  bl_data  = bl_dat,     # pass bl_dat here if Step 2 was skipped
   bl_model = bl_mod,
   method   = "PCA",       # or "CVA" — see note below
   m        = 100L,        # grid resolution; use 200L for final analysis
@@ -397,7 +366,7 @@ summary(bl_results)
 ``` r
 # CVA — confusion labels derived from bl_mod automatically
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "CVA"
 )
@@ -427,7 +396,7 @@ Omit `bl_model` to get a quick biplot of the data before fitting.
 directly:
 
 ``` r
-bl_proj_explore <- bl_build_result(bl_filt, method = "PCA")
+bl_proj_explore <- bl_build_result(bl_dat, method = "PCA")
 plot(bl_proj_explore)   # coloured by true class (red = class 1, blue = class 0)
 ```
 
@@ -443,8 +412,8 @@ space to the 2D biplot Z-space.
 
 ``` r
 bl_proj <- bl_build_projection(
-  train_data  = bl_filt$train_data,
-  var_names   = bl_filt$var_names,
+  train_data  = bl_dat$train_data,
+  var_names   = bl_dat$var_names,
   method      = "PCA",
   standardise = TRUE,
   proj_dims   = c(1L, 2L)
@@ -459,7 +428,7 @@ model, and extracts decision boundary contour lines.
 
 ``` r
 bl_grid <- bl_build_grid(
-  train_data    = bl_filt$train_data,
+  train_data    = bl_dat$train_data,
   bl_projection = bl_proj,
   bl_model      = bl_mod,
   m             = 100L    # use 200L for final analysis
@@ -488,7 +457,7 @@ print(bl_grid)
 
 ``` r
 bl_results <- bl_assemble(
-  bl_data       = bl_filt,   # pass bl_dat if Step 2 was skipped
+  bl_data       = bl_dat,   # pass bl_dat if Step 2 was skipped
   bl_model      = bl_mod,
   bl_projection = bl_proj,
   bl_grid       = bl_grid
@@ -873,7 +842,7 @@ bl_dat <- bl_wrap_data(
 )
 
 # Step 2: filter outliers
-bl_filt <- bl_filter_outliers(
+bl_dat <- bl_dater_outliers(
   bl_data       = bl_dat,
   hull_fraction = 0.9,
   verbose       = TRUE
@@ -882,7 +851,7 @@ bl_filt <- bl_filter_outliers(
 # Step 3: fit your own model on the filtered training data
 my_svm <- e1071::svm(
   class ~ .,
-  data        = bl_filt$train_data,
+  data        = bl_dat$train_data,
   probability = TRUE,
   type        = "C-classification",
   kernel      = "radial",
@@ -894,13 +863,13 @@ my_svm <- e1071::svm(
 bl_mod <- bl_wrap_model(
   model      = my_svm,
   model_type = "SVM",
-  var_names  = bl_filt$var_names,
-  train_data = bl_filt$train_data
+  var_names  = bl_dat$var_names,
+  train_data = bl_dat$train_data
 )
 print(bl_mod)
 
 # Steps 4–6: single call
-bl_results <- bl_build_result(bl_filt, bl_mod, method = "PCA")
+bl_results <- bl_build_result(bl_dat, bl_mod, method = "PCA")
 
 # Visualise
 plot_biplotEZ(bl_results, new_title = "Custom SVM Boundary")
@@ -910,7 +879,7 @@ plot_biplotEZ(bl_results, new_title = "Custom SVM Boundary")
 
 ## Running without the outlier filter
 
-If you prefer not to use `bl_filter_outliers()`, skip Step 2 and pass
+If you prefer not to use `bl_dater_outliers()`, skip Step 2 and pass
 `bl_dat` directly to `bl_build_result()`:
 
 ``` r
@@ -1013,13 +982,13 @@ print(bl_results)
 |------|-------------------------|-------------|--------------------------------------------|--------------------|
 | 1    | `bl_prepare_data()`     | Standard    | Raw data frame                             | `bl_data`          |
 | 1    | `bl_wrap_data()`        | Alternative | Pre-split 0/1 data frames                  | `bl_data`          |
-| 2    | `bl_filter_outliers()`  | Optional    | `bl_data`                                  | `bl_filter_result` |
+| 2    | `bl_dater_outliers()`  | Optional    | `bl_data`                                  | `bl_dater_result` |
 | 3    | `bl_fit_model()`        | Standard    | Training data frame                        | `bl_model`         |
 | 3    | `bl_wrap_model()`       | Alternative | Any fitted model object                    | `bl_model`         |
-| 4–6  | `bl_build_result()`     | Quick       | `bl_data`/`bl_filter_result` + `bl_model`  | `bl_result`        |
+| 4–6  | `bl_build_result()`     | Quick       | `bl_data`/`bl_dater_result` + `bl_model`  | `bl_result`        |
 | 4    | `bl_build_projection()` | Detailed    | Training data frame                        | `bl_projection`    |
 | 5    | `bl_build_grid()`       | Detailed    | Training data, `bl_projection`, `bl_model` | `bl_grid`          |
-| 6    | `bl_assemble()`         | Detailed    | `bl_data`/`bl_filter_result` + all above   | `bl_result`        |
+| 6    | `bl_assemble()`         | Detailed    | `bl_data`/`bl_dater_result` + all above   | `bl_result`        |
 | —    | `plot_biplotEZ()`       | —           | `bl_result`                                | (plot)             |
 
 ### Phase 2
@@ -1037,7 +1006,7 @@ print(bl_results)
 | Function              | Input                         | Output             |
 |-----------------------|-------------------------------|--------------------|
 | `bl_select_target()`  | `bl_result` + row index or df | `bl_target`        |
-| `set_filters()`       | `bl_target` + named args      | `bl_filters`       |
+| `set_filters()`       | `bl_target` + named args      | `bl_daters`       |
 | `bl_find_local_cf()`  | `bl_result` + `bl_target`     | `bl_local_result`  |
 | `bl_shapley()`        | `bl_local_result`             | `bl_shapley`       |
 | `bl_find_sparse_cf()` | `bl_shapley`                  | `bl_sparse_result` |

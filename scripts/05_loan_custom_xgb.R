@@ -61,17 +61,16 @@
 
 # ---- Step 2: Exploratory biplot — full data, no model -----------------
 {
-  bl_dat_exp  <- bl_prepare_data(
+  bl_dat_exp <- bl_prepare_data(
     data           = loan_encoded,
     class_col      = "loan_status",
     train_fraction = 1,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 1
   )
 
-  bl_filt_exp <- bl_filter_outliers(bl_dat_exp, hull_fraction = 1)
-
   bl_proj <- bl_build_result(
-    bl_data = bl_filt_exp,
+    bl_data = bl_dat_exp,
     method  = "PCA",
     title   = "Loan default — exploratory PCA biplot (all data)"
   )
@@ -96,23 +95,22 @@
 
 # ---- Steps 4-6: Prepare data, fit custom XGBoost, build biplot --------
 {
-  bl_dat  <- bl_prepare_data(
+  bl_dat <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
     feature_cols   = feature_cols,
     train_fraction = 0.8,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 0.9
   )
   print(bl_dat)
-
-  bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 
   # ---- Fit custom XGBoost -----------------------------------------------
   # Use 90 % of the filtered training data to train and 10 % as a validation
   # watchlist for early stopping.  Set seed before the split so results
   # are reproducible.
-  train_df  <- bl_filt$train_data
-  var_names <- bl_filt$var_names
+  train_df  <- bl_dat$train_data
+  var_names <- bl_dat$var_names
 
   set.seed(42L)
   val_idx   <- sample(nrow(train_df), size = floor(0.1 * nrow(train_df)))
@@ -165,7 +163,7 @@
   print(bl_mod)
 
   bl_results <- bl_build_result(
-    bl_data  = bl_filt,
+    bl_data  = bl_dat,
     bl_model = bl_mod,
     method   = "CVA",
     title    = "Loan default -- custom XGB, CVA biplot",
@@ -221,7 +219,7 @@
   # Update this list after reviewing var_imp output above
   vars_to_drop    <- c("person_gender", "person_emp_exp",
                        "cb_person_cred_hist_length", "person_income")
-  feature_cols_v2 <- setdiff(bl_filt$var_names, vars_to_drop)
+  feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
   cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
 }
 
@@ -232,19 +230,18 @@
 
 # ---- Steps 4b-6b: Rebuild pipeline with pruned features ----------------
 {
-  bl_dat_v2  <- bl_prepare_data(
+  bl_dat_v2 <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
     feature_cols   = feature_cols_v2,
     train_fraction = 0.8,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 0.9
   )
 
-  bl_filt_v2 <- bl_filter_outliers(bl_dat_v2, hull_fraction = 0.9)
-
   # ---- Fit custom XGBoost on reduced features ---------------------------
-  train_df_v2  <- bl_filt_v2$train_data
-  var_names_v2 <- bl_filt_v2$var_names
+  train_df_v2  <- bl_dat_v2$train_data
+  var_names_v2 <- bl_dat_v2$var_names
 
   set.seed(42L)
   val_idx_v2   <- sample(nrow(train_df_v2), size = floor(0.1 * nrow(train_df_v2)))
@@ -282,7 +279,7 @@
   print(bl_mod_v2)
 
   bl_results_v2 <- bl_build_result(
-    bl_data  = bl_filt_v2,
+    bl_data  = bl_dat_v2,
     bl_model = bl_mod_v2,
     method   = "CVA",
     title    = "Loan default -- custom XGB, reduced features, CVA biplot",

@@ -70,8 +70,9 @@ step is applied:
     cannot physiologically be zero; those rows are removed.
 
 `bl_prepare_data()` converts the `Outcome` column to `class` (it is
-already 0/1 so `target_class = NULL`) and creates a reproducible 80/20
-train/test split.
+already 0/1 so `target_class = NULL`), creates a reproducible 80/20
+train/test split, and removes the outermost 10% of training points via
+`hull_fraction = 0.9`.
 
 ```{r step1}
 pima_csv <- system.file("extdata", "pima_diabetes.csv",
@@ -87,7 +88,8 @@ bl_dat <- bl_prepare_data(
   class_col      = "Outcome",
   target_class   = NULL,       # already 0/1
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 0.9
 )
 
 print(bl_dat)
@@ -95,28 +97,13 @@ print(bl_dat)
 
 **What to check:**
 
+-   `Hull fraction / Retained / Removed` — rows and percentages trimmed
+    by the convex hull filter.
 -   `Features` — the eight clinical measurement columns.
--   `Train rows / Test rows` — approximately 80/20 of the filtered
-    dataset.
--   `Class balance` — check that both classes are represented in the
-    training set.
+-   `Class balance` — check that both classes are represented.
 
 ```{r step1-check}
 table(bl_dat$train_data$class)
-```
-
-------------------------------------------------------------------------
-
-### Step 2 — Filter outliers (optional)
-
-`bl_filter_outliers()` removes training observations that fall outside
-the convex hull enclosing the specified fraction of the data. With
-`hull_fraction = 0.9`, the outermost 10 % of training points are removed
-before model fitting.
-
-```{r step2}
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-print(bl_filt)
 ```
 
 ------------------------------------------------------------------------
@@ -139,18 +126,18 @@ gam_formula <- class ~ s(Glucose) + s(BloodPressure) +
 
 custom_gam <- mgcv::gam(
   formula = gam_formula,
-  data    = bl_filt$train_data,
+  data    = bl_dat$train_data,
   family  = binomial(link = "logit")
 )
 
 bl_mod <- bl_wrap_model(
   model      = custom_gam,
   model_type = "custom",
-  var_names  = bl_filt$var_names,
+  var_names  = bl_dat$var_names,
   predict_fn = function(m, new_data) {
     as.numeric(mgcv::predict.gam(m, newdata = new_data, type = "response"))
   },
-  train_data = bl_filt$train_data
+  train_data = bl_dat$train_data
 )
 
 print(bl_mod)
@@ -185,7 +172,7 @@ decision surfaces like those produced by a GAM:
 
 ```{r steps4-6}
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "CVA",
   title    = "Pima diabetes — GAM, CVA biplot",
@@ -560,9 +547,8 @@ real clinical dataset:
 
 | Phase | Step | Function                              | Purpose                                   |
 |-------|------|---------------------------------------|-------------------------------------------|
-| 1     | 1    | `bl_prepare_data()`                   | Load and split the Pima dataset           |
-| 1     | 2    | `bl_filter_outliers()`                | Remove the outer 10 % of training points  |
-| 1     | 3    | `bl_wrap_model()`                     | Register a custom GAM with spline terms   |
+| 1     | 1    | `bl_prepare_data()`                   | Load, split, and filter outliers (hull_fraction = 0.9) |
+| 1     | 2    | `bl_wrap_model()`                     | Register a custom GAM with spline terms   |
 | 1     | 4–6  | `bl_build_result()`                   | CVA biplot + prediction grid              |
 | 2     | 7    | `bl_find_boundary()`                  | Global counterfactual search              |
 | 2     | 8    | `plot(bl_bnd)`                        | Variable importance, distance to boundary |

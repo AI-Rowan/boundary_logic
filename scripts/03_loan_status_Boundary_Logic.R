@@ -93,17 +93,16 @@
 # object (not a full bl_result). plot_biplotEZ() renders it in the
 # same style as a model-backed biplot.
 {
-  bl_dat_exp  <- bl_prepare_data(
+  bl_dat_exp <- bl_prepare_data(
     data           = loan_encoded,
     class_col      = "loan_status",
     train_fraction = 1,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 1
   )
 
-  bl_filt_exp <- bl_filter_outliers(bl_dat_exp, hull_fraction = 1)
-
   bl_proj <- bl_build_result(
-    bl_data = bl_filt_exp,
+    bl_data = bl_dat_exp,
     method  = "PCA",
     title   = "Loan default — exploratory PCA biplot (all data)"
   )
@@ -139,22 +138,43 @@
 
 
 # ---- Steps 4-6: Prepare data, fit XGBoost, build biplot ---------------
+# Standard path: bl_prepare_data() handles feature selection, class encoding,
+# seeded train/test split, and outlier filtering in one call.
+#
+# Alternative path using bl_wrap_data() — use this when your data is already
+# split (e.g. from a cross-validation framework or external pipeline):
+#
+#   data_clean <- loan_filtered[, c(feature_cols, "loan_status")]
+#   names(data_clean)[names(data_clean) == "loan_status"] <- "class"
+#   set.seed(121L)
+#   n          <- nrow(data_clean)
+#   train_idx  <- sample(n, size = floor(0.8 * n), replace = FALSE)
+#   train_data <- data_clean[ train_idx, , drop = FALSE]
+#   test_data  <- data_clean[-train_idx, , drop = FALSE]
+#   rownames(train_data) <- NULL; rownames(test_data) <- NULL
+#   bl_dat <- bl_wrap_data(
+#     train_data   = train_data,
+#     test_data    = test_data,
+#     var_names    = feature_cols,
+#     target_class = NULL       # loan_status already encoded as 0/1
+#   )
+#   # bl_wrap_data() does not filter outliers; call bl_filter_outliers() if needed:
+#   # bl_dat <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 {
-  bl_dat  <- bl_prepare_data(
+  bl_dat <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
     feature_cols   = feature_cols,
     train_fraction = 0.8,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 0.9
   )
   print(bl_dat)
 
-  bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-
   # ---- Step 5a: SVM via bl_fit_model() (quick baseline) ------------------
   bl_mod_svm <- bl_fit_model(
-    train_data = bl_filt$train_data,
-    var_names  = bl_filt$var_names,
+    train_data = bl_dat$train_data,
+    var_names  = bl_dat$var_names,
     model_type = "SVM"
   )
   print(bl_mod_svm)
@@ -162,37 +182,37 @@
   # ---- Step 5b: XGB via bl_wrap_model() with explicit predict_fn ---------
   # Using model_type = "custom" makes the prediction contract explicit.
   # Alternative: model_type = "XGB" with model = list(model = xgb_fit,
-  # features = bl_filt$var_names) also works via the built-in XGB dispatch
+  # features = bl_dat$var_names) also works via the built-in XGB dispatch
   # in .pred_function() — no predict_fn required in that case.
   xgb_data <- xgboost::xgb.DMatrix(
-    data  = as.matrix(bl_filt$train_data[, bl_filt$var_names]),
-    label = bl_filt$train_data$class
+    data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
+    label = bl_dat$train_data$class
   )
-  xgb_fit <- xgboost::xgboost(
-    data        = xgb_data,
-    nrounds     = 200,
-    objective   = "binary:logistic",
-    eval_metric = "logloss",
-    max_depth   = 3,
-    eta         = 0.1,
-    verbose     = 0
+  xgb_fit <- xgboost::xgb.train(
+    params  = list(objective   = "binary:logistic",
+                   eval_metric = "logloss",
+                   max_depth   = 3,
+                   learning_rate = 0.1),
+    data    = xgb_data,
+    nrounds = 200,
+    verbose = 0
   )
   bl_mod <- bl_wrap_model(
     model      = xgb_fit,
     model_type = "custom",
-    var_names  = bl_filt$var_names,
+    var_names  = bl_dat$var_names,
     predict_fn = function(m, new_data) {
       mat <- xgboost::xgb.DMatrix(as.matrix(new_data))
       as.numeric(predict(m, newdata = mat))
     },
-    train_data = bl_filt$train_data
+    train_data = bl_dat$train_data
   )
   print(bl_mod)
 
   # CVA is the default biplot method for this workflow — it maximises
   # class separation in the projection plane.
   bl_results <- bl_build_result(
-    bl_data  = bl_filt,
+    bl_data  = bl_dat,
     bl_model = bl_mod,
     method   = "CVA",
     title    = "Loan default (prior defaulters) -- XGB, CVA biplot",
@@ -264,7 +284,7 @@
   # List variables to remove based on the var_imp output above.
   vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length", "person_income")
   
-  feature_cols_v2 <- setdiff(bl_filt$var_names, vars_to_drop)
+  feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
   cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
 }
 
@@ -275,41 +295,40 @@
 
 # ---- Steps 4b-6b: Rebuild pipeline with pruned features ----------------
 {
-  bl_dat_v2  <- bl_prepare_data(
+  bl_dat_v2 <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
     feature_cols   = feature_cols_v2,
     train_fraction = 0.8,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 0.9
   )
-
-  bl_filt_v2 <- bl_filter_outliers(bl_dat_v2, hull_fraction = 0.9)
 
   # Direct XGB path — no predict_fn required; see Step 5b for the
   # custom/predict_fn alternative demonstrated on the full feature set.
   xgb_data_v2 <- xgboost::xgb.DMatrix(
-    data  = as.matrix(bl_filt_v2$train_data[, bl_filt_v2$var_names]),
-    label = bl_filt_v2$train_data$class
+    data  = as.matrix(bl_dat_v2$train_data[, bl_dat_v2$var_names]),
+    label = bl_dat_v2$train_data$class
   )
-  xgb_fit_v2 <- xgboost::xgboost(
-    data        = xgb_data_v2,
-    nrounds     = 200,
-    objective   = "binary:logistic",
-    eval_metric = "logloss",
-    max_depth   = 3,
-    eta         = 0.1,
-    verbose     = 0
+  xgb_fit_v2 <- xgboost::xgb.train(
+    params  = list(objective   = "binary:logistic",
+                   eval_metric = "logloss",
+                   max_depth   = 3,
+                   learning_rate = 0.1),
+    data    = xgb_data_v2,
+    nrounds = 200,
+    verbose = 0
   )
   bl_mod_v2 <- bl_wrap_model(
-    model      = list(model = xgb_fit_v2, features = bl_filt_v2$var_names),
+    model      = list(model = xgb_fit_v2, features = bl_dat_v2$var_names),
     model_type = "XGB",
-    var_names  = bl_filt_v2$var_names,
-    train_data = bl_filt_v2$train_data
+    var_names  = bl_dat_v2$var_names,
+    train_data = bl_dat_v2$train_data
   )
   print(bl_mod_v2)
 
   bl_results_v2 <- bl_build_result(
-    bl_data  = bl_filt_v2,
+    bl_data  = bl_dat_v2,
     bl_model = bl_mod_v2,
     method   = "CVA",
     title    = "Loan default -- XGB, reduced features, CVA biplot",

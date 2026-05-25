@@ -128,31 +128,18 @@
 }
 
 
-# ---- Step 5: Outlier filter ------------------------------------------------
-# bl_wrap_data() only validates and packages the pre-split data — it does no
-# cleaning. bl_filter_outliers() is still needed because:
-#
-#   - A manual split does not remove outliers; it only divides rows.
-#   - Outliers in the training set distort the biplot projection and shift the
-#     decision boundary away from the bulk of the data.
-#   - The convex hull polygon produced here flows into bl_build_grid(), where
-#     it clips the prediction contours to the observed-data region.
-#   - hull_fraction = 0.9 trims the outermost ~10 % of training points;
-#     hull_fraction = 1 retains all points but still builds the polygon.
-#
-# bl_filter_outliers() accepts either a bl_data object (from bl_prepare_data
-# or bl_wrap_data) or a bl_filter_result — both have identical structure.
-# The call below is therefore identical to script 03.
-{
-  bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-}
+# ---- Step 5 (removed) ------------------------------------------------------
+# bl_wrap_data() packages pre-split data without outlier filtering.
+# Downstream steps use bl_dat directly (it is already a compatible object).
+# In the standard bl_prepare_data() workflow, hull filtering is integrated
+# via the hull_fraction parameter and runs automatically.
 
 
 # ---- Step 6: Fit XGBoost model --------------------------------------------
 {
   bl_mod <- bl_fit_model(
-    train_data = bl_filt$train_data,
-    var_names  = bl_filt$var_names,
+    train_data = bl_dat$train_data,
+    var_names  = bl_dat$var_names,
     model_type = "XGB"
   )
   print(bl_mod)
@@ -162,7 +149,7 @@
 # ---- Step 7: Build biplot result and plot ----------------------------------
 {
   bl_results <- bl_build_result(
-    bl_data  = bl_filt,
+    bl_data  = bl_dat,
     bl_model = bl_mod,
     method   = "CVA",
     title    = "Loan default -- bl_wrap_data() demo, XGB + CVA biplot",

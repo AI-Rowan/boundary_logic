@@ -8,7 +8,7 @@
 # Use this script when the XGBoost model has already been fitted and
 # saved externally (e.g. from script 05 or a separate training pipeline).
 # The data preparation steps are identical to scripts 03 and 05 so that
-# bl_filt matches the data the model was originally trained on.
+# bl_dat matches the data the model was originally trained on.
 #
 # Run interactively: place cursor inside a {} block and press Ctrl+Enter
 ############################################################
@@ -59,22 +59,21 @@
 }
 
 
-# ---- Step 3: Prepare data and filter outliers --------------------------
+# ---- Step 3: Prepare data -------------------------------------------------
 # Use the same seed and hull_fraction as the original training run so
-# bl_filt$train_data matches what the model was fitted on.
+# bl_dat$train_data matches what the model was fitted on.
 {
   bl_dat <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
     feature_cols   = feature_cols,
     train_fraction = 0.8,
-    seed           = 121L
+    seed           = 121L,
+    hull_fraction  = 0.9
   )
+  var_names <- bl_dat$var_names
 
-  bl_filt   <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-  var_names <- bl_filt$var_names
-
-  cat("Training rows:", nrow(bl_filt$train_data), "\n")
+  cat("Training rows:", nrow(bl_dat$train_data), "\n")
   cat("Features     :", paste(var_names, collapse = ", "), "\n")
 }
 
@@ -96,8 +95,8 @@
   # For demonstration, fit a quick model here so the script is self-contained.
   # Replace these three lines with one of the xgb.load / readRDS calls above.
   dtrain  <- xgboost::xgb.DMatrix(
-    data  = as.matrix(bl_filt$train_data[, var_names]),
-    label = bl_filt$train_data[["class"]]
+    data  = as.matrix(bl_dat$train_data[, var_names]),
+    label = bl_dat$train_data[["class"]]
   )
   xgb_fit <- xgboost::xgb.train(
     params  = list(objective = "binary:logistic", eval_metric = "auc",
@@ -117,7 +116,7 @@
     model      = list(model = xgb_fit, features = var_names),
     model_type = "XGB",
     var_names  = var_names,
-    train_data = bl_filt$train_data   # supplies accuracy and Gini; omit if unavailable
+    train_data = bl_dat$train_data   # supplies accuracy and Gini; omit if unavailable
   )
   print(bl_mod)
 }
@@ -126,7 +125,7 @@
 # ---- Step 6: Build result object and biplot ----------------------------
 {
   bl_results <- bl_build_result(
-    bl_data  = bl_filt,
+    bl_data  = bl_dat,
     bl_model = bl_mod,
     method   = "CVA",
     title    = "Loan default -- loaded XGB model, CVA biplot",

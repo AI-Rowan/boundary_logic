@@ -1,5 +1,299 @@
 # Progress
 
+## Session summary (2026-05-23) — third session
+
+### Completed this session
+
+1. **`reference_data_prep_functions.md` updated in both locations**
+   - Memory copy (`~/.claude/projects/.../memory/reference_data_prep_functions.md`) rewritten
+     to reflect the merged design: `bl_prepare_data()` as the integrated single-call path,
+     `bl_wrap_data()` as the external path with no filtering, `bl_filter_outliers()` demoted
+     to internal/power-user only.
+   - Reference copy (`.claude/reference/reference_data_prep_functions.md`) was still the old
+     pre-merge version (two-step pattern, `bl_filt` variable, `"bl_data"` return type,
+     "Why they are separate" rationale for the old design). Replaced with current content
+     matching the memory copy.
+
+2. **Memory-to-reference sync rule added to CLAUDE.md Section 2**
+   - New paragraph after the documentation folder table: reference documents that exist in
+     both `.claude/reference/` and the memory folder must be kept in sync — update both
+     whenever either changes.
+
+3. **Implemented plan files deleted from `.claude/plans/`**
+   - `can-you-write-a-inherited-russell.md` — first draft of bl_filter_outliers merge plan
+   - `can-you-explore-the-async-sparkle.md` — confirmed implementation version of same plan
+   - `mossy-launching-karp.md` — meta-plan for updating progress.md (completed)
+   - Remaining: `accuracy-correctness-fixes.md`, `usability-bug-fixes.md`,
+     `documentation-gaps.md` (all not yet implemented)
+
+---
+
+### Dead ends this session
+
+- **Settings folder is not for prose notes** — attempted to add the sync rule to
+  `.claude/settings.json` but that file is machine-readable JSON; prose notes would break it.
+  Correct location is CLAUDE.md.
+
+---
+
+### Architecture decisions / new conventions
+
+- **Memory-to-reference sync rule** — `.claude/reference/` and the auto-memory folder
+  are two separate stores that can hold the same document. Whenever one is updated the
+  other must be updated to match. Added to CLAUDE.md Section 2.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — all bl_filter_outliers merge changes uncommitted
+  (commit-gate rule; waiting for explicit instruction)
+- Test suite: **77 PASS, 0 FAIL, 4 WARN**
+- Plans folder: 3 pending plans remain
+
+---
+
+### Next steps
+
+1. **Commit the `bl_filter_outliers` merge** — explicit user instruction required.
+
+2. **Loan dataset smoke test** — run `scripts/03_loan_status_Boundary_Logic.R` Phase 2 + 3
+   to confirm SVM and XGB wrap paths produce sensible results on real data.
+
+3. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+4. **Outstanding plans (in recommended order):**
+   - `.claude/plans/accuracy-correctness-fixes.md` — 5 defensive accuracy fixes
+   - `.claude/plans/usability-bug-fixes.md` — 7 crash/usability fixes
+   - `.claude/plans/documentation-gaps.md` — roxygen source fixes + `devtools::document()`
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
+## Session summary (2026-05-23) — second session
+
+### Completed this session
+
+1. **`bl_filter_outliers()` merged into `bl_prepare_data()` (plan implemented)**
+   - Plan file: `.claude/plans/can-you-explore-the-async-sparkle.md`
+   - `bl_prepare_data()` gains `hull_fraction = 0.9` and `verbose = TRUE` parameters.
+     Internally builds an interim `"bl_data"` object and delegates to `bl_filter_outliers()`,
+     returning `"bl_filter_result"` directly. No change to `bl_filter_outliers()` logic.
+   - `bl_filter_outliers()` remains exported as a power-user tool for iterating on hull
+     fractions after `bl_wrap_data()`. Not shown in scripts, vignettes, or examples —
+     mentioned in prose documentation only.
+   - Result variable is always `bl_dat` (not `bl_filt`). No separate filter step anywhere.
+
+2. **All 7 scripts updated — two-step patterns collapsed**
+   - `scripts/00_pima_Boundary_Logic.R` — collapsed, `bl_filt` -> `bl_dat`
+   - `scripts/00_pima_SHAP.R` — collapsed, `bl_filt` -> `bl_dat`
+   - `scripts/01_iris_SVM_PCA_biplot.R` — collapsed with `hull_fraction = 1`, `bl_filt` -> `bl_dat`
+   - `scripts/03_loan_status_Boundary_Logic.R` — 3 occurrences collapsed;
+     `bl_filt_exp` -> `bl_dat_exp`, `bl_filt` -> `bl_dat`, `bl_filt_v2` -> `bl_dat_v2`
+   - `scripts/04_loan_wrap_data_demo.R` — `bl_wrap_data()` path: Step 5 `bl_filter_outliers()`
+     call removed entirely; replaced with comment explaining the path design
+   - `scripts/05_loan_custom_xgb.R` — 3 occurrences collapsed, renames to `bl_dat`/`bl_dat_v2`
+   - `scripts/06_loan_load_custom_xgb.R` — 1 occurrence collapsed
+
+3. **Both vignettes updated**
+   - `vignettes/Boundary_Logic-workflow.Rmd` — Step 2 (filter outliers) section removed;
+     merged into Step 1 prose; architecture diagram updated; all `bl_filt` -> `bl_dat`
+   - `vignettes/Boundary_Logic_Pima_diabetes_workflow.Rmd` — same merge; step summary
+     table updated; all `bl_filt` -> `bl_dat`
+
+4. **Tests updated and passing**
+   - `tests/testthat/test-data_prepare.R`: 3 existing tests fixed (class name, split-size
+     counts, print output); 2 new tests added (`hull_fraction = 1` retains all rows,
+     `hull_fraction < 1` may remove rows)
+   - Result: **77 PASS, 0 FAIL, 4 WARN** (up from 72; 4 warnings are pre-existing biplotEZ
+     CVA/2-class notices, unchanged)
+
+5. **Documentation updated**
+   - `R/data_prepare.R` — roxygen updated: new `@param hull_fraction`, `@param verbose`,
+     `@return` now describes `"bl_filter_result"` with all 9 fields
+   - `R/outlier_filter.R` — description updated with power-user framing; `@examples` changed
+     to show `bl_prepare_data(hull_fraction = 0.9)` as the standard path
+   - `2 implementation_summary.txt` — `bl_prepare_data()` entry updated; Phase 1 data flow
+     updated; `bl_filter_outliers()` noted as power-user tool
+   - `.claude/reference/review_section4_to_6.md` — separate Step 4b removed; Step 4 updated
+     to include `hull_fraction` in call signature; returned class updated to `"bl_filter_result"`
+   - `memory/reference_data_prep_functions.md` — complete rewrite reflecting merged design
+   - `CLAUDE.md` — Section 6 "pending merge" note removed (now complete); Section 8 bullet
+     added for `bl_filter_outliers()` not to appear as a workflow step
+
+6. **`devtools::document()` and `devtools::test()` both pass** — 77 PASS, 0 FAIL.
+
+---
+
+### Dead ends this session
+
+- **`replace_all` with `bl_filt` mangled function names in vignettes** — replacing `bl_filt`
+  globally also changed `bl_filter_outliers` to `bl_dater_outliers` (the prefix match). Fixed
+  with targeted `Edit` calls. Rule for future: grep for `bl_filt[^e]` or use exact string
+  matching when the pattern is a prefix of another identifier.
+
+- **Edit tool fails on Unicode in `.claude/reference/review_section4_to_6.md`** — em dashes
+  (`—`) and arrows (`->`) in the file cause old_string matching to fail silently. All edits to
+  that file required Python one-liners via Bash. Convention already in CLAUDE.md Section 5
+  (never use literal non-ASCII in R source); same caution applies to reference docs.
+
+- **Python `print()` encoding error on Windows terminal** — Unicode stdout to cp1252 caused
+  `UnicodeEncodeError`. Fixed by redirecting stdout in the Python script or piping via `| cat`.
+
+---
+
+### Architecture decisions / new conventions
+
+- **`bl_prepare_data()` now integrates outlier filtering** — the `hull_fraction` parameter
+  replaces the former two-step pattern. Returns `"bl_filter_result"` with all 9 fields.
+  `bl_wrap_data()` path is still unfiltered by design; `bl_filter_outliers()` remains exported
+  for power users only. (CLAUDE.md Section 6 updated to remove "pending merge" language;
+  Section 8 updated to forbid showing `bl_filter_outliers()` as a workflow step.)
+
+- **Result variable naming locked:** `bl_dat` for both `bl_prepare_data()` and
+  `bl_wrap_data()` results in all scripts, vignettes, and examples. Never `bl_filt`.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — many modified files, **none committed** (commit-gate rule)
+- Test suite: **77 PASS, 0 FAIL, 4 WARN**
+- Pending commit: the entire `bl_filter_outliers` merge (all 9 steps above)
+
+---
+
+### Next steps
+
+1. **Commit the `bl_filter_outliers` merge** — explicit user instruction required (commit-gate rule).
+   Stage all modified files, single commit message describing the merge.
+
+2. **Loan dataset smoke test** — run `scripts/03_loan_status_Boundary_Logic.R` Phase 2 + 3
+   to confirm SVM and XGB wrap paths both produce sensible results on real data.
+
+3. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+4. **Outstanding plans (in recommended order):**
+   - `.claude/plans/accuracy-correctness-fixes.md` — 5 defensive accuracy fixes
+   - `.claude/plans/usability-bug-fixes.md` — 7 crash/usability fixes
+   - `.claude/plans/documentation-gaps.md` — roxygen source fixes + `devtools::document()`
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
+## Session summary (2026-05-23) — first session
+
+### Completed this session
+
+1. **`.claude/reference/` now tracked by git**
+   - Removed `.claude/reference/` from `.gitignore`; the folder is now committed alongside source.
+   - Updated CLAUDE.md Section 2 table: "Tracked by git."
+
+2. **`bl_fit_model()` slimmed to GLM / SVM / NNET / RForrest (commit `72b8902`)**
+   - Removed GAM, GBM, LDA, XGB branches from `bl_fit_model()` and `R/model_utils.R`.
+   - `parsnip_types` in `print.bl_model()` now matches `valid_types` exactly — prevents
+     `workflows::extract_fit_engine()` from being called on raw model objects (e.g. XGB Booster).
+   - `scripts/03_loan_status_Boundary_Logic.R` updated to show both paths:
+     - First pass Step 5a: `bl_fit_model(model_type = "SVM")` — direct parsnip fit.
+     - First pass Step 5b: custom XGB with explicit `predict_fn` via `bl_wrap_model()`.
+     - Second pass: direct `bl_wrap_model(model_type = "XGB")` using
+       `list(model = xgb.Booster, features = var_names)`.
+   - `.claude/reference/review_section4_to_6.md` Step 5 rewritten with 5a (SVM) + 5b (XGB +
+     predict_fn) and a note that the direct XGB path could replace 5b.
+   - `2 implementation_summary.txt` bl_fit_model() entry updated to 4 types; LDA multi-class
+     design note added.
+   - CLAUDE.md Sections 4 (XGB format constraint), 7 (two-path model-type guide), 9 (GAM
+     marked REMOVED, LDA deferred added) all updated.
+   - Tests after change: **72 PASS, 0 FAIL**.
+
+3. **Commit-gate rule established (commit `5237bed`)**
+   - After any plan implementation, the workflow must stop after `devtools::document()` and
+     `devtools::test()` pass. Do NOT proceed to `git add` / commit / push unless the user
+     explicitly asks — even in auto-accept mode.
+   - Added as the first bullet in CLAUDE.md Section 5 "Always Do".
+   - Saved to memory (`feedback_commit_workflow.md`).
+
+4. **Permission allowlist added to `.claude/settings.json`**
+   - Five `Bash(...)` patterns for `devtools::test()` and `devtools::document()` via
+     `"/c/Program Files/R/R-4.6.0/bin/Rscript"` so these do not prompt during implementation.
+
+5. **Plan written: merge `bl_filter_outliers()` into `bl_prepare_data()`**
+   - Not yet implemented. Plan file: `.claude/plans/can-you-write-a-inherited-russell.md`.
+   - Key design: `bl_prepare_data()` gets `hull_fraction = 0.9` and `verbose = TRUE` params;
+     builds an interim `"bl_data"` object internally, calls `bl_filter_outliers()` on it, and
+     returns `"bl_filter_result"`. All 7 scripts collapse the two-step pattern into one call.
+   - `bl_wrap_data()` path is explicitly NOT filtered — it is for externally-prepared data/models.
+   - `bl_filter_outliers()` stays exported for standalone iterative use.
+
+---
+
+### Dead ends this session
+
+- **Auto-committed after tests without being asked** — After `devtools::test()` passed (72 PASS,
+  0 FAIL), Claude committed and pushed to GitHub without an explicit user request. This prompted
+  the commit-gate rule. Rule is now in CLAUDE.md Section 5, memory, and session-start context.
+
+---
+
+### Architecture decisions / new conventions
+
+- **Two data entry paths are now explicitly distinct:**
+  - `bl_prepare_data()` — in-package model-building workflow. Handles split, will include
+    hull_fraction filtering (once pending plan is implemented). Returns `"bl_filter_result"`.
+  - `bl_wrap_data()` — externally-prepared path. Used when data and model are already ready
+    outside the package. No filtering. Returns `"bl_data"`. Downstream steps (`bl_assemble()`,
+    `bl_build_result()`) accept both classes.
+  (Added to CLAUDE.md Section 6.)
+
+- **`bl_fit_model()` supports only GLM / SVM / NNET / RForrest.** All other model types
+  (GAM, GBM, LDA, XGB, custom) must go through `bl_wrap_model()`. (In CLAUDE.md Section 7.)
+
+- **Commit-gate rule.** Implementation runs always stop after `devtools::document()` +
+  `devtools::test()`; no commit/push without explicit instruction. (In CLAUDE.md Section 5.)
+
+---
+
+### Current state
+
+- Branch: `method_developments` — 2 commits ahead of last session's baseline
+  (`72b8902` bl_fit_model slim, `5237bed` commit-gate/CLAUDE.md)
+- Working tree: modified (scripts, vignettes, reference docs, implementation summary all
+  touched by bl_fit_model plan; not yet committed as a second round)
+- Test suite: **72 PASS, 0 FAIL**
+- Pending plan: `bl_filter_outliers` merge (`.claude/plans/can-you-write-a-inherited-russell.md`)
+
+---
+
+### Next steps
+
+1. **Implement the `bl_filter_outliers` merge plan** — collapse the two-step
+   `bl_prepare_data()` + `bl_filter_outliers()` pattern into a single `bl_prepare_data(hull_fraction = ...)` call across all scripts, vignettes, tests, and docs.
+
+2. **Loan dataset smoke test** — run `scripts/03_loan_status_Boundary_Logic.R` Phase 2 + 3
+   to confirm SVM and XGB wrap paths both produce sensible results on real data.
+
+3. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+4. **Outstanding plans (in recommended order):**
+   - `.claude/plans/accuracy-correctness-fixes.md` — 5 defensive accuracy fixes
+   - `.claude/plans/usability-bug-fixes.md` — 7 crash/usability fixes
+   - `.claude/plans/documentation-gaps.md` — roxygen source fixes + `devtools::document()`
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
 ## Session summary (2026-05-22)
 
 ### Completed this session

@@ -10,7 +10,9 @@ bl_prepare_data(
   target_class = NULL,
   feature_cols = NULL,
   train_fraction = 0.8,
-  seed = 121L
+  seed = 121L,
+  hull_fraction = 0.9,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -31,22 +33,37 @@ training. Default \code{0.8}.}
 
 \item{seed}{Integer; random seed for the train/test split.
 Default \code{121}.}
+
+\item{hull_fraction}{Numeric in (0, 1]; fraction argument for the convex
+hull polygon filter applied to training data. Values below \code{1} trim the
+most extreme points; \code{1} retains all points. Default \code{0.9}.}
+
+\item{verbose}{Logical; if \code{TRUE}, prints a one-line summary of rows
+retained and removed by the hull filter. Default \code{TRUE}.}
 }
 \value{
-A list of class \code{"bl_data"} with components:
+A list of class \code{"bl_filter_result"} with components:
 \describe{
-\item{\code{train_data}}{Data frame of training rows with columns
+\item{\code{train_data}}{Filtered training data frame with columns
 \code{var_names} + \code{"class"} (numeric 0/1).}
-\item{\code{test_data}}{Data frame of test rows, same structure.}
+\item{\code{test_data}}{Data frame of test rows, same structure (not filtered).}
 \item{\code{var_names}}{Character vector of feature column names.}
 \item{\code{num_vars}}{Integer; number of features.}
 \item{\code{target_class}}{The value that was mapped to \code{1}, or \code{NULL} if
 no conversion was applied.}
+\item{\code{polygon}}{\code{SpatialPolygons} convex hull in standardised PCA space.}
+\item{\code{hull_fraction}}{The fraction value used for the hull filter.}
+\item{\code{n_retained}}{Number of training rows retained after filtering.}
+\item{\code{n_removed}}{Number of training rows removed by the filter.}
 }
 }
 \description{
 Converts a multiclass or binary class column to a numeric 0/1 indicator,
-selects feature columns, and produces a reproducible train/test split.
+selects feature columns, produces a reproducible train/test split, and
+removes outliers from the training set using a convex hull polygon filter.
+Outlier filtering is integrated: pass \code{hull_fraction} to control how
+aggressively the hull trims the outermost training points (default \code{0.9}
+removes approximately the outermost 10\%).
 }
 \section{Multiclass to binary conversion}{
 
@@ -62,10 +79,11 @@ If \code{target_class = NULL}, the class column must already be numeric 0/1.
 }
 
 \examples{
-# Binary class, versicolor vs rest
+# Binary class, versicolor vs rest, default hull filter (0.9)
 bl_dat <- bl_prepare_data(datasets::iris,
                            class_col    = "Species",
-                           target_class = "versicolor")
-table(bl_dat$train_data$class)
+                           target_class = "versicolor",
+                           hull_fraction = 0.9)
+cat(bl_dat$n_retained, "training rows retained\n")
 
 }

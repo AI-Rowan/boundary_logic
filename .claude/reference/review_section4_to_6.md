@@ -40,7 +40,39 @@ The block runs 7 operations in sequence. Each produces one named object used by 
 
 ---
 
-### 4a — `bl_prepare_data()` → `bl_dat`
+### Alternative entry point: `bl_wrap_data()`
+
+If your data is already split (e.g. from a cross-validation framework or external pipeline),
+you can bypass `bl_prepare_data()` and supply pre-split frames directly. The commented-out
+block at the top of the Steps 4-6 section in script 03 shows the full pattern:
+
+```r
+# Rename outcome column to "class" and split manually
+data_clean <- loan_filtered[, c(feature_cols, "loan_status")]
+names(data_clean)[names(data_clean) == "loan_status"] <- "class"
+set.seed(121L)
+n          <- nrow(data_clean)
+train_idx  <- sample(n, size = floor(0.8 * n), replace = FALSE)
+train_data <- data_clean[ train_idx, , drop = FALSE]
+test_data  <- data_clean[-train_idx, , drop = FALSE]
+rownames(train_data) <- NULL; rownames(test_data) <- NULL
+bl_dat <- bl_wrap_data(
+  train_data   = train_data,
+  test_data    = test_data,
+  var_names    = feature_cols,
+  target_class = NULL       # loan_status already encoded as 0/1
+)
+# bl_wrap_data() does not filter outliers; call bl_filter_outliers() if needed:
+# bl_dat <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
+```
+
+`bl_wrap_data()` returns `"bl_data"` (not `"bl_filter_result"`), but both classes are accepted
+by all downstream functions. All Steps 5-6 and Phases 2-3 are identical regardless of which
+entry point was used.
+
+---
+
+### 4 — `bl_prepare_data()` → `bl_dat`
 
 **File:** `R/data_prepare.R`
 
@@ -51,7 +83,8 @@ bl_dat <- bl_prepare_data(
   class_col      = "loan_status",
   feature_cols   = feature_cols,
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 0.9
 )
 ```
 
@@ -73,7 +106,12 @@ bl_dat <- bl_prepare_data(
    - Remaining rows → `test_data`
    - Row names are cleared from both.
 
-**Returned object — `bl_dat` (S3 class `"bl_data"`):**
+6. **Calls `bl_filter_outliers()` internally** on the interim `"bl_data"` object:
+   - Standardises training features, runs lightweight 2D PCA, builds convex hull.
+   - Removes training rows outside the hull; test set passed through unchanged.
+   - Prints one-line summary (if `verbose = TRUE`).
+
+**Returned object — `bl_dat` (S3 class `"bl_filter_result"`):**
 
 | Field | Type | Content |
 |---|---|---|
@@ -85,60 +123,9 @@ bl_dat <- bl_prepare_data(
 
 ---
 
-### 4b — `bl_filter_outliers()` → `bl_filt`
+### 4b (integrated)
 
-**File:** `R/outlier_filter.R`
-
-**Call:**
-```r
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-```
-
-**Purpose:** Remove extreme outliers from the *training set* by keeping only points inside a 90%-density convex hull in 2D PCA space. The test set is passed through unchanged.
-
-**What it does, step by step:**
-
-1. **Validates** `bl_dat` is a `"bl_data"` object; `hull_fraction` is in (0, 1].
-
-2. **Standardises training features** (z-score, using training means and SDs):
-   ```
-   X_st = (X - colMeans(X)) / colSDs(X)
-   ```
-   Any constant column gets SD=1 to avoid division by zero.
-
-3. **Lightweight 2D PCA** via `svd(X_st, nu=2, nv=2)`:
-   - Extracts the first 2 right singular vectors (i.e., the first 2 PC loading directions)
-   - Projects: `Z_train = X_st %*% V[, 1:2]` → n × 2 matrix, columns named `"x"`, `"y"`
-
-4. **Builds convex hull** via `.build_hull_polygon()` (`hull_utils.R`):
-   - Opens an off-screen PNG device (so nothing appears on screen)
-   - Calls `aplpack::plothulls(x=Z[,1], y=Z[,2], fraction=0.9, n.hull=1)` — the `fraction=0.9` means 90% of points land inside the hull
-   - Wraps the returned hull vertex coordinates as an `sp::SpatialPolygons` object
-   - Closes the PNG device
-
-5. **Point-in-polygon test** via `.points_in_polygon()` (`hull_utils.R`):
-   - Converts `Z_train` to spatial points (`sp::SpatialPoints`)
-   - `sp::over(points, polygon)` returns NA for points outside → logical vector `inside`
-
-6. **Filters** `train_data` to only rows where `inside == TRUE`.
-
-7. Prints one-line summary: `"Retained X of Y (Z%); removed A (B%)"`.
-
-**Returned object — `bl_filt` (S3 class `"bl_filter_result"`):**
-
-| Field | Type | Content |
-|---|---|---|
-| `train_data` | data.frame | Filtered training rows (inside hull); row names cleared |
-| `test_data` | data.frame | Test data **unchanged** from `bl_dat$test_data` |
-| `var_names` | character vector | Same as `bl_dat$var_names` |
-| `num_vars` | integer | Same as `bl_dat$num_vars` |
-| `target_class` | NULL | Passed through |
-| `polygon` | `sp::SpatialPolygons` | The 2D convex hull in *standardised PCA space* (used only for this filtering step — NOT reused downstream) |
-| `hull_fraction` | numeric | `0.9` |
-| `n_retained` | integer | Rows kept |
-| `n_removed` | integer | Rows removed |
-
-> **Note:** The `polygon` in `bl_filt` is in the *raw standardised PCA space* used during filtering. It is **not** the same polygon that gets stored in `bl_results` later. The downstream polygon (in `bl_results`) is recomputed in the final CVA Z-space by `bl_build_grid()`.
+Outlier filtering is now integrated into  via . See Step 4 above for the full mechanics.
 
 ---
 
@@ -155,8 +142,8 @@ bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
 **Call (Step 5a in script, quick baseline):**
 ```r
 bl_mod_svm <- bl_fit_model(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
+  train_data = bl_dat$train_data,
+  var_names  = bl_dat$var_names,
   model_type = "SVM"
 )
 ```
@@ -206,27 +193,27 @@ bl_mod_svm <- bl_fit_model(
 **Call (Step 5b in script, used for full analysis):**
 ```r
 xgb_data <- xgboost::xgb.DMatrix(
-  data  = as.matrix(bl_filt$train_data[, bl_filt$var_names]),
-  label = bl_filt$train_data$class
+  data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
+  label = bl_dat$train_data$class
 )
-xgb_fit <- xgboost::xgboost(
-  data        = xgb_data,
-  nrounds     = 200,
-  objective   = "binary:logistic",
-  eval_metric = "logloss",
-  max_depth   = 3,
-  eta         = 0.1,
-  verbose     = 0
+xgb_fit <- xgboost::xgb.train(
+  params  = list(objective     = "binary:logistic",
+                 eval_metric   = "logloss",
+                 max_depth     = 3,
+                 learning_rate = 0.1),
+  data    = xgb_data,
+  nrounds = 200,
+  verbose = 0
 )
 bl_mod <- bl_wrap_model(
   model      = xgb_fit,
   model_type = "custom",
-  var_names  = bl_filt$var_names,
+  var_names  = bl_dat$var_names,
   predict_fn = function(m, new_data) {
     mat <- xgboost::xgb.DMatrix(as.matrix(new_data))
     as.numeric(predict(m, newdata = mat))
   },
-  train_data = bl_filt$train_data
+  train_data = bl_dat$train_data
 )
 ```
 
@@ -247,10 +234,10 @@ bl_mod <- bl_wrap_model(
 > **Alternative (direct XGB path):** Instead of `model_type = "custom"` with a `predict_fn`, you can pass the raw booster with feature metadata and let the built-in XGB dispatch handle prediction:
 > ```r
 > bl_mod <- bl_wrap_model(
->   model      = list(model = xgb_fit, features = bl_filt$var_names),
+>   model      = list(model = xgb_fit, features = bl_dat$var_names),
 >   model_type = "XGB",
->   var_names  = bl_filt$var_names,
->   train_data = bl_filt$train_data
+>   var_names  = bl_dat$var_names,
+>   train_data = bl_dat$train_data
 > )
 > ```
 > The `custom` + `predict_fn` approach is shown here because it makes the prediction contract explicit and generalises to any model type not natively supported.
@@ -261,7 +248,7 @@ bl_mod <- bl_wrap_model(
 |---|---|---|
 | `model` | list | `list(model = <xgb.Booster>, predict_fn = <function>)` |
 | `model_type` | character | `"custom"` |
-| `var_names` | character vector | Predictor names (copy of `bl_filt$var_names`) |
+| `var_names` | character vector | Predictor names (copy of `bl_dat$var_names`) |
 | `cutoff` | numeric | `0.5` |
 | `accuracy` | numeric | Training accuracy, e.g. `0.91` |
 | `gini` | numeric | Training Gini coefficient, e.g. `0.85` |
@@ -275,7 +262,7 @@ bl_mod <- bl_wrap_model(
 **Call:**
 ```r
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "CVA",
   title    = "Loan default (prior defaulters) — XGB, CVA biplot",
@@ -372,7 +359,7 @@ Combines all artifacts into the final `bl_result` object.
 
 | Category | Field | Content |
 |---|---|---|
-| **Data** | `train_data` | Filtered training data (from `bl_filt`) |
+| **Data** | `train_data` | Filtered training data (from `bl_dat`) |
 | | `test_data` | Test data filtered to training variable ranges |
 | | `var_names` | Predictor names |
 | | `num_vars` | Number of predictors |
@@ -508,20 +495,13 @@ loan_encoded (data.frame, ~45 k rows × 9 cols)
 loan_filtered (data.frame, ~27 k rows × 9 cols)
 feature_cols  (character vector, p predictor names)
      │
-     │  bl_prepare_data()
+     │  bl_prepare_data(hull_fraction = 0.9)
+     │  → split → bl_filter_outliers() → standardise → SVD → 2D hull → point-in-polygon
      ▼
-bl_dat  [bl_data]
-  ├── train_data  (21 600 rows × p+1 cols)
-  ├── test_data   (5 400 rows × p+1 cols)
-  └── var_names, num_vars, target_class=NULL
-     │
-     │  bl_filter_outliers(hull_fraction = 0.9)
-     │  → standardise → SVD → 2D hull → point-in-polygon
-     ▼
-bl_filt  [bl_filter_result]
+bl_dat  [bl_filter_result]
   ├── train_data  (filtered, ~19-20 k rows)
   ├── test_data   (unchanged, 5 400 rows)
-  └── var_names, polygon, n_retained, n_removed
+  └── var_names, polygon, hull_fraction, n_retained, n_removed
      │
      │  bl_wrap_model(model_type = "custom", predict_fn = ...)
      │  → external xgboost fit → accuracy + Gini on train

@@ -51,16 +51,11 @@ bl_dat <- bl_prepare_data(
   class_col      = "Outcome",
   target_class   = NULL,       # already 0/1
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 0.9
 )
 
 print(bl_dat)
-
-
-# ---- Step 2: Filter outliers ------------------------------------------
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-
-#print(bl_filt)
 
 
 # ---- Step 3: Fit GAM and wrap -----------------------------------------
@@ -70,7 +65,7 @@ gam_formula <- class ~ s(Glucose) + s(BloodPressure) +
 
 custom_gam <- mgcv::gam(
   formula = gam_formula,
-  data    = bl_filt$train_data,
+  data    = bl_dat$train_data,
   family  = binomial(link = "logit")
 )
 
@@ -79,11 +74,11 @@ summary(custom_gam)
 bl_mod <- bl_wrap_model(
   model      = custom_gam,
   model_type = "custom",
-  var_names  = bl_filt$var_names,
+  var_names  = bl_dat$var_names,
   predict_fn = function(m, new_data) {
     as.numeric(mgcv::predict.gam(m, newdata = new_data, type = "response"))
   },
-  train_data = bl_filt$train_data
+  train_data = bl_dat$train_data
 )
 
 print(bl_mod)
@@ -92,10 +87,10 @@ print(bl_mod)
 # ---- Steps 4-6: Build projection, grid, and assemble ------------------
 # bl_build_result() wraps bl_build_projection() + bl_build_grid() +
 # bl_assemble() into a single call.
-#   - Pass bl_filt when outlier filtering was applied; bl_dat otherwise.
+#   - Pass bl_dat when outlier filtering was applied; bl_dat otherwise.
 #   - Set method = "PCA" for a variance-based projection.
 #   - Omit bl_mod to get an exploratory biplot without a prediction surface:
-#       bl_proj <- bl_build_result(bl_filt, method = "CVA"); plot(bl_proj)
+#       bl_proj <- bl_build_result(bl_dat, method = "CVA"); plot(bl_proj)
 #
 # b_margin controls only the decision boundary contour band half-width:
 #   b_margin = 0.01   ->  contours at 0.49 / 0.51
@@ -107,7 +102,7 @@ print(bl_mod)
 # that bl_predict(), bl_project_points(), and bl_find_boundary() all work.
 
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "CVA",
   title    = "Pima diabetes — GAM, CVA biplot",

@@ -36,17 +36,11 @@ bl_dat <- bl_prepare_data(
   class_col      = "Species",
   target_class   = "versicolor",
   train_fraction = 0.8,
-  seed           = 121L
+  seed           = 121L,
+  hull_fraction  = 1
 )
 
-
-
-
 print(bl_dat)
-
-
-# ---- Step 2: Filter outliers ------------------------------------------
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 1)
 
 
 
@@ -56,8 +50,8 @@ bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 1)
 # can extract class-1 probabilities.
 
 bl_mod <- bl_fit_model(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
+  train_data = bl_dat$train_data,
+  var_names  = bl_dat$var_names,
   model_type = "SVM"
 )
 
@@ -69,7 +63,7 @@ print(bl_mod)
 # b_margin = 0.01 -- contour band = cutoff +/- 0.01
 
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "PCA",
   standardise = T,

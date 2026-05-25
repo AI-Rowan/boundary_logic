@@ -6,7 +6,11 @@
 #' Prepare a data frame for boundary logic analysis
 #'
 #' Converts a multiclass or binary class column to a numeric 0/1 indicator,
-#' selects feature columns, and produces a reproducible train/test split.
+#' selects feature columns, produces a reproducible train/test split, and
+#' removes outliers from the training set using a convex hull polygon filter.
+#' Outlier filtering is integrated: pass `hull_fraction` to control how
+#' aggressively the hull trims the outermost training points (default `0.9`
+#' removes approximately the outermost 10%).
 #'
 #' @section Multiclass to binary conversion:
 #' If your data has more than two classes (e.g., `datasets::iris` has three Species),
@@ -30,24 +34,34 @@
 #'   training. Default `0.8`.
 #' @param seed           Integer; random seed for the train/test split.
 #'   Default `121`.
+#' @param hull_fraction  Numeric in (0, 1]; fraction argument for the convex
+#'   hull polygon filter applied to training data. Values below `1` trim the
+#'   most extreme points; `1` retains all points. Default `0.9`.
+#' @param verbose        Logical; if `TRUE`, prints a one-line summary of rows
+#'   retained and removed by the hull filter. Default `TRUE`.
 #'
-#' @return A list of class `"bl_data"` with components:
+#' @return A list of class `"bl_filter_result"` with components:
 #' \describe{
-#'   \item{`train_data`}{Data frame of training rows with columns
+#'   \item{`train_data`}{Filtered training data frame with columns
 #'     `var_names` + `"class"` (numeric 0/1).}
-#'   \item{`test_data`}{Data frame of test rows, same structure.}
+#'   \item{`test_data`}{Data frame of test rows, same structure (not filtered).}
 #'   \item{`var_names`}{Character vector of feature column names.}
 #'   \item{`num_vars`}{Integer; number of features.}
 #'   \item{`target_class`}{The value that was mapped to `1`, or `NULL` if
 #'     no conversion was applied.}
+#'   \item{`polygon`}{`SpatialPolygons` convex hull in standardised PCA space.}
+#'   \item{`hull_fraction`}{The fraction value used for the hull filter.}
+#'   \item{`n_retained`}{Number of training rows retained after filtering.}
+#'   \item{`n_removed`}{Number of training rows removed by the filter.}
 #' }
 #'
 #' @examples
-#' # Binary class, versicolor vs rest
+#' # Binary class, versicolor vs rest, default hull filter (0.9)
 #' bl_dat <- bl_prepare_data(datasets::iris,
 #'                            class_col    = "Species",
-#'                            target_class = "versicolor")
-#' table(bl_dat$train_data$class)
+#'                            target_class = "versicolor",
+#'                            hull_fraction = 0.9)
+#' cat(bl_dat$n_retained, "training rows retained\n")
 #'
 #' @export
 bl_prepare_data <- function(data,
@@ -55,7 +69,9 @@ bl_prepare_data <- function(data,
                             target_class   = NULL,
                             feature_cols   = NULL,
                             train_fraction = 0.8,
-                            seed           = 121L) {
+                            seed           = 121L,
+                            hull_fraction  = 0.9,
+                            verbose        = TRUE) {
 
   # ---- Input validation ------------------------------------------------
   stop_if_not_data_frame(data, "data")
@@ -120,7 +136,7 @@ bl_prepare_data <- function(data,
   rownames(test_data)  <- NULL
 
   # ---- Return ----------------------------------------------------------
-  structure(
+  bl_data_raw <- structure(
     list(
       train_data   = train_data,
       test_data    = test_data,
@@ -130,6 +146,7 @@ bl_prepare_data <- function(data,
     ),
     class = "bl_data"
   )
+  bl_filter_outliers(bl_data_raw, hull_fraction = hull_fraction, verbose = verbose)
 }
 
 
