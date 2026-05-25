@@ -1,5 +1,96 @@
 # Progress
 
+## Session summary (2026-05-25)
+
+### Completed this session
+
+1. **Committed and pushed the `bl_filter_outliers` merge (commit `d509201`)**
+   - All work from the previous three sessions (2026-05-23) was uncommitted under the
+     commit-gate rule. Committed and pushed to `origin/method_developments` this session.
+   - 21 files changed: `bl_prepare_data()` integration, all 7 scripts, both vignettes,
+     tests, roxygen docs, reference docs, implementation summary, CLAUDE.md, progress.md.
+
+2. **xgboost API fix in `scripts/03_loan_status_Boundary_Logic.R`**
+   - `xgboost::xgboost()` broke with a newer xgboost version: `data` renamed to `x`,
+     `eta` renamed to `learning_rate`, `y` now a required separate argument.
+   - Both XGB call sites in script 03 (Steps 4-6 and Steps 4b-6b) updated to
+     `xgboost::xgb.train()` with a `params` list and `learning_rate = 0.1`.
+   - Scripts 05 and 06 already used `xgb.train()` — no changes needed there.
+
+3. **`bl_find_boundary()` message reworded**
+   - Old: `"bl_find_boundary(): %d counterfactual(s) back-project outside training feature ranges."`
+   - New: `"bl_find_boundary(): %d identified counterfactual(s) are outside the training feature ranges, but are retained."`
+   - Change in `R/boundary.R` line 413.
+
+4. **`bl_wrap_data()` alternative added to `scripts/03_loan_status_Boundary_Logic.R`**
+   - Commented-out block added above the Steps 4-6 `{}` block showing the full manual
+     split + `bl_wrap_data()` + optional `bl_filter_outliers()` pattern.
+   - `.claude/reference/review_section4_to_6.md` updated with a matching new section
+     ("Alternative entry point: `bl_wrap_data()`") and the xgboost API fix in Step 5b.
+
+5. **Removed accidental duplicate `.claude/reference/04_loan_wrap_data_demo.R`**
+   - This file was committed to `.claude/reference/` in error in commit `bcfc3fb`
+     (2026-05-19); the intended file is `scripts/04_loan_wrap_data_demo.R`.
+   - The reference copy was never referenced from anywhere in the package.
+   - Removed via `git rm`; `scripts/04_loan_wrap_data_demo.R` is unaffected.
+
+6. **Partial loan dataset smoke test completed**
+   - Ran `scripts/03_loan_status_Boundary_Logic.R` interactively through Phase 2 Step 7
+     (first pass). `bl_find_boundary()` ran without errors; the reworded message appeared
+     as expected (27 counterfactuals outside training ranges, retained).
+   - Full Phase 2 + Phase 3 smoke test not completed this session.
+
+---
+
+### Dead ends this session
+
+- **Python inline script via `python3 -c`** — shell quoting with backticks inside the
+  heredoc caused `NOT FOUND` on the first pattern match attempt when updating the reference
+  doc. Fixed by writing the Python logic to a temporary `.py` file and running it via
+  `python3 fix_ref_doc.py`. Temporary file deleted after use.
+
+- **Reference doc em-dash mismatch** — the Step 4 heading in `review_section4_to_6.md`
+  uses Unicode em dash `—` and arrow `→`; the first Python script used ASCII `--` and `->`,
+  causing the match to fail. Required a second script using the exact Unicode characters
+  read back from the file via `grep`.
+
+---
+
+### Architecture decisions / new conventions
+
+None this session. All changes were bug fixes, message tweaks, and documentation updates.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — up to date with `origin/method_developments` (commit `d509201`)
+- Working tree: clean
+- Test suite: **77 PASS, 0 FAIL, 4 WARN** (last confirmed 2026-05-23; no source changes
+  this session that would affect tests)
+
+---
+
+### Next steps
+
+1. **Complete the loan dataset smoke test** — continue running `scripts/03_loan_status_Boundary_Logic.R`
+   through Phase 2 Steps 8-9 (distance plots, surrogate) and full Phase 3 (Steps 11-17).
+   Confirm Mahalanobis selector and filter-order swap behave sensibly on real loan data.
+
+2. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+3. **Outstanding plans (in recommended order):**
+   - `.claude/plans/accuracy-correctness-fixes.md` — 5 defensive accuracy fixes
+   - `.claude/plans/usability-bug-fixes.md` — 7 crash/usability fixes
+   - `.claude/plans/documentation-gaps.md` — roxygen source fixes + `devtools::document()`
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
 ## Session summary (2026-05-23) — third session
 
 ### Completed this session
