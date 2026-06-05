@@ -2,7 +2,7 @@
 # Internal model fitting dispatcher — tidymodels edition
 # Refactored from: scripts/2.2 Model_use fitting v2.R
 #
-# Supported types: GLM, SVM, NNET, RForrest (all parsnip/workflows).
+# Supported types: GLM, SVM, NNET, RForest (all parsnip/workflows).
 # Other types (GBM, GAM, LDA, XGB) must be fitted externally and
 # registered via bl_wrap_model().
 ############################################################
@@ -12,7 +12,7 @@
   NNET     = list(hidden_units = 20L, penalty = 0.001, epochs = 1000L),
   SVM      = list(),
   GLM      = list(),
-  RForrest = list(min_n = 5L)
+  RForest = list(min_n = 5L)
 )
 
 
@@ -21,7 +21,7 @@
 #' @param train_data  Data frame with feature columns + a column named
 #'   `"class"` (numeric 0/1).
 #' @param var_names   Character vector of feature column names.
-#' @param model_type  One of `"GLM"`, `"SVM"`, `"NNET"`, `"RForrest"`.
+#' @param model_type  One of `"GLM"`, `"SVM"`, `"NNET"`, `"RForest"`.
 #' @param model_params Named list of hyperparameter overrides.
 #'
 #' @importFrom parsnip logistic_reg mlp svm_rbf decision_tree set_engine set_mode fit
@@ -33,10 +33,23 @@
 #' @keywords internal
 .fit_model <- function(train_data, var_names, model_type, model_params = list()) {
 
+  if (identical(model_type, "RForrest")) {
+    warning("model_type 'RForrest' is deprecated; use 'RForest'.", call. = FALSE)
+    model_type <- "RForest"
+  }
+
   # Merge user params over defaults (user values win)
   defaults <- .default_model_params[[model_type]]
   if (is.null(defaults)) defaults <- list()
   params <- utils::modifyList(defaults, model_params)
+
+  known_params <- names(defaults)
+  unknown      <- setdiff(names(model_params), known_params)
+  if (length(unknown) > 0L)
+    warning(sprintf(
+      "bl_fit_model(): unknown model_params key(s) for %s (ignored): %s",
+      model_type, paste(unknown, collapse = ", ")
+    ), call. = FALSE)
 
   # ---- tidymodels: factor outcome required for classification ------------
   train_tm       <- train_data
@@ -65,14 +78,14 @@
       parsnip::set_engine("nnet", trace = FALSE) |>
       parsnip::set_mode("classification"),
 
-    "RForrest" = parsnip::decision_tree(
+    "RForest" = parsnip::decision_tree(
       min_n = params$min_n
     ) |>
       parsnip::set_engine("rpart") |>
       parsnip::set_mode("classification"),
 
     stop(sprintf(
-      "Unknown model_type '%s'. Must be one of: GLM, SVM, NNET, RForrest.",
+      "Unknown model_type '%s'. Must be one of: GLM, SVM, NNET, RForest.",
       model_type
     ), call. = FALSE)
   )

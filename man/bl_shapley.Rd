@@ -8,7 +8,7 @@ bl_shapley(
   bl_local_result,
   exact_max_vars = 14L,
   approx_perm = 2048L,
-  seed = 1L
+  seed = NULL
 )
 }
 \arguments{
@@ -21,8 +21,9 @@ variables is at most this value. Default \code{14L}.}
 \item{approx_perm}{Integer; number of permutations for the approximate
 method. Default \code{2048L}.}
 
-\item{seed}{Random seed for the approximate method. Default
-\code{1L}.}
+\item{seed}{Random seed for the approximate method. \code{NULL}
+(default) uses the current RNG state, giving independent estimates across
+repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results.}
 }
 \value{
 A list of class \code{"bl_shapley"} with the following fields:

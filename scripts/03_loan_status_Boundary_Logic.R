@@ -14,24 +14,23 @@
 #   Step 3   : Domain filter: keep only prior-defaulter sub-population
 #   Steps 4-6: Fit XGBoost model, build first PCA biplot
 #
-#   Phase 2 (Steps 7-9): Global interpretations
-#     7. Find nearest boundary point for each observation
-#     8. Distance-to-boundary plot (jitter + boxplot)
-#     9. Surrogate model
+#   Phase 2 (Steps 7-8): Global interpretations
+#     7. Find nearest boundary point + distance-to-boundary plots
+#     8. Surrogate model
 #
-#   Step 10  : Extract per-variable importance, prune weak variables
+#   Prune least-important variables
 #   Steps 4b-6b: Refit XGBoost on reduced feature set, rebuild biplot
-#   Phase 2 second pass (Steps 7b-9b): re-inspect with reduced model
+#   Phase 2 second pass (Steps 7b-8b): re-inspect with reduced model
 #
-#   Phase 3 (Steps 11-18): Local interpretation of one target
-#    11. Inspect predictions and select target
-#    12. Set actionability constraints
-#    13. Find local counterfactual via biplot rotation
-#    14. Local biplot plot
-#    15. Shapley contribution plot
-#    16. Sparse counterfactual
-#    17. (Optional) Unconstrained local search
-#    18. External applicant
+#   Phase 3 (Steps 9-16): Local interpretation of one target
+#     9. Inspect predictions and select target
+#    10. Set actionability constraints
+#    11. Find local counterfactual via biplot rotation
+#    12. Local biplot plot
+#    13. Shapley contribution plot
+#    14. Sparse counterfactual
+#    15. (Optional) Unconstrained local search
+#    16. External applicant
 #
 # Run interactively: place cursor inside a {} block and press Ctrl+Enter
 ############################################################
@@ -172,12 +171,12 @@
   print(bl_dat)
 
   # ---- Step 5a: SVM via bl_fit_model() (quick baseline) ------------------
-  bl_mod_svm <- bl_fit_model(
-    train_data = bl_dat$train_data,
-    var_names  = bl_dat$var_names,
-    model_type = "SVM"
-  )
-  print(bl_mod_svm)
+  # bl_mod_svm <- bl_fit_model(
+  #   train_data = bl_dat$train_data,
+  #   var_names  = bl_dat$var_names,
+  #   model_type = "SVM"
+  # )
+  # print(bl_mod_svm)
 
   # ---- Step 5b: XGB via bl_wrap_model() with explicit predict_fn ---------
   # Using model_type = "custom" makes the prediction contract explicit.
@@ -230,7 +229,6 @@
 
   # Project all observations and overlay on the biplot
   test_pts <- bl_project_points(bl_results$test_data, bl_results, filter_to_polygon = TRUE )   # removes out-of-polygon points before plotting)
-  sum(test_pts$inside_polygon==F)
   plot_biplotEZ(bl_results, points = test_pts)
 }
 
@@ -240,29 +238,23 @@
 # ===========================================================
 
 
-# ---- Step 7: Find nearest boundary point for each observation ----------
-{
-  bl_bnd <- bl_find_boundary(bl_results)
-  print(bl_bnd)
-  hist(bl_bnd$B_pred)
-  bl_bnd$B_pred
-  bl_bnd$x_obs
-  bl_bnd$pred_obs
-  plot_biplotEZ(bl_results, points = test_pts)
-  # To inspect individual counterfactuals: bl_pick_point(bl_results, bl_boundary = bl_bnd)
-}
-
-# ---- Step 8: Distance-to-boundary plot ---------------------------------
+# ---- Step 7: Find boundary + distance-to-boundary plots ---------------
 # Y-axis label shows "variable : total absolute standardised distance" —
 # a variable-level importance proxy. Sorted ascending (least important first).
 # Colour scheme: TP = red, TN = blue, FP = purple, FN = orange.
 {
+  bl_bnd <- bl_find_boundary(bl_results)
+  hist(bl_bnd$B_pred)
+
+  plot_biplotEZ(bl_results, points = test_pts)
+  # To inspect individual counterfactuals: bl_pick_point(bl_results, bl_boundary = bl_bnd)
+
   plot(bl_bnd)
   plot(bl_bnd, type = "boxplot")
 }
 
 
-# ---- Step 9: Surrogate model -------------------------------------------
+# ---- Step 8: Surrogate model -------------------------------------------
 {
   bl_surr <- bl_surrogate(bl_results)
   print(bl_surr)
@@ -271,7 +263,7 @@
 
 
 # ===========================================================
-# STEP 10 — Prune least-important variables
+# Prune least-important variables
 # ===========================================================
 # bl_robustness() prints sum_of_distance: the total absolute standardised
 # distance contribution per variable (ascending = weakest first).
@@ -346,23 +338,19 @@
 # PHASE 2 (second pass) — Global interpretations, reduced model
 # ===========================================================
 
-# ---- Step 7b: Boundary on reduced model --------------------------------
+# ---- Step 7b: Boundary + distance-to-boundary plots (reduced model) ---
 {
   bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
   print(bl_bnd_v2)
   plot_biplotEZ(bl_results_v2, points = test_pts_v2)
   # To inspect individual counterfactuals: bl_pick_point(bl_results_v2, bl_boundary = bl_bnd_v2)
-}
 
-
-# ---- Step 8b: Distance-to-boundary plot --------------------------------
-{
   plot(bl_bnd_v2)
   plot(bl_bnd_v2, type = "boxplot")
 }
 
 
-# ---- Step 9b: Surrogate model ------------------------------------------
+# ---- Step 8b: Surrogate model ------------------------------------------
 {
   bl_surr_v2 <- bl_surrogate(bl_results_v2)
   print(bl_surr_v2)
@@ -374,29 +362,29 @@
 # PHASE 3 — Local interpretation (using reduced model bl_results_v2)
 # ===========================================================
 
-# ---- Step 11: Inspect predictions and select target -------------------
+# ---- Step 9: Inspect predictions and select target --------------------
 # Review pred_summary to choose a target. False Negatives (predicted 0,
 # true 1) are most actionable: the applicant will default but the model
 # clears them — what would need to change to flag them correctly?
 {
   pred_summary <- bl_predict(bl_results_v2)
-  print(pred_summary)
 
   tdp <- 1
-  tgt <- bl_select_target(bl_results_v2, target = tdp)
-  print(tgt)
+  test_point <- bl_project_points(bl_results_v2$test_data[tdp,], bl_results_v2)
+  pred_summary[tdp, ]   # inspect: pred_prob, confusion category, feature values
 
+  target_value <- bl_results_v2$test_data[tdp, ]
   # Highlight the target on the main biplot
   plot_biplotEZ(
     bl_results_v2,
-    points       = test_pts_v2,
-    target_point = unlist(tgt$x_obs),
+    points       = test_point,
+    target_point = target_value,
     target_label = tdp
   )
 }
 
 
-# ---- Step 12: Set actionability constraints ----------------------------
+# ---- Step 10: Set actionability constraints ---------------------------
 # Omit any pruned variables from set_filters() — they are no longer in
 # the model and passing them will raise an error.
 #
@@ -406,6 +394,8 @@
 #   "fixed"     — constrained to ± 0.5 of observed; always reverts in sparse CF
 #   c(min, max) — counterfactual must lie within this absolute range
 {
+  tgt <- bl_select_target(bl_results_v2, target = tdp)
+
   flt <- set_filters(
     tgt,
   #  person_age     = "fixed",       # not actionable
@@ -418,7 +408,7 @@
 }
 
 
-# ---- Step 13: Find local counterfactual via biplot rotation -----------
+# ---- Step 11: Find local counterfactual via biplot rotation ----------
 {
   bl_local <- bl_find_local_cf(
     bl_result   = bl_results_v2,
@@ -429,13 +419,13 @@
 }
 
 
-# ---- Step 14: Local biplot plot ----------------------------------------
+# ---- Step 12: Local biplot plot ----------------------------------------
 {
   plot(bl_local)
 }
 
 
-# ---- Step 15: Shapley contribution plot --------------------------------
+# ---- Step 13: Shapley contribution plot --------------------------------
 {
   bl_shapley_values <- bl_shapley(bl_local)
   print(bl_shapley_values)
@@ -443,7 +433,7 @@
 }
 
 
-# ---- Step 16: Sparse counterfactual ------------------------------------
+# ---- Step 14: Sparse counterfactual ------------------------------------
 {
   bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
   print(bl_sparse)
@@ -455,7 +445,7 @@
 # ALTERNATIVE: unconstrained local search
 # ===========================================================
 
-# ---- Step 17 (optional): Unconstrained local search ------------------
+# ---- Step 15 (optional): Unconstrained local search ------------------
 {
   bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
   print(bl_local_free)
@@ -476,7 +466,7 @@
 # No class column is required.
 # ===========================================================
 
-# ---- Step 18: External applicant --------------------------------------
+# ---- Step 16: External applicant --------------------------------------
 {
   new_applicant <- data.frame(
     person_age                 = 32,
@@ -490,22 +480,21 @@
     cb_person_cred_hist_length = 4,
     credit_score               = 420
   )
-  # Drop any columns that were pruned in Step 10
+  # Drop any columns that were pruned in Step 9
   new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
                                   drop = FALSE]
 
-  tgt_ext <- bl_select_target(bl_results_v2, target = new_applicant)
-  print(tgt_ext)
 
   # Highlight on main biplot
   plot_biplotEZ(
     bl_results_v2,
     points       = test_pts_v2,
-    target_point = unlist(tgt_ext$x_obs),
+    target_point = new_applicant,
     target_label = "new"
   )
 
   # Local search — no actionability constraints for this new applicant
+  tgt_ext       <- bl_select_target(bl_results_v2, target = new_applicant)
   bl_local_ext  <- bl_find_local_cf(bl_results_v2, tgt_ext)
   print(bl_local_ext)
   plot(bl_local_ext)

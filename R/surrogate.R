@@ -45,9 +45,14 @@
 #'   \item{`surrogate_pred`}{Integer vector; surrogate class per obs (0 or 1).}
 #'   \item{`model_pred`}{Integer vector; model-predicted class per obs.}
 #'   \item{`class_obs`}{Integer vector; true labels (`NA` if absent in `data`).}
-#'   \item{`accuracy_vs_model`}{Numeric; agreement rate with model predictions.}
+#'   \item{`accuracy_vs_model`}{Numeric; agreement rate with model predictions
+#'     (computed over in-hull observations only).}
 #'   \item{`accuracy_vs_labels`}{Numeric; accuracy vs true labels
-#'     (`NA` if no labels available).}
+#'     (`NA` if no labels available; in-hull only).}
+#'   \item{`n_total`}{Integer; total number of observations scored.}
+#'   \item{`n_in_hull`}{Integer; observations inside the training-data polygon.}
+#'   \item{`hull_coverage`}{Numeric in `[0, 1]`; fraction of observations inside
+#'     the polygon. Accuracy metrics are computed only over in-hull observations.}
 #'   \item{`boundary_set_nr`}{Integer vector; contour index assigned per obs.}
 #'   \item{`z_boundary_type`}{Numeric vector; probability level per retained contour.}
 #'   \item{`Z_obs`}{n x 2 matrix; Z-space coordinates of each observation.}
@@ -201,6 +206,7 @@ bl_surrogate <- function(bl_result, data = NULL) {
   } else {
     NA_real_
   }
+  hull_coverage <- length(idx_in) / n
 
   # ---- Return --------------------------------------------------------
   structure(
@@ -210,6 +216,9 @@ bl_surrogate <- function(bl_result, data = NULL) {
       class_obs          = class_obs,
       accuracy_vs_model  = accuracy_vs_model,
       accuracy_vs_labels = accuracy_vs_labels,
+      n_total            = n,
+      n_in_hull          = length(idx_in),
+      hull_coverage      = hull_coverage,
       boundary_set_nr    = boundary_set_nr,
       z_boundary_type    = z_boundary_type,
       Z_obs              = Z_obs,
@@ -229,7 +238,9 @@ print.bl_surrogate <- function(x, ...) {
   cat("<bl_surrogate>\n")
   cat(sprintf("  Observations        : %d\n", nrow(x$Z_obs)))
   cat(sprintf("  Surrogate regions   : %d\n", length(x$z_boundary_type)))
-  cat(sprintf("  Accuracy vs model   : %.4f\n", x$accuracy_vs_model))
+  cat(sprintf("  Accuracy vs model   : %.4f  (in-hull: %d / %d = %.0f%%)\n",
+              x$accuracy_vs_model,
+              x$n_in_hull, x$n_total, x$hull_coverage * 100))
   if (!is.na(x$accuracy_vs_labels)) {
     cat(sprintf("  Accuracy vs labels  : %.4f\n", x$accuracy_vs_labels))
   } else {

@@ -132,6 +132,9 @@
 #'     covariance from CVA class factor), `"W_binary"` (pooled within-class
 #'     covariance from binary 0/1 class column), or `"Sigma"` (total
 #'     covariance fallback).}
+#'   \item{`condition_number`}{Numeric; condition number of the loading matrix
+#'     `V` (via [base::kappa()]). Values above 1e10 indicate near-singularity
+#'     and trigger a warning at construction time.}
 #' }
 #'
 #' @section Mahalanobis metric:
@@ -262,7 +265,13 @@ bl_build_projection <- function(train_data,
   }
 
   # ---- Extract V and tV ------------------------------------------------
-  V  <- bp$Lmat
+  V      <- bp$Lmat
+  cond_v <- kappa(V, exact = FALSE)
+  if (cond_v > 1e10)
+    warning(sprintf(
+      "Loading matrix V is near-singular (condition number = %.2e). Back-projections and counterfactuals may be numerically unreliable. Consider using fewer features or enabling standardisation.",
+      cond_v
+    ), call. = FALSE)
   tV <- solve(V)
 
   # ---- Default point colours -------------------------------------------
@@ -299,20 +308,21 @@ bl_build_projection <- function(train_data,
   # ---- Return ----------------------------------------------------------
   structure(
     list(
-      V            = V,
-      tV           = tV,
-      X_center     = X_center,
-      X_sd         = X_sd,
-      method       = method,
-      standardise  = standardise,
-      proj_dims    = proj_dims,
-      biplot_obj   = bp,
-      cva_classes  = cva_classes,
-      point_col    = point_col,
-      train_ranges = train_ranges,
-      metric       = metric_info$metric,
-      metric_inv   = metric_info$metric_inv,
-      metric_type  = metric_info$metric_type
+      V                = V,
+      tV               = tV,
+      X_center         = X_center,
+      X_sd             = X_sd,
+      method           = method,
+      standardise      = standardise,
+      proj_dims        = proj_dims,
+      biplot_obj       = bp,
+      cva_classes      = cva_classes,
+      point_col        = point_col,
+      train_ranges     = train_ranges,
+      metric           = metric_info$metric,
+      metric_inv       = metric_info$metric_inv,
+      metric_type      = metric_info$metric_type,
+      condition_number = cond_v
     ),
     class = "bl_projection"
   )

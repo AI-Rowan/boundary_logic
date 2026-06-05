@@ -235,6 +235,15 @@ bl_build_grid <- function(train_data,
     )
   }
 
+  # ---- Clamp grid probabilities to [0, 1] ------------------------------
+  oob <- grid_prob < 0 | grid_prob > 1
+  if (any(oob, na.rm = TRUE))
+    warning(sprintf(
+      "%d grid cell(s) had predicted probabilities outside [0, 1] and were clamped. Check your model's predict_fn for calibration issues.",
+      sum(oob, na.rm = TRUE)
+    ), call. = FALSE)
+  grid_prob <- pmin(pmax(grid_prob, 0), 1)
+
   # ---- Colour palette (blue -> white -> red) ---------------------------
   col_vec   <- grDevices::colorRampPalette(
     c("deepskyblue", "white", "lightsalmon")

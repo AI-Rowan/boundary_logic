@@ -40,7 +40,9 @@
 #'   `bl_filter_outliers()` (when filtering was applied). Pass whichever is the
 #'   last step in your data-preparation chain — the function detects the type
 #'   automatically and extracts the correct training and test data.
-#' @param bl_model          A `"bl_model"` from `bl_fit_model()`.
+#' @param bl_model          A `"bl_model"` from `bl_fit_model()`, or `NULL`.
+#'   When `NULL`, model-derived fields (`model`, `model_type`, `cutoff`,
+#'   `accuracy`, `gini`) will be `NULL` in the returned object.
 #' @param bl_projection     A `"bl_projection"` from `bl_build_projection()`.
 #' @param bl_grid           A `"bl_grid"` from `bl_build_grid()`.
 #'
@@ -141,9 +143,9 @@ bl_assemble <- function(bl_data,
       num_vars      = length(var_names_use),
 
       # Model (NULL when no model supplied)
-      model         = bl_model$model,
-      model_type    = bl_model$model_type,
-      cutoff        = bl_model$cutoff,
+      model         = if (!is.null(bl_model)) bl_model$model      else NULL,
+      model_type    = if (!is.null(bl_model)) bl_model$model_type else NULL,
+      cutoff        = if (!is.null(bl_model)) bl_model$cutoff     else NULL,
       b_margin      = bl_grid$b_margin,
 
       # Projection
@@ -170,8 +172,8 @@ bl_assemble <- function(bl_data,
       biplot_grid   = bl_grid,
 
       # Performance (NULL when no model supplied)
-      accuracy      = bl_model$accuracy,
-      gini          = bl_model$gini,
+      accuracy      = if (!is.null(bl_model)) bl_model$accuracy   else NULL,
+      gini          = if (!is.null(bl_model)) bl_model$gini       else NULL,
 
       # Metadata
       call          = match.call(),
@@ -278,19 +280,17 @@ bl_build_result <- function(bl_data     = NULL,
   bl_model <- tryCatch(force(bl_model), error = function(e) NULL)
 
   # ---- Validate data source ---------------------------------------------
-  if (is.null(bl_data)) {
-    message("bl_build_result() requires 'bl_data'. ",
-            "Supply a 'bl_data' object from bl_prepare_data() or ",
-            "a 'bl_filter_result' object from bl_filter_outliers().")
-    return(invisible(NULL))
-  }
+  if (is.null(bl_data))
+    stop("bl_build_result() requires 'bl_data'. ",
+         "Supply a 'bl_data' object from bl_prepare_data() or ",
+         "a 'bl_filter_result' object from bl_filter_outliers().",
+         call. = FALSE)
 
-  if (!inherits(bl_data, c("bl_data", "bl_filter_result"))) {
-    message("bl_build_result(): 'bl_data' must be a 'bl_data' object from ",
-            "bl_prepare_data() or a 'bl_filter_result' object from ",
-            "bl_filter_outliers().")
-    return(invisible(NULL))
-  }
+  if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
+    stop("bl_build_result(): 'bl_data' must be a 'bl_data' object from ",
+         "bl_prepare_data() or a 'bl_filter_result' object from ",
+         "bl_filter_outliers().",
+         call. = FALSE)
 
   # The projection matrix V is always built from the training data.
   # bl_build_result() does not support building V from test data — use

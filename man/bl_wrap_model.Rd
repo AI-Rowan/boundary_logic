@@ -57,7 +57,7 @@ with \code{xgboost::xgboost()} fitted externally.
 \section{Supported model types}{
 
 For standard types (\code{"GLM"}, \code{"GAM"}, \code{"GBM"}, \code{"LDA"}, \code{"SVM"},
-\code{"NNET"}, \code{"RForrest"}, \code{"XGB"}), the existing prediction dispatch is
+\code{"NNET"}, \code{"RForest"}, \code{"XGB"}), the existing prediction dispatch is
 used. Your model object must be compatible with the prediction call for
 that type (e.g., a \code{glm} object for \code{"GLM"}).
 

@@ -1,8 +1,8 @@
-# Code Walkthrough: Steps 7 and 8 of `03_loan_status_Boundary_Logic.R`
+# Code Walkthrough: Step 7 of `03_loan_status_Boundary_Logic.R`
 
 ## Context
 
-This document continues from `review_section4_to_6.md`. At this point `bl_results` is the fully assembled Phase 1 anchor object and `test_pts` is the projected test-set `bl_points` object. Steps 7 and 8 form Phase 2 (first pass): global interpretation of where every observation sits relative to the decision boundary.
+This document continues from `review_section4_to_6.md`. At this point `bl_results` is the fully assembled Phase 1 anchor object and `test_pts` is the projected test-set `bl_points` object. Step 7 forms Phase 2 (first pass): finding the global boundary counterfactuals and visualising distance to boundary in one combined block. Step 8 (surrogate model) is independent and not covered here.
 
 ---
 
@@ -238,7 +238,7 @@ interaction, in interactive mode where the warning is visible and actionable.
 
 ---
 
-## Step 8 — `plot(bl_bnd)` and `plot(bl_bnd, type = "boxplot")`
+### `plot(bl_bnd)` — distance-to-boundary visualisation
 
 **File:** `R/boundary_plot.R` (S3 method `plot.bl_boundary`)
 
@@ -369,7 +369,7 @@ Returns a list invisibly:
 
 ---
 
-## Complete Object Flow: Steps 7–8
+## Complete Object Flow: Step 7
 
 ```
 bl_results  [bl_result]           ← Phase 1 anchor (from Steps 4-6)

@@ -13,7 +13,9 @@ no polygon filtering was applied), or a \code{"bl_filter_result"} object from
 last step in your data-preparation chain — the function detects the type
 automatically and extracts the correct training and test data.}
 
-\item{bl_model}{A \code{"bl_model"} from \code{bl_fit_model()}.}
+\item{bl_model}{A \code{"bl_model"} from \code{bl_fit_model()}, or \code{NULL}.
+When \code{NULL}, model-derived fields (\code{model}, \code{model_type}, \code{cutoff},
+\code{accuracy}, \code{gini}) will be \code{NULL} in the returned object.}
 
 \item{bl_projection}{A \code{"bl_projection"} from \code{bl_build_projection()}.}
 

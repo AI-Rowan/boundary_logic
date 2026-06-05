@@ -49,8 +49,8 @@ Detailed walkthroughs tracing every function call, parameter, and returned objec
 | Document | Steps | Source files covered |
 |---|---|---|
 | `.claude/reference/review_section4_to_6.md` | Steps 3–6 (Phase 1) | `data_prepare.R`, `outlier_filter.R`, `model_fit.R`, `model_utils.R`, `result.R`, `biplot_grid.R`, `projection.R`, `plot_biplot.R`, `project_points.R` |
-| `.claude/reference/review_section7_to_8.md` | Steps 7–8 (Phase 2) | `boundary.R`, `boundary_plot.R`, `hull_utils.R`, `feasibility_utils.R` |
-| `.claude/reference/review_section11_to_17.md` | Steps 11–17 (Phase 3) | `local_cf.R`, `shapley.R`, `project_points.R` |
+| `.claude/reference/review_section7_to_8.md` | Step 7 (Phase 2) | `boundary.R`, `boundary_plot.R`, `hull_utils.R`, `feasibility_utils.R` |
+| `.claude/reference/review_section11_to_17.md` | Steps 9–15 (Phase 3) | `local_cf.R`, `shapley.R`, `project_points.R` |
 
 Script: `scripts/03_loan_status_Boundary_Logic.R`
 
@@ -129,7 +129,7 @@ Two distinct paths depending on where the type should be supported.
 2. Add a prediction branch in `.pred_function()` (`R/predict_utils.R`)
 3. Test with the iris two-class binary dataset
 
-**`bl_fit_model()` + `bl_wrap_model()`** (simple parsnip-compatible type; current four are GLM, SVM, NNET, RForrest):
+**`bl_fit_model()` + `bl_wrap_model()`** (simple parsnip-compatible type; current four are GLM, SVM, NNET, RForest):
 1. Add the type string to `valid_types` in both `bl_fit_model()` and `bl_wrap_model()` (`R/model_fit.R`)
 2. Add a fitting branch in `.fit_model()` (`R/model_utils.R`)
 3. Add a prediction branch in `.pred_function()` (`R/predict_utils.R`)

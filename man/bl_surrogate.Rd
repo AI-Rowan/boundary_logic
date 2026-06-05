@@ -18,9 +18,14 @@ A list of class \code{"bl_surrogate"} with components:
 \item{\code{surrogate_pred}}{Integer vector; surrogate class per obs (0 or 1).}
 \item{\code{model_pred}}{Integer vector; model-predicted class per obs.}
 \item{\code{class_obs}}{Integer vector; true labels (\code{NA} if absent in \code{data}).}
-\item{\code{accuracy_vs_model}}{Numeric; agreement rate with model predictions.}
+\item{\code{accuracy_vs_model}}{Numeric; agreement rate with model predictions
+(computed over in-hull observations only).}
 \item{\code{accuracy_vs_labels}}{Numeric; accuracy vs true labels
-(\code{NA} if no labels available).}
+(\code{NA} if no labels available; in-hull only).}
+\item{\code{n_total}}{Integer; total number of observations scored.}
+\item{\code{n_in_hull}}{Integer; observations inside the training-data polygon.}
+\item{\code{hull_coverage}}{Numeric in \verb{[0, 1]}; fraction of observations inside
+the polygon. Accuracy metrics are computed only over in-hull observations.}
 \item{\code{boundary_set_nr}}{Integer vector; contour index assigned per obs.}
 \item{\code{z_boundary_type}}{Numeric vector; probability level per retained contour.}
 \item{\code{Z_obs}}{n x 2 matrix; Z-space coordinates of each observation.}

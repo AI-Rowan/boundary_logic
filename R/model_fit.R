@@ -14,16 +14,16 @@
 #' @param var_names    Character vector of feature column names.
 #' @param model_type   Character scalar specifying the model family. One of:
 #'   `"GLM"` (logistic regression), `"SVM"` (support vector machine),
-#'   `"NNET"` (neural network), `"RForrest"` (rpart decision tree).
+#'   `"NNET"` (neural network), `"RForest"` (rpart decision tree).
 #'   Default `"GLM"`. For other model families (XGBoost, GBM, GAM, LDA)
 #'   use `bl_wrap_model()` with the externally fitted object.
 #' @param cutoff       Numeric decision threshold for computing accuracy.
 #'   Default `0.5`.
 #' @param model_params Named list of hyperparameter overrides. Unrecognised
-#'   keys are silently ignored. Parameter names follow **parsnip** conventions.
+#'   keys trigger a warning. Parameter names follow **parsnip** conventions.
 #'   Common overrides:
 #'   - NNET: `list(hidden_units = 10, penalty = 0.01, epochs = 500)`
-#'   - RForrest: `list(min_n = 10)`
+#'   - RForest: `list(min_n = 10)`
 #'
 #' @return A list of class `"bl_model"` with components:
 #' \describe{
@@ -57,7 +57,12 @@ bl_fit_model <- function(train_data,
     stop("'train_data' must contain a column named 'class'.", call. = FALSE)
   stop_if_not_scalar_numeric(cutoff, "cutoff")
 
-  valid_types <- c("GLM", "SVM", "NNET", "RForrest")
+  if (identical(model_type, "RForrest")) {
+    warning("model_type 'RForrest' is deprecated; use 'RForest'.", call. = FALSE)
+    model_type <- "RForest"
+  }
+
+  valid_types <- c("GLM", "SVM", "NNET", "RForest")
   if (!model_type %in% valid_types)
     stop(sprintf("model_type '%s' is not supported. Choose from: %s.",
                  model_type, paste(valid_types, collapse = ", ")),
@@ -112,7 +117,7 @@ print.bl_model <- function(x, ...) {
   # ---- Model summary -----------------------------------------------------
   # Only models produced by bl_fit_model() are workflow objects.
   # Raw objects (bl_wrap_model) use summary() directly.
-  parsnip_types <- c("GLM", "SVM", "NNET", "RForrest")
+  parsnip_types <- c("GLM", "SVM", "NNET", "RForest")
   cat("\n--- Model summary ---\n")
   tryCatch({
     if (x$model_type %in% parsnip_types) {
@@ -144,7 +149,7 @@ print.bl_model <- function(x, ...) {
 #'
 #' @section Supported model types:
 #' For standard types (`"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`,
-#' `"NNET"`, `"RForrest"`, `"XGB"`), the existing prediction dispatch is
+#' `"NNET"`, `"RForest"`, `"XGB"`), the existing prediction dispatch is
 #' used. Your model object must be compatible with the prediction call for
 #' that type (e.g., a `glm` object for `"GLM"`).
 #'
@@ -206,8 +211,13 @@ bl_wrap_model <- function(model,
   stop_if_not_character(var_names, "var_names")
   stop_if_not_scalar_numeric(cutoff, "cutoff")
 
+  if (identical(model_type, "RForrest")) {
+    warning("model_type 'RForrest' is deprecated; use 'RForest'.", call. = FALSE)
+    model_type <- "RForest"
+  }
+
   valid_types <- c("GLM", "GAM", "GBM", "LDA", "SVM", "NNET",
-                   "RForrest", "XGB", "custom")
+                   "RForest", "XGB", "custom")
   if (!model_type %in% valid_types)
     stop(sprintf(
       "model_type '%s' is not supported. Choose from: %s.",

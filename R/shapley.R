@@ -97,12 +97,13 @@
 #' @param model_type Character string identifying the model type.
 #' @param var_names  Character vector of variable names length p.
 #' @param M          Integer; number of permutations. Default \code{2048L}.
-#' @param seed       Random seed. Default \code{1L}.
+#' @param seed       Random seed. \code{NULL} (default) uses the current RNG
+#'   state. Supply an integer for reproducible results.
 #' @return Named numeric vector of approximate Shapley values length p.
 #' @noRd
 .shapley_perm_one <- function(start, end, model, model_type, var_names,
-                              M = 2048L, seed = 1L) {
-  set.seed(seed)
+                              M = 2048L, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
   p        <- length(start)
   shap_sum <- numeric(p)
   for (mm in seq_len(M)) {
@@ -141,8 +142,9 @@
 #'   variables is at most this value. Default \code{14L}.
 #' @param approx_perm     Integer; number of permutations for the approximate
 #'   method. Default \code{2048L}.
-#' @param seed            Random seed for the approximate method. Default
-#'   \code{1L}.
+#' @param seed            Random seed for the approximate method. \code{NULL}
+#'   (default) uses the current RNG state, giving independent estimates across
+#'   repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results.
 #'
 #' @return A list of class \code{"bl_shapley"} with the following fields:
 #'   \describe{
@@ -161,7 +163,7 @@
 #' @importFrom utils combn
 #' @export
 bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
-                       approx_perm = 2048L, seed = 1L) {
+                       approx_perm = 2048L, seed = NULL) {
   if (!inherits(bl_local_result, "bl_local_result"))
     stop("'bl_local_result' must be a 'bl_local_result' object.", call. = FALSE)
   if (!bl_local_result$solution_found)

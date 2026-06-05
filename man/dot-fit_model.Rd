@@ -12,7 +12,7 @@
 
 \item{var_names}{Character vector of feature column names.}
 
-\item{model_type}{One of \code{"GLM"}, \code{"SVM"}, \code{"NNET"}, \code{"RForrest"}.}
+\item{model_type}{One of \code{"GLM"}, \code{"SVM"}, \code{"NNET"}, \code{"RForest"}.}
 
 \item{model_params}{Named list of hyperparameter overrides.}
 }

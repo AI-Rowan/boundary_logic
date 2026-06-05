@@ -260,7 +260,15 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
     }
     if (keep) boundary_used <- c(boundary_used, i)
   }
-  if (length(boundary_used) == 0L) boundary_used <- seq_len(nr_raw)
+  if (length(boundary_used) == 0L) {
+    warning(
+      "No closed boundary contours enclose training observations. ",
+      "Falling back to all contours -- counterfactual distances may be unreliable. ",
+      "Consider increasing 'm' (grid resolution) in bl_build_grid().",
+      call. = FALSE
+    )
+    boundary_used <- seq_len(nr_raw)
+  }
 
   # Rebuild with retained boundaries only
   z_boundary_type   <- z_boundary_type[boundary_used]

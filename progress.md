@@ -1,5 +1,250 @@
 # Progress
 
+## Session summary (2026-06-05)
+
+### Completed this session
+
+1. **Merged Phase 2 Steps 7+8 → Step 7; surrogate stays Step 8**
+   - `bl_find_boundary()` and both `plot(bl_bnd)` calls are now in a single `{}` block.
+     Step 8 (surrogate) is unchanged; it is now clearly independent.
+   - Same merge applied to second-pass blocks: Steps 7b+8b → Step 7b; surrogate becomes Step 8b.
+   - Renamed the prune section from `# STEP 9 —` (all-caps section-header style) to an unnumbered
+     section (`# Prune least-important variables`). The prune block is a decision/analysis point
+     between Phase 2 and the Phase 1 refit, not a sequential numbered step — removing its number
+     eliminates a visual gap in the `# ---- Step X:` sequence.
+
+2. **Phase 3 renumbered: Steps 10-17 → Steps 9-16**
+   - Directly follows from removing the Step 9 number from the prune section.
+   - Step 9: Inspect predictions (was 10)
+   - Step 10: Set actionability constraints (was 11)
+   - Step 11: Find local counterfactual (was 12)
+   - Step 12: Local biplot (was 13)
+   - Step 13: Shapley (was 14)
+   - Step 14: Sparse counterfactual (was 15)
+   - Step 15 (optional): Unconstrained local search (was 16)
+   - Step 16: External applicant (was 17)
+   - Header comment block updated; "Step 9 : Extract per-variable importance" line removed.
+
+3. **`target_point` simplification in Steps 9 and 16**
+   - Step 9 (inspect): `target_value <- bl_results_v2$test_data[tdp, ]` is used directly for
+     `plot_biplotEZ(target_point = target_value)`. `bl_select_target()` removed from this block.
+   - Step 10 (constraints): `tgt <- bl_select_target(bl_results_v2, target = tdp)` now opens
+     the block, right before `set_filters(tgt, ...)` which needs it.
+   - Step 16 (external applicant): `target_value <- new_applicant` for the biplot;
+     `tgt_ext <- bl_select_target(...)` appears only before `bl_find_local_cf()`.
+   - Rationale: `plot_biplotEZ()` calls `as.numeric(target_point[var_names])` internally,
+     so named data frame rows work without `unlist()`.
+
+4. **Fixed `review_section11_to_17.md` (two bugs from the previous session's partial renumber)**
+   - Sub-sections `### 11a`, `### 11b`, `### 11c` renamed → `### 9a`, `### 9b`, `### 9c`.
+     The previous session's single-pass regex renamed `## Step 11 —` headings but not the
+     `### 11a` style sub-headings (no "Step" in them to match).
+   - Duplicate `## Step 10 — set_filters()` (was a pre-existing off-by-one bug) resolved
+     naturally: the first `## Step 10` (inspect predictions) was renamed to `## Step 9`,
+     making the remaining `## Step 10` (set_filters) correct.
+   - Title updated: "Steps 10-16" → "Steps 9-15".
+   - Context updated: "after Step 9 pruning" → "after variable pruning".
+   - Stale inline text `target_point = unlist(tgt$x_obs)` corrected to
+     `target_point = target_value  # bl_results_v2$test_data[tdp, ]`.
+
+5. **CLAUDE.md reference table updated**: "Steps 10-16 (Phase 3)" → "Steps 9-15 (Phase 3)".
+
+6. **Loan dataset smoke test completed (full Phase 3 confirmed)**
+   - `Rscript --parse` triggered a full script execution (flag not recognised; R ran the file).
+   - Script ran end-to-end without errors: Phase 1 (XGB), Phase 1 refit (reduced features),
+     Phase 2 (boundary, robustness, surrogate), Phase 3 (target selection, local CF, Shapley,
+     sparse CF, unconstrained variant, external applicant). All outputs produced correctly.
+   - Cross-correlation diagnostic: 42.6% for full model, 11.3% for reduced 5-feature model —
+     confirms that pruning correlated features reduces the Mahalanobis cross-term substantially.
+
+---
+
+### Dead ends this session
+
+- **Previous session's renumber left `### 11a/b/c` intact** — the single-pass Python regex used
+  in the prior session matched `Step (1[1-7]) —` but `### 11a —` has no "Step" prefix, so the
+  sub-section labels were silently skipped. Discovered by grepping the heading pattern; fixed
+  with three targeted Edit calls.
+
+- **`Rscript --parse` not supported on R-4.6.0** — the parse-check command from prior sessions
+  failed with "unknown option '--parse'"; R instead ran the full script. This inadvertently
+  served as the smoke test confirmation. True parse-only checking would require
+  `parse(file = "script.R")` inside an `-e` expression, but `-e` with biplotEZ segfaults —
+  so the current workaround (full execution confirms no parse error) is acceptable.
+
+---
+
+### Architecture decisions / new conventions
+
+- **The prune block is an unnumbered section, not a step.** It sits between Phase 2 and the
+  Phase 1 refit and is formatted as a section separator (`# ==== Prune least-important variables ====`)
+  rather than a `# ---- Step X:` block. This keeps the `# ---- Step X:` sequence continuous and
+  unambiguous. Not added to CLAUDE.md because it is script-specific, not a package-level rule.
+
+- **`plot_biplotEZ()` `target_point` convention clarified.** Pass `test_data[tdp, ]` directly —
+  no `unlist()` or `bl_select_target()` required. The function calls `as.numeric(target_point[var_names])`
+  internally. `bl_select_target()` is needed only for `set_filters()` and `bl_find_local_cf()`.
+  Not added to CLAUDE.md; documented in the `### 9c` block of `review_section11_to_17.md`.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — many files modified, **none committed** (commit-gate rule)
+- Working tree: dirty
+- Test suite: **77 PASS, 0 FAIL, 4 WARN** (last confirmed 2026-05-29; no source changes this
+  session that affect tests; full script execution completed without errors)
+- Loan dataset smoke test: **complete** — Phase 1 through Phase 3 all passed this session
+
+---
+
+### Next steps
+
+1. **Commit all session changes** — explicit user instruction required (commit-gate rule).
+   Files modified across both sessions since last commit:
+   `R/projection.R`, `R/biplot_grid.R`, `R/boundary.R`, `R/surrogate.R`,
+   `R/shapley.R`, `R/result.R`, `R/project_points.R`, `R/model_fit.R`, `R/model_utils.R`,
+   `R/predict_utils.R`, `man/bl_surrogate.Rd`, `man/bl_build_projection.Rd`,
+   `scripts/03_loan_status_Boundary_Logic.R`, `CLAUDE.md`,
+   `.claude/reference/review_section7_to_8.md`, `.claude/reference/review_section11_to_17.md`,
+   `.claude/settings.json`, `.claude/reference/` (archive files).
+
+2. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
+## Session summary (2026-05-29)
+
+### Completed this session
+
+1. **Implemented `accuracy-correctness-fixes.md` (5 fixes)**
+
+   - **Fix 1 — Condition number check** (`R/projection.R`): Added `kappa(V, exact = FALSE)` check
+     before `solve(V)`; warns when condition number > 1e10. Added `condition_number` field to
+     the `bl_projection` return object.
+
+   - **Fix 2 — Grid probability clamp** (`R/biplot_grid.R`): Added `pmin(pmax(..., 0), 1)` after
+     the chunked prediction loop, with a warning reporting how many cells were clamped.
+
+   - **Fix 3 — Boundary pruning fallback warning** (`R/boundary.R`): Replaced silent
+     `boundary_used <- seq_len(nr_raw)` fallback with an explicit `warning()` explaining the
+     issue and suggesting higher `m`. (The second warning for empty-after-pruning was already
+     implemented — that part of the plan was dropped.)
+
+   - **Fix 4 — Surrogate hull coverage** (`R/surrogate.R`): Added `hull_coverage`, `n_in_hull`,
+     `n_total` to the return object. Updated `print.bl_surrogate()` to show
+     `(in-hull: X / Y = Z%)` context alongside accuracy.
+
+   - **Fix 5 — Shapley seed independence** (`R/shapley.R`): Changed default from `seed = 1L` to
+     `seed = NULL` in both `.shapley_perm_one()` and `bl_shapley()`. Added
+     `if (!is.null(seed)) set.seed(seed)` guard. Updated roxygen for both functions.
+
+2. **Implemented `usability-bug-fixes.md` (Fixes 1–5 and Fix 7; Fix 6 dropped)**
+
+   - **Fix 1 — `bl_assemble()` NULL model crash** (`R/result.R`): Guarded all `bl_model$...`
+     field extractions with `if (!is.null(bl_model)) ... else NULL`. Updated `@param bl_model`
+     roxygen to state NULL is allowed.
+
+   - **Fix 2 — `bl_build_result()` silent NULL** (`R/result.R`): Replaced two `invisible(NULL)`
+     error-path returns with `stop(..., call. = FALSE)`. The `bl_model = NULL` notification
+     path deliberately kept as `message()`.
+
+   - **Fix 3 — `print.bl_points()` crash without model** (`R/project_points.R`): Added
+     `if (!is.null(x$pred_prob))` guard with `"(no model)"` fallback.
+
+   - **Fix 4 — RForrest → RForest rename** (`R/model_fit.R`, `R/model_utils.R`,
+     `R/predict_utils.R`): Bulk rename via `replace_all`. Added backward-compat shim in four
+     entry points (`bl_fit_model()`, `bl_wrap_model()`, `.fit_model()`, `.pred_function()`)
+     that warns and redirects the old spelling. Updated `parsnip_types` in `print.bl_model()`.
+
+   - **Fix 5 — Unknown hyperparameter warning** (`R/model_utils.R`): After `modifyList()`,
+     compares `names(model_params)` against `names(defaults)` and warns on unknowns.
+
+   - **Fix 6 — DROPPED** at user request (non-0.5 cutoff warning).
+
+   - **Fix 7 — `@return` rounding doc** (`R/project_points.R`): Corrected "4 d.p." → "3 d.p."
+     in `bl_predict()` `@return`.
+
+3. **Implemented `documentation-gaps.md`**
+
+   - Most original steps were already done (all 21 exports had `.Rd` files; `rounding` param
+     already removed; `rlang` imports confirmed absent from NAMESPACE/DESCRIPTION).
+   - Two new gaps found and fixed from the accuracy-correctness session:
+     - `R/surrogate.R` `@return`: Added `n_total`, `n_in_hull`, `hull_coverage` items.
+       Backtick-wrapped `[0, 1]` to avoid roxygen2 cross-reference false positive.
+     - `R/projection.R` `@return`: Added `condition_number` item.
+   - `devtools::document()` run twice (once to catch the backtick issue, once clean).
+   - Regenerated `man/bl_surrogate.Rd` and `man/bl_build_projection.Rd`.
+
+4. **Plan archive + cleanup**
+   - All three plan files moved from `.claude/plans/` to `.claude/reference/` with
+     IMPLEMENTED banners.
+   - `can-you-review-the-flickering-locket.md` (the documentation-gaps review plan) deleted.
+   - `.claude/plans/` is now empty.
+
+5. **Permission allowlist expanded** (`.claude/settings.json`)
+   - Added three new `Bash(...)` patterns for `devtools::check()` and `Rscript *.R` verification
+     scripts, reducing permission prompts for those commands.
+
+6. **CLAUDE.md Section 7 typo fixed**
+   - "current four are GLM, SVM, NNET, RForrest" corrected to "RForest".
+
+---
+
+### Dead ends this session
+
+- **roxygen `[0, 1]` cross-reference warning** — adding `hull_coverage` to `bl_surrogate()`
+  `@return` with bare `Numeric in [0, 1]` caused roxygen2 to interpret `[0, 1]` as a
+  cross-reference link to a topic named "0, 1", generating a warning. Fixed by wrapping in
+  backticks: `` `[0, 1]` ``. Required a second `devtools::document()` run to clear.
+
+---
+
+### Architecture decisions / new conventions
+
+None this session. All changes were defensive fixes, a typo correction, and documentation
+improvements. No new architectural patterns introduced.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — many files modified, **none committed** (commit-gate rule)
+- Working tree: dirty
+- Test suite: **77 PASS, 0 FAIL, 4 WARN** (confirmed end of session)
+- Plans folder: **empty** — all three pending plans implemented and archived
+- Pre-existing warnings (unchanged):
+  - `boundary_plot.R:83` — multi-line `@importFrom`
+  - `shapley.R:19`, `shapley.R:252` — unresolvable "R x p" roxygen link
+
+---
+
+### Next steps
+
+1. **Commit all session changes** — explicit user instruction required (commit-gate rule).
+   Files modified: `R/projection.R`, `R/biplot_grid.R`, `R/boundary.R`, `R/surrogate.R`,
+   `R/shapley.R`, `R/result.R`, `R/project_points.R`, `R/model_fit.R`, `R/model_utils.R`,
+   `R/predict_utils.R`, `man/bl_surrogate.Rd`, `man/bl_build_projection.Rd`, `CLAUDE.md`,
+   `.claude/settings.json`, `.claude/reference/` (3 new archive files).
+
+2. **Complete the loan dataset smoke test** — run `scripts/03_loan_status_Boundary_Logic.R`
+   through Phase 2 Steps 8-9 (distance plots, surrogate) and full Phase 3 (Steps 11-17).
+   Confirm Mahalanobis selector and filter-order swap behave sensibly on real loan data.
+
+3. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
 ## Session summary (2026-05-25)
 
 ### Completed this session
@@ -496,6 +741,7 @@ None this session. All changes were bug fixes, message tweaks, and documentation
 ### Verification commands
 ```r
 "/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::check()"
 ```
 
 ---
@@ -750,7 +996,7 @@ print(bl_m)
 
 4. **New scripts** — created three new loan-workflow scripts:
    - `scripts/04_loan_wrap_data_demo.R` — Phase 1 only, demonstrates `bl_wrap_data()` vs `bl_prepare_data()` side by side
-   - `scripts/05_loan_custom_xgb.R` — full Phase 1–3 using `xgboost::xgb.train()` with custom hyperparameters and `bl_wrap_model()`
+   - `scripts/05_loan_custom_xgb.R` — full Phase 1-3 using `xgboost::xgb.train()` with custom hyperparameters and `bl_wrap_model()`
    - `scripts/06_loan_load_custom_xgb.R` — loads a pre-saved XGBoost model from disk and wraps it via `bl_wrap_model()`
 
 5. **`.bl_rotate()` bug identified** — confirmed that when `best_pair != c(1, 2)` the target
@@ -832,9 +1078,9 @@ print(bl_m)
 
    | Document | Steps covered | Functions documented |
    |---|---|---|
-   | `review_section4_to_6.md` | Steps 3–6 (Phase 1) | `bl_prepare_data`, `bl_filter_outliers`, `bl_fit_model`, `bl_build_result` (+ `bl_build_projection`, `bl_build_grid`, `bl_assemble`), `plot_biplotEZ`, `bl_project_points` |
-   | `review_section7_to_8.md` | Steps 7–8 (Phase 2) | `bl_find_boundary`, `print.bl_boundary`, `plot.bl_boundary` (jitter + boxplot), `bl_robustness`, `plot_biplotEZ` boundary overlay |
-   | `review_section11_to_17.md` | Steps 11–17 (Phase 3) | `bl_predict`, `bl_select_target`, `set_filters`, `bl_find_local_cf` (+ `.bl_rotate` SVD rotation), `plot.bl_local_result`, `bl_shapley` (exact + approximate), `plot.bl_shapley`, `bl_find_sparse_cf`, `print/plot.bl_sparse_result` |
+   | `review_section4_to_6.md` | Steps 3-6 (Phase 1) | `bl_prepare_data`, `bl_filter_outliers`, `bl_fit_model`, `bl_build_result` (+ `bl_build_projection`, `bl_build_grid`, `bl_assemble`), `plot_biplotEZ`, `bl_project_points` |
+   | `review_section7_to_8.md` | Steps 7-8 (Phase 2) | `bl_find_boundary`, `print.bl_boundary`, `plot.bl_boundary` (jitter + boxplot), `bl_robustness`, `plot_biplotEZ` boundary overlay |
+   | `review_section11_to_17.md` | Steps 11-17 (Phase 3) | `bl_predict`, `bl_select_target`, `set_filters`, `bl_find_local_cf` (+ `.bl_rotate` SVD rotation), `plot.bl_local_result`, `bl_shapley` (exact + approximate), `plot.bl_shapley`, `bl_find_sparse_cf`, `print/plot.bl_sparse_result` |
 
 2. **Set up reference document infrastructure:**
    - Created `.claude/reference/` folder and moved review docs there
@@ -856,7 +1102,7 @@ print(bl_m)
 
 ### Dead ends this session
 
-- **Parallel agent spawning failed** — first attempt to launch three Explore agents for the Step 11–17 review hit API connection errors (`ConnectionRefused`, `FailedToOpenSocket`) on all three simultaneously. Fell back to reading source files directly with the Read tool.
+- **Parallel agent spawning failed** — first attempt to launch three Explore agents for the Step 11-17 review hit API connection errors (`ConnectionRefused`, `FailedToOpenSocket`) on all three simultaneously. Fell back to reading source files directly with the Read tool.
 - **`.gitignore` exception pattern failed** — initial attempt to use `!.claude/reference/` to un-ignore the reference folder didn't work because git cannot un-ignore files inside an ignored parent directory. Fixed by restructuring `.gitignore` to ignore specific subdirectories (`.claude/plans/`, `.claude/settings*.json`) rather than the whole `.claude/` folder.
 
 ---
@@ -886,10 +1132,10 @@ print(bl_m)
    - NULL model crash in `bl_assemble`
    - `bl_build_result` silent NULL return
    - `print.bl_points` crash when no model
-   - RForrest→RForest typo + backward-compat shim
+   - RForrest->RForest typo + backward-compat shim
    - Silent ignored hyperparameters
    - Non-0.5 cutoff warning
-   - Rounding doc mismatch (4 d.p. → 3 d.p.)
+   - Rounding doc mismatch (4 d.p. -> 3 d.p.)
 
 4. **Documentation gaps:** implement `.claude/plans/documentation-gaps.md` — `devtools::document()` plus stale roxygen fixes.
 
@@ -911,11 +1157,11 @@ print(bl_m)
    | File | Fix applied |
    |---|---|
    | `tests/testthat/test-predict_utils.R` | Removed stale `2L` rounding arg from all `.pred_function()` calls; updated `* 100` integer check to `* 1000` (predictions are 3 d.p., not 2); fixed error test to use a non-workflow model object |
-   | `tests/testthat/test-model_fit.R` | Removed `result$rounding` from `.pred_function()` call; removed `rounding = 2L` from `bl_fit_model()` call; updated `* 100` → `* 1000` assertion |
+   | `tests/testthat/test-model_fit.R` | Removed `result$rounding` from `.pred_function()` call; removed `rounding = 2L` from `bl_fit_model()` call; updated `* 100` -> `* 1000` assertion |
    | `tests/testthat/test-projection.R` | Updated `expect_error()` regexp to `"method = 'CVA' requires"` |
    | `tests/testthat/test-result.R` | Removed extra `NULL` positional arg from all `bl_assemble()` calls; updated `hull_fraction` test to check it's a numeric in [0,1] from `bl_grid` (not NULL) |
 
-   **Final test result: 72 PASS, 0 FAIL, 4 WARN** (warnings are pre-existing CVA/iris 2-class notices from biplotEZ — not failures).
+   **Final test result: 72 PASS, 0 FAIL, 4 WARN** (warnings are pre-existing CVA/iris 2-class notices from biplotEZ -- not failures).
 
 2. **Comprehensive code review** — full audit of all R/ files across three dimensions: accuracy/correctness, usability, and documentation.
 
@@ -924,8 +1170,8 @@ print(bl_m)
    | Plan file | Contents |
    |---|---|
    | `accuracy-correctness-fixes.md` | 5 fixes: condition number check for `solve(V)`, grid prob clamping [0,1], boundary pruning warning, surrogate hull coverage reporting, Shapley seed independence |
-   | `usability-bug-fixes.md` | 7 fixes: NULL model crash in `bl_assemble`, `bl_build_result` silent NULL, `print.bl_points` crash, RForrest→RForest typo+shim, silent hyperparams, cutoff warning, rounding doc mismatch |
-   | `documentation-gaps.md` | Run `devtools::document()` to generate 11 missing `.Rd` files, fix stale roxygen (`rounding` param, 4 d.p. → 3 d.p.), remove orphaned rlang imports |
+   | `usability-bug-fixes.md` | 7 fixes: NULL model crash in `bl_assemble`, `bl_build_result` silent NULL, `print.bl_points` crash, RForrest->RForest typo+shim, silent hyperparams, cutoff warning, rounding doc mismatch |
+   | `documentation-gaps.md` | Run `devtools::document()` to generate 11 missing `.Rd` files, fix stale roxygen (`rounding` param, 4 d.p. -> 3 d.p.), remove orphaned rlang imports |
 
 4. **Created `.claude/settings.json`** — set `"plansDirectory": ".claude/plans"` so future plans save to the project directory.
 
@@ -941,15 +1187,15 @@ print(bl_m)
 
 ### Known issues
 
-- **Zero-length arrow warning** — `plot_biplotEZ()` with `boundary =` generates "zero-length arrow is of indeterminate angle and so skipped" warnings from R's graphics device. Three suppression approaches were tried and all failed (pre-filter, `suppressWarnings()`, `withCallingHandlers()`). The warning fires at deferred device-flush time, outside the R call stack. All attempted fix code has been reverted. Recommended next step: change `show_arrows` default to `FALSE` in `plot_biplotEZ()` — at large observation counts the boundary crosses suffice without the arrows. See CLAUDE.md Section 9 for full details.
+- **Zero-length arrow warning** — `plot_biplotEZ()` with `boundary =` generates "zero-length arrow is of indeterminate angle and so skipped" warnings from R's graphics device. Three suppression approaches were tried and all failed (pre-filter, `suppressWarnings()`, `withCallingHandlers()`). The warning fires at deferred device-flush time, outside the R call stack. All attempted fix code has been reverted. Recommended next step: change `show_arrows` default to `FALSE` in `plot_biplotEZ()` -- at large observation counts the boundary crosses suffice without the arrows. See CLAUDE.md Section 9 for full details.
 
 ---
 
 ### Next steps (pick any plan to implement)
 
-1. **Accuracy first (recommended):** implement `.claude/plans/accuracy-correctness-fixes.md` — purely defensive, no method changes, highest scientific value.
-2. **Quick wins:** implement `.claude/plans/usability-bug-fixes.md` — several are outright crashes.
-3. **Documentation:** implement `.claude/plans/documentation-gaps.md` — mostly running `devtools::document()` plus small source fixes.
+1. **Accuracy first (recommended):** implement `.claude/plans/accuracy-correctness-fixes.md` -- purely defensive, no method changes, highest scientific value.
+2. **Quick wins:** implement `.claude/plans/usability-bug-fixes.md` -- several are outright crashes.
+3. **Documentation:** implement `.claude/plans/documentation-gaps.md` -- mostly running `devtools::document()` plus small source fixes.
 
 After completing any plan, commit the changes on `method_developments` and update this file.
 

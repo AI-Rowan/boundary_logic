@@ -71,6 +71,11 @@
 #' @keywords internal
 .pred_function <- function(model_use, model_type, new_data) {
 
+  if (identical(model_type, "RForrest")) {
+    warning("model_type 'RForrest' is deprecated; use 'RForest'.", call. = FALSE)
+    model_type <- "RForest"
+  }
+
   floor_round <- function(x) floor(x * 1000) / 1000
 
   pred_value <- if (model_type == "custom") {
@@ -109,7 +114,7 @@
         predict(model_use, newdata = new_data)
       ),
 
-      "RForrest" = floor_round(
+      "RForest" = floor_round(
         predict(model_use, newdata = new_data)[, 2]
       ),
 
@@ -120,7 +125,7 @@
       },
 
       stop(sprintf(
-        "Unknown model_type '%s'. Must be one of: GLM, GAM, GBM, LDA, SVM, NNET, RForrest, XGB, custom.",
+        "Unknown model_type '%s'. Must be one of: GLM, GAM, GBM, LDA, SVM, NNET, RForest, XGB, custom.",
         model_type
       ), call. = FALSE)
     )

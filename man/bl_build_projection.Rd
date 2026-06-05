@@ -67,6 +67,9 @@ ridge fallback when singular.}
 covariance from CVA class factor), \code{"W_binary"} (pooled within-class
 covariance from binary 0/1 class column), or \code{"Sigma"} (total
 covariance fallback).}
+\item{\code{condition_number}}{Numeric; condition number of the loading matrix
+\code{V} (via \code{\link[base:kappa]{base::kappa()}}). Values above 1e10 indicate near-singularity
+and trigger a warning at construction time.}
 }
 }
 \description{

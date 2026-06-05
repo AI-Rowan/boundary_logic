@@ -184,7 +184,7 @@ bl_project_points <- function(data, bl_result,
 #' The returned data frame contains:
 #' \itemize{
 #'   \item \code{row} — row index (1-based).
-#'   \item \code{pred_prob} — model predicted probability (rounded to 4 d.p.).
+#'   \item \code{pred_prob} — model predicted probability (rounded to 3 d.p.).
 #'   \item \code{pred_class} — predicted class (0 or 1).
 #'   \item \code{true_class} — true class if a \code{"class"} column is present
 #'     in \code{data}; otherwise omitted.
@@ -264,7 +264,11 @@ print.bl_points <- function(x, ...) {
   cat(sprintf("  Labels known    : %s\n", if (!is.null(x$class)) "yes" else "no"))
   cat(sprintf("  Inside polygon  : %d / %d\n",
               sum(x$inside_polygon), length(x$inside_polygon)))
-  cat(sprintf("  Pred prob range : [%.4f, %.4f]\n",
-              min(x$pred_prob), max(x$pred_prob)))
+  if (!is.null(x$pred_prob)) {
+    cat(sprintf("  Pred prob range : [%.4f, %.4f]\n",
+                min(x$pred_prob), max(x$pred_prob)))
+  } else {
+    cat("  Pred prob range : (no model)\n")
+  }
   invisible(x)
 }

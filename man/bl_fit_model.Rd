@@ -20,7 +20,7 @@ plus a column named \code{"class"} (numeric 0/1).}
 
 \item{model_type}{Character scalar specifying the model family. One of:
 \code{"GLM"} (logistic regression), \code{"SVM"} (support vector machine),
-\code{"NNET"} (neural network), \code{"RForrest"} (rpart decision tree).
+\code{"NNET"} (neural network), \code{"RForest"} (rpart decision tree).
 Default \code{"GLM"}. For other model families (XGBoost, GBM, GAM, LDA)
 use \code{bl_wrap_model()} with the externally fitted object.}
 
@@ -28,11 +28,11 @@ use \code{bl_wrap_model()} with the externally fitted object.}
 Default \code{0.5}.}
 
 \item{model_params}{Named list of hyperparameter overrides. Unrecognised
-keys are silently ignored. Parameter names follow \strong{parsnip} conventions.
+keys trigger a warning. Parameter names follow \strong{parsnip} conventions.
 Common overrides:
 \itemize{
 \item NNET: \code{list(hidden_units = 10, penalty = 0.01, epochs = 500)}
-\item RForrest: \code{list(min_n = 10)}
+\item RForest: \code{list(min_n = 10)}
 }}
 }
 \value{

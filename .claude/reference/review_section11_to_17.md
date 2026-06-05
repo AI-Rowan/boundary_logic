@@ -1,16 +1,16 @@
-# Code Walkthrough: Steps 11–17 of `03_loan_status_Boundary_Logic.R`
+# Code Walkthrough: Steps 9–15 of `03_loan_status_Boundary_Logic.R`
 
 ## Context
 
-This document continues from `review_section7_to_8.md`. At this point `bl_results_v2` is the Phase 1 anchor built on the reduced feature set (after Step 10 pruning), and `test_pts_v2` is the projected test-set `bl_points` object. Steps 11–17 form Phase 3: single-observation local interpretation — selecting one target, finding its local counterfactual, attributing feature contributions, and building the sparsest possible flip.
+This document continues from `review_section7_to_8.md`. At this point `bl_results_v2` is the Phase 1 anchor built on the reduced feature set (after variable pruning), and `test_pts_v2` is the projected test-set `bl_points` object. Steps 9–15 form Phase 3: single-observation local interpretation — selecting one target, finding its local counterfactual, attributing feature contributions, and building the sparsest possible flip.
 
 Note: Phase 3 uses `bl_results_v2` (6-feature reduced model), not `bl_results` (the original 10-feature model).
 
 ---
 
-## Step 11 — `bl_predict()` + `bl_select_target()` + `plot_biplotEZ()` with target
+## Step 9 — `bl_predict()` + `bl_select_target()` + `plot_biplotEZ()` with target
 
-### 11a — `bl_predict()` → `pred_summary`
+### 9a — `bl_predict()` → `pred_summary`
 
 **File:** `R/project_points.R`
 
@@ -54,7 +54,7 @@ Used this way in scripts 00, 01, 03, 05, 06 and both vignettes. The analyst read
 
 ---
 
-### 11b — `bl_select_target()` → `tgt`
+### 9b — `bl_select_target()` → `tgt`
 
 **File:** `R/local_cf.R`
 
@@ -106,13 +106,13 @@ When `target` is a data frame instead of an integer, `x_obs` is taken directly f
 
 ---
 
-### 11c — `plot_biplotEZ()` with `target_point`
+### 9c — `plot_biplotEZ()` with `target_point`
 
 ```r
 plot_biplotEZ(
   bl_results_v2,
   points       = test_pts_v2,
-  target_point = unlist(tgt$x_obs),
+  target_point = target_value,        # bl_results_v2$test_data[tdp, ]
   target_label = tdp
 )
 ```
@@ -120,14 +120,14 @@ plot_biplotEZ(
 Same 5-layer biplot as before (grid, test points, axes, contour), plus:
 
 **Layer 6 — Target circle:**
-- `target_point = unlist(tgt$x_obs)`: named numeric vector of feature values in X-space
+- `target_point = target_value` (i.e. `bl_results_v2$test_data[tdp, ]`): data frame row; `plot_biplotEZ()` calls `as.numeric(target_point[var_names])` internally, so no `unlist()` is needed
 - Inside `plot_biplotEZ()`, this is centered (`- X_center`) and projected to Z-space: `target_z = target_st %*% V[, proj_dims]`
 - Rendered as a large filled circle (`pch = 21`, `cex = 1.8`) with the confusion category colour as background (or red/blue if true class unknown)
 - `target_label = 2` is displayed inside the circle
 
 ---
 
-## Step 12 — `set_filters()` → `flt`
+## Step 10 — `set_filters()` → `flt`
 
 **File:** `R/local_cf.R`
 
@@ -174,7 +174,7 @@ No constraint = unconstrained (all contour points accepted for that feature).
 
 ---
 
-## Step 13 — `bl_find_local_cf()` → `bl_local`
+## Step 11 — `bl_find_local_cf()` → `bl_local`
 
 **File:** `R/local_cf.R`
 
@@ -361,7 +361,7 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 
 ---
 
-## Step 14 — `plot(bl_local)` → `plot.bl_local_result()`
+## Step 12 — `plot(bl_local)` → `plot.bl_local_result()`
 
 **File:** `R/local_cf.R`
 
@@ -403,7 +403,7 @@ This means the axes, variable label positions, and tick marks are all recalculat
 
 ---
 
-## Step 15 — `bl_shapley()` + `print()` + `plot()`
+## Step 13 — `bl_shapley()` + `print()` + `plot()`
 
 **File:** `R/shapley.R`
 
@@ -525,7 +525,7 @@ Horizontal bar chart (ggplot2):
 
 ---
 
-## Step 16 — `bl_find_sparse_cf()` + `print()` + `plot()`
+## Step 14 — `bl_find_sparse_cf()` + `print()` + `plot()`
 
 **File:** `R/shapley.R`
 
@@ -613,7 +613,7 @@ The `used_in_sparse` column shows which features actually changed. Features with
 
 ---
 
-## Step 17 (optional) — Unconstrained local search
+## Step 15 (optional) — Unconstrained local search
 
 ```r
 bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
@@ -625,7 +625,7 @@ Identical pipeline to Steps 13–16, with `set_filters = NULL`. The unconstraine
 
 ---
 
-## Complete Object Flow: Steps 11–17
+## Complete Object Flow: Steps 10–16
 
 ```
 bl_results_v2  [bl_result]          ← Phase 1 anchor (reduced 6-feature model)
@@ -720,7 +720,7 @@ bl_sparse  [bl_sparse_result]
 
 ## Key Methodological Points
 
-1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 13) rotates the projection specifically around the target observation and tries multiple eigenvector pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
+1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 12) rotates the projection specifically around the target observation and tries multiple eigenvector pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
 
 2. **The convex hull is NOT applied in Phase 3.** Because each eigenvector pair rotation invalidates the original grid polygon, `bl_find_local_cf()` uses `train_ranges` (per-feature min/max) and `set_filters` actionability constraints instead of the Z-space hull. The hull was the right constraint in global space; in locally-rotated space it would be incorrect.
 
