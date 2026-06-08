@@ -4,6 +4,11 @@
 #               scripts/4.4 Local Interpretation Shapley.R
 ############################################################
 
+# Bare column-name symbols referenced via NSE in plot.bl_shapley()'s
+# ggplot2::aes() calls -- declared so R CMD check does not flag them as
+# undefined globals.
+utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p"))
+
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -16,7 +21,7 @@
 #'
 #' @param start     Numeric vector length p (observed values).
 #' @param end       Numeric vector length p (counterfactual values).
-#' @param masks     Integer matrix [R x p] of 0/1 values.
+#' @param masks     Integer matrix `[R x p]` of 0/1 values.
 #' @param var_names Character vector of column names length p.
 #' @return Data frame with \code{var_names} columns and \code{nrow(masks)} rows.
 #' @noRd
@@ -194,7 +199,7 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
   pred_boundary <- bl_local_result$B_pred
   data_to_boundary <- end - start
 
-  # Ordering: class 0 → decreasing (most negative first); class 1 → ascending
+  # Ordering: class 0 -> decreasing (most negative first); class 1 -> ascending
   dec_order  <- (pred_use == 1L)
   dist_order <- order(shap, decreasing = dec_order)
 
@@ -246,11 +251,11 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 #' @param x   A \code{"bl_shapley"} object from \code{\link{bl_shapley}}.
 #' @param ... Currently ignored.
 #'
-#' @return A \code{ggplot} object (invisible printing — assign or call
+#' @return A \code{ggplot} object (invisible printing -- assign or call
 #'   explicitly to display).
 #'
 #' @importFrom ggplot2 ggplot aes geom_col geom_label scale_fill_manual
-#'   scale_color_manual theme_bw theme labs
+#' @importFrom ggplot2 scale_color_manual theme_bw theme labs
 #' @export
 plot.bl_shapley <- function(x, ...) {
   df        <- x$shapley_df

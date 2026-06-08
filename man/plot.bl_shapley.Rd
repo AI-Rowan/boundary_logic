@@ -12,7 +12,7 @@
 \item{...}{Currently ignored.}
 }
 \value{
-A \code{ggplot} object (invisible printing — assign or call
+A \code{ggplot} object (invisible printing -- assign or call
 explicitly to display).
 }
 \description{

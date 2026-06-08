@@ -29,7 +29,6 @@ Imports:
     kernlab,
     parsnip,
     workflows,
-    discrim,
     biplotEZ,
     aplpack,
     ggplot2

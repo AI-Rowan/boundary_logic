@@ -95,11 +95,11 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 
 - **After implementing any plan: stop after `devtools::document()` and `devtools::test()` pass.** Report the PASS/FAIL count and wait. Do NOT proceed to `git add`, `git commit`, or `git push` unless the user explicitly asks — even in auto-accept mode.
 - Add `roxygen2` documentation (`#' @param`, `#' @return`, `#' @export`) to every exported function.
+- **roxygen2 `@importFrom` directives must be single-line only.** Multi-line `@importFrom` (continuation lines starting with `#'   `) cause a hard roxygen2 parsing error. If you need to import many symbols from one package, split them across multiple `@importFrom` directives, e.g. `#' @importFrom ggplot2 aes ggplot geom_col` on one line, `#' @importFrom ggplot2 scale_fill_manual theme_bw` on the next. (Discovered 2026-06-08 when fixing `shapley.R:257-258` and `boundary_plot.R:83`.)
 - Validate inputs with the `stop_if_*()` helpers in `utils.R`, always with `call. = FALSE`.
 - Name the assembled pipeline result `bl_results` in scripts (not `result` or `bl_result`).
 - Name the Shapley object `bl_shapley_values` in scripts (not `bl_shap`, to avoid confusion with the Python SHAP library).
 - Run `devtools::test()` after any change to a core function.
-- Confirm changes against both the iris and Pima datasets when modifying core functions.
 - Before modifying a core function: read its roxygen header, grep for callers, check what `bl_result` fields flow from it, then make a minimal change without refactoring surrounding code.
 - Every new base-R plotting function (one that calls `graphics::*` directly) must open a graphics device if none is active: `if (grDevices::dev.cur() == 1L) grDevices::dev.new()` at the top of the function body, after input validation. Add `@importFrom grDevices dev.cur dev.new` to its roxygen block.
 - **Distance-measure functions** use the `distance = c("mahalanobis", "euclidean")` parameter convention with `"mahalanobis"` as the default. The Mahalanobis path reads `bl_result$metric_inv` (full `W^{-1}`) or `bl_result$metric` (raw `W`, e.g. `sqrt(diag(W))` for per-feature standardisation); the Euclidean path preserves pre-Mahalanobis behaviour for reproducibility. Always include the `is.null(bl_result$metric_inv)` fallback-with-warning to handle older `bl_result` objects.

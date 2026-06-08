@@ -5,6 +5,11 @@
 # Refactored from: scripts/4.1 Global interpretations - Robust and VIP.r
 ############################################################
 
+# Bare column-name symbols referenced via NSE in plot.bl_boundary()'s
+# ggplot2::aes() calls -- declared so R CMD check does not flag them as
+# undefined globals.
+utils::globalVariables(c("values", "Variable"))
+
 
 #' Distance-to-boundary plot
 #'
@@ -81,8 +86,8 @@
 #' }
 #'
 #' @importFrom ggplot2 ggplot aes geom_jitter geom_boxplot geom_vline labs
-#'   scale_color_manual scale_fill_manual theme_light theme element_text
-#'   position_dodge
+#' @importFrom ggplot2 scale_color_manual scale_fill_manual theme_light theme
+#' @importFrom ggplot2 element_text position_dodge
 #' @export
 plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
                               distance = c("mahalanobis", "euclidean"), ...) {

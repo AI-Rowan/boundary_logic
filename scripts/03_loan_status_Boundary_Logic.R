@@ -483,7 +483,20 @@ names(loan_encoded)
 {
   bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
   print(bl_sparse)
-  plot(bl_sparse)
+  plot(bl_sparse,
+       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+       label_offset_var  = c("person_age",
+                             "loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0.5,0,0,0),
+       ticks_var = c("person_age",
+                     "loan_amnt",
+                     "loan_int_rate",
+                     "loan_percent_income",
+                     "credit_score"),
+       ticks_n = c(2,4,200,200,20))
 }
 
 
@@ -515,7 +528,21 @@ names(loan_encoded)
   bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
 
   plot(bl_shap_free)
-  plot(bl_sparse_free)
+  plot(bl_sparse_free,
+       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+       label_offset_var  = c("person_age",
+                             "loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0,0,0,1),
+       ticks_var = c("person_age",
+                     "loan_amnt",
+                     "loan_int_rate",
+                     "loan_percent_income",
+                     "credit_score"),
+       ticks_n = c(2,4,200,200,20)
+  )
 }
 
 

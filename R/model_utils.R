@@ -25,6 +25,9 @@
 #' @param model_params Named list of hyperparameter overrides.
 #'
 #' @importFrom parsnip logistic_reg mlp svm_rbf decision_tree set_engine set_mode fit
+#' @importFrom kernlab ksvm
+#' @importFrom nnet nnet
+#' @importFrom rpart rpart
 #' @importFrom workflows workflow add_formula add_model
 #' @importFrom stats as.formula
 #' @importFrom utils modifyList

@@ -128,7 +128,7 @@ print(tgt)
 test_unlabeled <- bl_results$test_data[ tdp, !(names(bl_results$test_data) %in% "class")]
 holdout_pts <- bl_project_points(test_unlabeled, bl_results)
 
-bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data[15,])
+bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data[tdp, ])
 
 plot_biplotEZ(bl_results, points = holdout_pts)
 

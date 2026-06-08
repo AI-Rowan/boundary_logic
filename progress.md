@@ -1,5 +1,61 @@
 # Progress
 
+## Session summary (2026-06-08, latest) — Fix editor diagnostics in R/shapley.R and R/local_cf.R
+
+### Completed this session
+
+1. **Diagnosed and fixed three real issues in `R/shapley.R`** — the VS Code editor was correctly
+   flagging errors that had been missed by the 2026-05-19 cleanup pass:
+   - **Non-ASCII characters** (lines 197, 249): literal `→` and `—` replaced with ASCII
+     equivalents `->` and `--` using a Python one-liner (same technique as the 2026-05-19
+     pass, per `progress.md:1433`).
+   - **Broken roxygen cross-reference** (line 19): wrapped `` `[R x p]` `` in backticks
+     to prevent roxygen2 interpreting it as a `\link{}` to a nonexistent topic
+     (matches the existing `[0, 1]`/`[-1, 1]` fix pattern in `biplot_grid.R`, etc.).
+   - **Multi-line `@importFrom ggplot2`** (lines 257-258): roxygen2 rejects multi-line
+     `@importFrom` directives with a hard error; split into two single-line
+     `@importFrom` declarations.
+   - **ggplot2 NSE global-variable suppression** (lines 261-262, 277): added
+     `utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p"))` near
+     the top of the file to suppress R CMD check "no visible binding for global variable"
+     NOTEs for the bare column-name symbols used in `plot.bl_shapley()`'s
+     `ggplot2::aes()` calls.
+
+2. **Confirmed `R/local_cf.R` is clean** — it showed no real defects; its VS Code squiggles
+   are false-positive "no visible global function definition" diagnostics from the R language
+   server's per-file analysis (it cannot see cross-file internal helpers like `.pred_function`,
+   `.nearest_idx_block`, etc. without the full package namespace loaded). Restarting the
+   R language server typically clears these.
+
+3. **Discovered and fixed an identical `@importFrom` error in `R/boundary_plot.R:83`** as a
+   bonus — the multi-line `@importFrom ggplot2 ...` was making `devtools::document()` fail
+   outright. Fixed it the same way (split into single-line directives).
+
+4. **Verified all fixes**:
+   - `devtools::document()` — **clean, no errors** (was erroring on both files before)
+   - `devtools::test()` — **77 PASS, 0 FAIL, 4 WARN** (matches recorded baseline exactly)
+   - Byte-level ASCII check — zero non-ASCII characters remain in `shapley.R`
+   - `R CMD check` — **0 errors**; the ggplot2 NSE-globals NOTE for `shapley.R` is gone
+   - Visual render — `plot(bl_shapley_values)` renders correctly on iris dataset (verified
+     via throwaway script per the biplotEZ-segfault convention, then deleted)
+
+5. **User fix preserved** — `scripts/01_iris_SVM_PCA_biplot.R` had a manual correction
+   (`bl_results$test_data[15,]` → `bl_results$test_data[tdp, ]`) applied by the user
+   during our verification process; left untouched.
+
+### Dead ends / obstacles this session
+
+1. **Multi-line `@importFrom` roxygen2 error** — hard failure blocking `devtools::document()`.
+   Not documented in CLAUDE.md; roxygen2 requires each `@importFrom` directive to be on a
+   single line only. Fixed by splitting into multiple single-line directives. This is a
+   new convention to enforce going forward (added to CLAUDE.md, see below).
+
+2. **R CMD check vignette-build failure** (Pandoc not found) — worked around with
+   `--no-build-vignettes` flag, but is a known Windows PATH issue (same as the 2026-06-05
+   session's workaround: `Sys.setenv(RSTUDIO_PANDOC = "C:/Program Files/RStudio/...")`).
+
+---
+
 ## Session summary (2026-06-08, continued yet further) — script cleanup + pkgdown site rebuild
 
 ### Completed this session
@@ -77,15 +133,24 @@
 - Tests: unaffected (no `R/` change this sub-session; baseline remains
   77 PASS / 0 FAIL / 4 WARN from the vignette sub-session above).
 
+### Committed and pushed
+
+User instructed "commit and push". Folded **all** of today's work (this sub-session's
+script rename/deletion + `docs/` rebuild, plus the prior vignette/SHAP sub-session) into
+a **single commit** — every modified/touched file traced back to the same day's session,
+and `CLAUDE.md`/`README.md`/`progress.md` were touched by both streams, making a clean
+split impractical.
+
+- Commit `b96878c` — "Rewrite vignette for credit-risk workflow with SHAP comparison;
+  clean up scripts and docs site" (152 files changed, 17850 insertions, 6738 deletions).
+- Pushed to `origin/method_developments` (`c8aa854..b96878c`).
+
 ### Next steps
 
-1. **Commit** when instructed (commit-gate: nothing committed yet this session).
-   This sub-session's changes (script rename/deletion, `_pkgdown.yml`, `docs/`
-   rebuild) can be folded into the same commit as the vignette work, or split —
-   ask the user which they prefer when the commit instruction comes.
-2. **User to check OneDrive version history** for the 4 accidentally-deleted files
+1. **User to check OneDrive version history** for the 4 accidentally-deleted files
+   (`Rplots.pdf`, `Rplots1.pdf`, `verify_labels.R`, `verify_labels_output.pdf`)
    before they're considered permanently gone.
-3. Carried over: Mac tester confirmation, then merge `method_developments` → `main`.
+2. Carried over: Mac tester confirmation, then merge `method_developments` → `main`.
 
 ---
 
