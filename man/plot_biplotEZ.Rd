@@ -10,19 +10,21 @@ plot_biplotEZ(
   target_point = NULL,
   target_label = NULL,
   no_grid = FALSE,
-  no_points = FALSE,
+  plot_points = TRUE,
   confusion_cols = TRUE,
   no_contour = FALSE,
   new_title = NA,
   cex_z = 0.5,
-  label_dir = "Hor",
+  label_dir = "Paral",
   label_cex = 1,
   tick_label_cex = 0.6,
   ticks_v = 1L,
+  ticks_var = 0L,
+  ticks_n = 5L,
   which = NULL,
   X_names = NULL,
   label_offset_var = 0L,
-  label_offset_dist = 0.5,
+  label_offset_dist = 1.5,
   rotate_deg = 0,
   grid_col = NULL,
   contour_col = "black",
@@ -49,8 +51,8 @@ point is shown without a label.}
 \item{no_grid}{Logical; if \code{TRUE}, the prediction grid is hidden.
 Default \code{FALSE}.}
 
-\item{no_points}{Logical; if \code{TRUE}, data points are hidden.
-Default \code{FALSE}.}
+\item{plot_points}{Logical; if \code{TRUE} (default), training data points
+are drawn. Set to \code{FALSE} to hide them.}
 
 \item{confusion_cols}{Logical; if \code{TRUE} (default), points are coloured
 by confusion category (TP=red, TN=blue, FP=purple, FN=orange) when true
@@ -67,7 +69,9 @@ are hidden. Default \code{FALSE}.}
 Default \code{0.5}.}
 
 \item{label_dir}{Character; biplotEZ axis label direction.
-\code{"Hor"} (horizontal, default) or \code{"Orthog"} (orthogonal to axis direction).}
+\code{"Paral"} (default) follows the plot border -- labels on the left/right
+borders are vertical, top/bottom are horizontal. \code{"Hor"} forces all labels
+horizontal. \code{"Orthog"} draws labels perpendicular to the axis direction.}
 
 \item{label_cex}{Numeric; variable name (axis label) size. Default \code{1}.}
 
@@ -76,20 +80,32 @@ Default \code{0.5}.}
 \item{ticks_v}{Integer; number of ticks per variable axis.
 Default \code{1L}.}
 
+\item{ticks_var}{Integer, integer vector, character, or character
+vector; variable(s) whose tick-mark count should override \code{ticks_v}.
+Supply variable names (e.g. \code{"Sepal.Length"}) or integer indices
+(e.g. \code{c(1L, 3L)}). \code{0} (default) means no override -- every axis uses
+\code{ticks_v}.}
+
+\item{ticks_n}{Integer or integer vector; tick-mark count(s) for
+the variable(s) named in \code{ticks_var}. A single value applies to all
+listed variables; a vector must match the length of \code{ticks_var}.
+Default \code{5L}.}
+
 \item{which}{Integer vector; indices of variables to draw axes
 for. Defaults to all variables.}
 
 \item{X_names}{Character vector; custom variable names for axis
 labels. Defaults to \code{bl_result$var_names}.}
 
-\item{label_offset_var}{Integer or integer vector; index/indices of variables
-whose axis labels should be shifted outward. \code{0} (default) means no
-offset. Supply a vector (e.g., \code{c(1L, 3L)}) to offset multiple variables.}
+\item{label_offset_var}{Integer, integer vector, character, or character
+vector; variable(s) whose axis labels should be shifted outward from the
+border. Supply variable names (e.g., \code{"Sepal.Length"}) or integer indices
+(e.g., \code{c(1L, 3L)}). \code{0} (default) means no offset.}
 
 \item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
-for \code{label_offset_var}. If a single value, the same distance is applied to
-all variables listed in \code{label_offset_var}. If a vector, must be the same
-length as \code{label_offset_var}. Default \code{0.5}.}
+in margin lines for \code{label_offset_var}. A single value applies to all
+listed variables; a vector must match the length of \code{label_offset_var}.
+Useful range 1--3. Default \code{1.5}.}
 
 \item{rotate_deg}{Numeric; angle in degrees to rotate the entire plot
 clockwise. Rotates all plotted elements -- grid, training points, contour

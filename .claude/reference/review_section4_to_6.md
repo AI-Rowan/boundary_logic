@@ -386,19 +386,27 @@ Combines all artifacts into the final `bl_result` object.
 
 ---
 
-### 7 — `plot_biplotEZ(bl_results)` — renders the training biplot
+### 7 — `plot_biplotEZ(bl_results)` / `plot(bl_results)` — renders the training biplot
 
 **File:** `R/plot_biplot.R`
+
+`plot(bl_results)` now works via `plot.bl_result()`, a one-liner S3 wrapper that forwards all arguments to `plot_biplotEZ()`.
 
 **Call:**
 ```r
 plot_biplotEZ(
   bl_results,
-  label_dir         = "Hor",
-  label_offset_var  = 0L,
-  label_offset_dist = 0.5
+  label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+  label_offset_var  = 0L,        # or a character/integer vector of variable names/indices
+  label_offset_dist = 1.5        # margin lines; useful range 1-3
 )
 ```
+
+Parameter notes:
+- `plot_points = TRUE` (default): shows data points; `FALSE` hides them (replaced `no_points`).
+- `label_dir = "Paral"` (default): border-adaptive -- left/right labels are vertical, top/bottom are horizontal.
+- `label_offset_var` accepts variable names: `label_offset_var = "loan_amnt"` is now valid.
+- `rotate_deg` rotates the entire plot clockwise; all elements (grid, points, contours, axes) rotate together.
 
 **What it renders (in layer order):**
 
@@ -409,6 +417,44 @@ plot_biplotEZ(
 | 3 | `points$Z` + `points$pred_col` | Training obs as coloured dots: TP=red, TN=blue, FP=purple, FN=orange |
 | 4 | `biplot_obj` again | Darker axes re-drawn on top of the grid and points |
 | 5 | `biplot_grid$ct` | Black contour lines marking the decision boundary (probability ≈ 0.5) |
+
+#### biplotEZ visual features: what `plot_biplotEZ()` uses, and what's available for later
+
+`plot_biplotEZ()` deliberately uses only a thin slice of biplotEZ's rendering
+API — enough to draw the coordinate-axis skeleton (`axes()`) on a blank canvas
+(`samples(opacity = 0)`), then layers the package's own grid, points, contours,
+and target marker on top with `graphics::points()`/`lines()`/`text()`. This is
+intentional: `boundarylogic` needs full control over confusion-category colours
+(TP/TN/FP/FN), the prediction-probability surface, decision-boundary contours,
+and synchronised rotation — none of which map cleanly onto biplotEZ's
+group-aesthetic-driven sample styling.
+
+**Currently used:** `biplot()`, `PCA()`/`CVA()` (projection — `R/projection.R`),
+`samples()` (canvas only, `opacity = 0`), `axes()` (full axis styling, exposed
+via `label_dir`, `label_cex`, `tick_label_cex`, `ticks_v`/`ticks_var`/`ticks_n`,
+`label_offset_var`/`label_offset_dist`, `which`, `X_names`).
+
+**Available in biplotEZ but not currently used — candidates for future
+additions:**
+
+| biplotEZ function | What it would add | Notes |
+|---|---|---|
+| `means()` | Class/group mean markers + labels | Would need confusion-category-aware grouping to fit the package's colour scheme |
+| `alpha.bags()` | Alpha-bag contours -- region containing alpha% of a class's points | Density-based summary region per class |
+| `ellipses()` | Kappa concentration ellipses per class | Parametric alternative to alpha-bags |
+| `density1D()` / `density2D()` | Kernel density curves / heatmaps over the biplot | Visual alternative/complement to the existing probability-coloured grid |
+| `legend.type()` | In-plot legend for samples/means/bags/ellipses/regions | Package currently prints a text summary to the console instead |
+| `newsamples()` / `newaxes()` | Supplementary points/axes styled distinctly (e.g. orange) from the primary biplot | Could visually distinguish genuinely external data from train/test overlays |
+| `interpolate()` | Projects a new dataset onto an *existing* fitted biplot object | Different mechanism from `bl_project_points()`, which re-derives coordinates from `bl_result$V`/`X_center` directly |
+| `classification()` / `prediction()` | biplotEZ's own classification-region and sample/mean prediction overlays | Alternative to this package's custom prediction-grid + contour approach |
+| `regress()` | Regression biplot (axes fitted via linear regression or B-splines) | An alternative *construction*, not an addition to the current PCA/CVA biplot |
+| `rotate()` / `reflect()` / `translate_axes()` | Generic geometric transforms | `boundarylogic` already implements its own (`.apply_biplot_rotation()`) because rotation must keep the prediction grid, contours, and target point in sync -- biplotEZ's generic versions don't know about these package-specific elements |
+| `fit.measures()` | Quality-of-fit diagnostics (overall quality, axis/sample/class predictivity) | Not visual, but could help decide which additions above are worth prioritising |
+| `CA()`, `CATPCA()`, `PCO()`, `AoD()`, `CLPs()`, `CLRs()` | Alternative biplot constructions for categorical / distance-matrix data | Not applicable to this package's continuous-feature binary-classification setting |
+
+None of the above are wired into `plot_biplotEZ()`, `plot.bl_local_result()`,
+or `plot.bl_surrogate()` today. Adding any of them would be new, scoped feature
+work (see CLAUDE.md Section 9, "Deferred / Future Work").
 
 **`points` here:** Because no `points=` argument is passed, `plot_biplotEZ()` automatically calls `bl_project_points(bl_results$train_data, bl_results)` internally to project the training data.
 
@@ -475,13 +521,13 @@ test_pts <- bl_project_points(bl_results$test_data, bl_results)
 plot_biplotEZ(bl_results, points = test_pts)
 ```
 
-Used this way in all loan scripts (03–06), the iris and Pima scripts, both vignettes, and the README. Variants: `filter_to_polygon = TRUE` (only one explicit use, in script 03 line 185) drops out-of-hull observations before plotting; `filter_to_train_ranges = TRUE` (no current scripted use) drops X-space-extrapolated rows. Without an explicit `bl_project_points()` call, `plot_biplotEZ()` only ever shows training data because of the auto-project on line ~145 of `plot_biplot.R`.
+Used this way in all loan scripts (03–06), the iris and Pima scripts, both vignettes, and the README. Variants: `filter_to_polygon = TRUE` (only one explicit use, in script 03 line 234) drops out-of-hull observations before plotting; `filter_to_train_ranges = TRUE` (no current scripted use) drops X-space-extrapolated rows. Without an explicit `bl_project_points()` call, `plot_biplotEZ()` only ever shows training data because of the auto-project on line ~145 of `plot_biplot.R`.
 
 ---
 
-### 9 — `plot_biplotEZ(bl_results, points = test_pts)` — overlays test data
+### 9 — `plot_biplotEZ(bl_results, points = test_pts)` / `plot(bl_results, points = test_pts)` — overlays test data
 
-**Same function, different arguments.** Renders identical layers 1–5 as above, but uses `test_pts$Z` and `test_pts$pred_col` for the data points (layer 3) instead of projecting training data automatically. This shows where the held-out test observations fall on the decision surface.
+**Same function, different arguments.** `plot(bl_results, points = ...)` works via the `plot.bl_result()` S3 wrapper, consistent with the Step 7 unified-plot-interface pattern. Renders identical layers 1–5 as above, but uses `test_pts$Z` and `test_pts$pred_col` for the data points (layer 3) instead of projecting training data automatically. This shows where the held-out test observations fall on the decision surface.
 
 ---
 
@@ -544,7 +590,7 @@ test_pts  [bl_points]
   ├── class          (true loan_status)
   └── inside_polygon (TRUE/FALSE per obs)
      │
-     │  plot_biplotEZ(bl_results, points = test_pts)
+     │  plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
      └─→ renders same biplot with test points overlaid
 ```
 

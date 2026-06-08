@@ -263,16 +263,16 @@ print(bl_local)
 # The biplotEZ object is patched with the rotated loading matrix (Vr_rot)
 # and rotated training coordinates (Z_train_rot) for the best pair.
 #
-# Default (no_points = TRUE): shows only the target + counterfactual.
+# Default (plot_points = FALSE): shows only the target + counterfactual.
 #   - Filled circle = target observation (confusion colour or red/blue)
 #   - Grey cross + arrow = nearest boundary (counterfactual)
 #
 # To also show training data:
-#   plot(bl_local, no_points = FALSE)
+#   plot(bl_local, plot_points = TRUE)
 #   Training colours: TP=red, TN=blue, FP=purple, FN=orange
 #
 # Supported parameters (same as plot_biplotEZ):
-#   no_grid, no_points, no_contour, cex_z, label_dir, tick_label_cex,
+#   no_grid, plot_points, no_contour, cex_z, label_dir, tick_label_cex,
 #   ticks_v, which, X_names, label_offset_var, label_offset_dist,
 #   show_arrows, arrow_col, contour_col, contour_lwd, contour_lty
 
@@ -322,7 +322,7 @@ print(bl_sparse)
 #   Grey cross   = full counterfactual (all variables changed)
 #   Green cross  = sparse CF (valid — crosses boundary)
 #   Yellow cross = sparse CF (invalid — does not cross boundary)
-# To also show training data: plot(bl_sparse, no_points = FALSE)
+# To also show training data: plot(bl_sparse, plot_points = TRUE)
 # All plot(bl_local) parameters are supported via ...
 plot(bl_sparse)
 

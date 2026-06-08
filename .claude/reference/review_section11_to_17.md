@@ -106,16 +106,22 @@ When `target` is a data frame instead of an integer, `x_obs` is taken directly f
 
 ---
 
-### 9c — `plot_biplotEZ()` with `target_point`
+### 9c — `plot()` with `target_point` and biplot label customisation
 
 ```r
-plot_biplotEZ(
+plot(
   bl_results_v2,
-  points       = test_pts_v2,
-  target_point = target_value,        # bl_results_v2$test_data[tdp, ]
-  target_label = tdp
+  points       = test_point,           # bl_project_points(test_data[tdp:10, ], ...)
+  target_point = target_value,         # bl_results_v2$test_data[tdp, ]
+  target_label = tdp,
+  label_dir         = "Paral",
+  label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "credit_score"),
+  label_offset_dist = c(0, 0, 0.5, 0, 0)
 )
 ```
+
+Note: `test_point` is a small 10-row subset of test observations (rows `tdp:10`) — kept distinct from the full `test_pts_v2` overlay so the highlight plot remains readable. The `label_*` arguments are the same cosmetic biplot-label controls documented in `review_section4_to_6.md` Step 7, passed here via `plot()`'s `...` argument to `plot_biplotEZ()`.
 
 Same 5-layer biplot as before (grid, test points, axes, contour), plus:
 
@@ -135,8 +141,9 @@ Same 5-layer biplot as before (grid, test points, axes, contour), plus:
 ```r
 flt <- set_filters(
   tgt,
-  loan_amnt     = "decrease",
-  loan_int_rate = "fixed"
+  person_age    = "fixed",
+  loan_int_rate = "increase",
+  credit_score  = "increase"
 )
 ```
 
@@ -168,8 +175,9 @@ No constraint = unconstrained (all contour points accepted for that feature).
 **`print(flt)` console output:**
 ```
 -- bl_filters --
-  loan_amnt            : decrease
-  loan_int_rate        : fixed
+  person_age           : fixed
+  loan_int_rate        : increase
+  credit_score         : increase
 ```
 
 ---
@@ -182,9 +190,8 @@ No constraint = unconstrained (all contour points accepted for that feature).
 ```r
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results_v2,
-  bl_model    = bl_mod_v2,      # (implicit via bl_results_v2)
-  bl_target   = tgt,
-  set_filters = flt
+  set_filters = flt,
+  bl_target   = tgt
 )
 ```
 
@@ -365,7 +372,8 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 
 **File:** `R/local_cf.R`
 
-Default: `no_points = TRUE` (training points hidden), `no_grid = FALSE`, `no_contour = FALSE`.
+Default: `plot_points = FALSE` (training points hidden), `no_grid = FALSE`, `no_contour = FALSE`.
+`rotate_deg = 0` and `label_cex = 1` are now available. `label_offset_var` accepts variable names or integer indices. `label_dir = "Paral"` (border-adaptive) is the new default.
 
 **What it renders (8 layers):**
 
@@ -649,10 +657,10 @@ tgt  [bl_target]
   ├── pred_prob, pred_class
   └── row_id = 2
      │
-     │  set_filters(tgt, loan_amnt="decrease", loan_int_rate="fixed")
+     │  set_filters(tgt, person_age="fixed", loan_int_rate="increase", credit_score="increase")
      ▼
 flt  [bl_filters]
-  ├── constraints = list(loan_amnt="decrease", loan_int_rate="fixed")
+  ├── constraints = list(person_age="fixed", loan_int_rate="increase", credit_score="increase")
   └── bl_target = tgt
      │
      │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt, max_pairs=10)

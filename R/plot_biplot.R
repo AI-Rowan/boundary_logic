@@ -4,6 +4,62 @@
 # Uses the biplotEZ pipeline for the base plot and axis rendering.
 ############################################################
 
+# ---- Private helpers -------------------------------------------------------
+
+.make_label_line_vec <- function(label_offset_var, label_offset_dist,
+                                  num_vars, var_names) {
+  if (is.character(label_offset_var)) {
+    idx <- match(label_offset_var, var_names)
+    bad <- label_offset_var[is.na(idx)]
+    if (length(bad) > 0L)
+      warning(sprintf(
+        "label_offset_var: variable(s) not found: %s",
+        paste(bad, collapse = ", ")), call. = FALSE)
+    label_offset_var <- idx[!is.na(idx)]
+  }
+  vec       <- rep(0.1, num_vars)
+  valid_idx <- label_offset_var[label_offset_var >= 1L &
+                                label_offset_var <= num_vars]
+  if (length(valid_idx) > 0L)
+    vec[valid_idx] <- rep_len(label_offset_dist, length(valid_idx))
+  vec
+}
+
+.make_ticks_vec <- function(ticks_v, ticks_var, ticks_n, num_vars, var_names) {
+  if (is.character(ticks_var)) {
+    idx <- match(ticks_var, var_names)
+    bad <- ticks_var[is.na(idx)]
+    if (length(bad) > 0L)
+      warning(sprintf(
+        "ticks_var: variable(s) not found: %s",
+        paste(bad, collapse = ", ")), call. = FALSE)
+    ticks_var <- idx[!is.na(idx)]
+  }
+  vec       <- rep(ticks_v, num_vars)
+  valid_idx <- ticks_var[ticks_var >= 1L & ticks_var <= num_vars]
+  if (length(valid_idx) > 0L)
+    vec[valid_idx] <- rep_len(ticks_n, length(valid_idx))
+  vec
+}
+
+.apply_biplot_rotation <- function(biplot_obj, rotate_deg, proj_dims) {
+  if (is.null(rotate_deg) || rotate_deg == 0)
+    return(list(biplot_obj = biplot_obj, R_mat = NULL))
+  theta              <- -rotate_deg * pi / 180
+  R_mat              <- matrix(c(cos(theta), sin(theta),
+                                 -sin(theta), cos(theta)), nrow = 2L)
+  V_rot              <- biplot_obj$Lmat
+  V_rot[, proj_dims] <- V_rot[, proj_dims] %*% R_mat
+  tV_rot             <- solve(V_rot)
+  tVr_rot            <- tV_rot[proj_dims, , drop = FALSE]
+  biplot_obj$Lmat[, proj_dims] <- V_rot[, proj_dims]
+  biplot_obj$ax.one.unit       <- (1 / diag(t(tVr_rot) %*% tVr_rot)) * t(tVr_rot)
+  biplot_obj$Z[, proj_dims]    <- biplot_obj$Z[, proj_dims] %*% R_mat
+  list(biplot_obj = biplot_obj, R_mat = R_mat)
+}
+
+# ---------------------------------------------------------------------------
+
 #' Plot the Phase 1 biplot
 #'
 #' Creates a biplot visualisation of the Phase 1 result using the biplotEZ
@@ -41,8 +97,8 @@
 #'   Controls which observations are plotted as coloured points. If `NULL`
 #'   (default), training data is projected automatically. Pass
 #'   `bl_project_points(result$test_data, result)` to show test data instead.
-#' @param no_points        Logical; if `TRUE`, data points are hidden.
-#'   Default `FALSE`.
+#' @param plot_points      Logical; if `TRUE` (default), training data points
+#'   are drawn. Set to `FALSE` to hide them.
 #' @param confusion_cols   Logical; if `TRUE` (default), points are coloured
 #'   by confusion category (TP=red, TN=blue, FP=purple, FN=orange) when true
 #'   labels are available. Set to `FALSE` to colour points by predicted class
@@ -54,22 +110,34 @@
 #' @param cex_z            Numeric; size of training data points (`cex`).
 #'   Default `0.5`.
 #' @param label_dir        Character; biplotEZ axis label direction.
-#'   `"Hor"` (horizontal, default) or `"Orthog"` (orthogonal to axis direction).
+#'   `"Paral"` (default) follows the plot border -- labels on the left/right
+#'   borders are vertical, top/bottom are horizontal. `"Hor"` forces all labels
+#'   horizontal. `"Orthog"` draws labels perpendicular to the axis direction.
 #' @param label_cex        Numeric; variable name (axis label) size. Default `1`.
 #' @param tick_label_cex   Numeric; axis tick label size. Default `0.6`.
 #' @param ticks_v          Integer; number of ticks per variable axis.
 #'   Default `1L`.
+#' @param ticks_var        Integer, integer vector, character, or character
+#'   vector; variable(s) whose tick-mark count should override `ticks_v`.
+#'   Supply variable names (e.g. `"Sepal.Length"`) or integer indices
+#'   (e.g. `c(1L, 3L)`). `0` (default) means no override -- every axis uses
+#'   `ticks_v`.
+#' @param ticks_n          Integer or integer vector; tick-mark count(s) for
+#'   the variable(s) named in `ticks_var`. A single value applies to all
+#'   listed variables; a vector must match the length of `ticks_var`.
+#'   Default `5L`.
 #' @param which            Integer vector; indices of variables to draw axes
 #'   for. Defaults to all variables.
 #' @param X_names          Character vector; custom variable names for axis
 #'   labels. Defaults to `bl_result$var_names`.
-#' @param label_offset_var Integer or integer vector; index/indices of variables
-#'   whose axis labels should be shifted outward. `0` (default) means no
-#'   offset. Supply a vector (e.g., `c(1L, 3L)`) to offset multiple variables.
+#' @param label_offset_var Integer, integer vector, character, or character
+#'   vector; variable(s) whose axis labels should be shifted outward from the
+#'   border. Supply variable names (e.g., `"Sepal.Length"`) or integer indices
+#'   (e.g., `c(1L, 3L)`). `0` (default) means no offset.
 #' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
-#'   for `label_offset_var`. If a single value, the same distance is applied to
-#'   all variables listed in `label_offset_var`. If a vector, must be the same
-#'   length as `label_offset_var`. Default `0.5`.
+#'   in margin lines for `label_offset_var`. A single value applies to all
+#'   listed variables; a vector must match the length of `label_offset_var`.
+#'   Useful range 1--3. Default `1.5`.
 #' @param rotate_deg       Numeric; angle in degrees to rotate the entire plot
 #'   clockwise. Rotates all plotted elements -- grid, training points, contour
 #'   lines, variable axes, and the target point -- without rerunning the
@@ -113,19 +181,21 @@ plot_biplotEZ <- function(bl_result,
                            target_point      = NULL,
                            target_label      = NULL,
                            no_grid           = FALSE,
-                           no_points         = FALSE,
+                           plot_points       = TRUE,
                            confusion_cols    = TRUE,
                            no_contour        = FALSE,
                            new_title         = NA,
                            cex_z             = 0.5,
-                           label_dir         = "Hor",
+                           label_dir         = "Paral",
                            label_cex         = 1,
                            tick_label_cex    = 0.6,
                            ticks_v           = 1L,
+                           ticks_var         = 0L,
+                           ticks_n           = 5L,
                            which             = NULL,
                            X_names           = NULL,
                            label_offset_var  = 0L,
-                           label_offset_dist = 0.5,
+                           label_offset_dist = 1.5,
                            rotate_deg        = 0,
                            grid_col          = NULL,
                            contour_col       = "black",
@@ -137,6 +207,8 @@ plot_biplotEZ <- function(bl_result,
             "Did bl_build_result() return NULL due to a missing 'bl_data' argument?")
     return(invisible(NULL))
   }
+
+  label_dir <- match.arg(label_dir, c("Paral", "Hor", "Orthog"))
 
   if (grDevices::dev.cur() == 1L) grDevices::dev.new()
 
@@ -162,54 +234,21 @@ plot_biplotEZ <- function(bl_result,
   if (!is.na(new_title)) biplot_plot$Title <- new_title
 
   # ---- Label offset vector (shift one or more axis labels outward) ----
-  label_line_vec <- rep(0, num_vars)
-  valid_idx <- label_offset_var[label_offset_var >= 1L &
-                                label_offset_var <= num_vars]
-  if (length(valid_idx) > 0L) {
-    dist_vec <- rep_len(label_offset_dist, length(valid_idx))
-    label_line_vec[valid_idx] <- dist_vec
-  }
+  label_line_vec <- .make_label_line_vec(label_offset_var, label_offset_dist,
+                                         num_vars, var_names)
+  ticks_vec <- .make_ticks_vec(ticks_v, ticks_var, ticks_n, num_vars, var_names)
 
   # ---- Optional rotation (clockwise by rotate_deg degrees) -------------
-  # R_mat is NULL when no rotation is applied; used again in Step 6 for
-  # the target point.
-  R_mat <- NULL
-  if (!is.null(rotate_deg) && rotate_deg != 0) {
-    theta <- -rotate_deg * pi / 180   # negative = clockwise
-    R_mat <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), nrow = 2L)
-
-    # Rotate the biplot-plane columns of V and recompute the inverse.
-    # This matches the original research approach (1.3 Optimal Rotation.R):
-    #   Vrho = V %*% t(A);  tVrho = solve(Vrho)
-    # For a simple angle rotation A is the 2x2 R_mat embedded in the
-    # proj_dims columns only.
-    V_new                  <- bl_result$V
-    V_new[, proj_dims]     <- V_new[, proj_dims] %*% R_mat
-    tV_new                 <- solve(V_new)
-    tVr_new                <- tV_new[proj_dims, , drop = FALSE]   # 2 x p
-
-    # Recompute ax.one.unit -- the biplotEZ field that controls where axis
-    # arrows are drawn.  Formula from original research code:
-    #   ax.one.unit <- 1 / (diag(t(tVr) %*% tVr)) * t(tVr)
-    ax_one_unit_new        <- (1 / diag(t(tVr_new) %*% tVr_new)) * t(tVr_new)
-
-    # Patch the biplotEZ object BEFORE the first plot() call so that the
-    # coordinate frame and axis arrows are both rendered in the rotated space.
-    biplot_plot$Lmat[, proj_dims] <- V_new[, proj_dims]
-    biplot_plot$ax.one.unit       <- ax_one_unit_new
-    biplot_plot$Z[, proj_dims]    <- biplot_plot$Z[, proj_dims] %*% R_mat
-
-    # Rotate all other plotted elements to match.
+  rot         <- .apply_biplot_rotation(biplot_plot, rotate_deg, proj_dims)
+  biplot_plot <- rot$biplot_obj
+  R_mat       <- rot$R_mat
+  if (!is.null(R_mat)) {
     gr$Zgrid <- gr$Zgrid %*% R_mat
     points$Z <- points$Z %*% R_mat
-
-    gr$ct <- lapply(gr$ct, function(cl) {
+    gr$ct    <- lapply(gr$ct, function(cl) {
       pts  <- cbind(cl$x, cl$y) %*% R_mat
-      cl$x <- pts[, 1L]
-      cl$y <- pts[, 2L]
-      cl
+      cl$x <- pts[, 1L]; cl$y <- pts[, 2L]; cl
     })
-
   }
 
   # ---- Step 1: biplotEZ base plot (axes only, no samples) --------------
@@ -222,7 +261,7 @@ plot_biplotEZ <- function(bl_result,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec) |>
     plot()
 
@@ -241,7 +280,7 @@ plot_biplotEZ <- function(bl_result,
   }
 
   # ---- Step 3: data points ---------------------------------------------
-  if (!isTRUE(no_points)) {
+  if (isTRUE(plot_points)) {
     pt_col <- if (!isTRUE(confusion_cols)) {
       ifelse(points$pred_class == 1L, "red", "blue")
     } else {
@@ -263,7 +302,7 @@ plot_biplotEZ <- function(bl_result,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec)
   graphics::par(new = TRUE)
   plot(bp_overlay)
@@ -351,3 +390,16 @@ plot_biplotEZ <- function(bl_result,
 
   invisible(bl_result)
 }
+
+
+#' Plot method for bl_result objects
+#'
+#' Thin wrapper around \code{\link{plot_biplotEZ}}. All parameters are
+#' passed through via \code{...}.
+#'
+#' @param x   A \code{"bl_result"} object from \code{bl_assemble()}.
+#' @param ... Arguments forwarded to \code{\link{plot_biplotEZ}}.
+#'
+#' @return Invisibly returns \code{x}. Called for its side-effect (plot).
+#' @export
+plot.bl_result <- function(x, ...) plot_biplotEZ(x, ...)

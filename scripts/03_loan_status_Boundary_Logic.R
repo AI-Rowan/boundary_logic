@@ -108,13 +108,22 @@
 
   plot_biplotEZ(
     bl_proj,
-    label_dir         = "Hor",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
-    label_offset_var  = 0L,     # variable index/indices to shift, e.g. c(1L, 3L)
-    label_offset_dist = 0.5     # outward distance per shifted label
+    label_dir         = "Paral",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
+    label_offset_var  = c("person_age",
+                          "person_gender",
+                          "person_income",                 
+                          "person_emp_exp",
+                          "loan_amnt",
+                          "loan_int_rate",                 
+                          "loan_percent_income",
+                          "cb_person_cred_hist_length",
+                          "credit_score",                  
+                          "previous_loan_defaults_on_file"),     # variable index/indices to shift, e.g. c(1L, 3L)
+    label_offset_dist = c(0,0,0.5,1,0.5,1,0,1.5,0,0 )    # outward distance per shifted label
   )
 }
 
-
+names(loan_encoded)
 # ---- Step 3: Domain filter — keep applicants without prior defaults ----
 # Retain only applicants with no prior default on file
 # (previous_loan_defaults_on_file == 0). This sub-population is the
@@ -151,6 +160,8 @@
 #   train_data <- data_clean[ train_idx, , drop = FALSE]
 #   test_data  <- data_clean[-train_idx, , drop = FALSE]
 #   rownames(train_data) <- NULL; rownames(test_data) <- NULL
+#   
+
 #   bl_dat <- bl_wrap_data(
 #     train_data   = train_data,
 #     test_data    = test_data,
@@ -159,6 +170,7 @@
 #   )
 #   # bl_wrap_data() does not filter outliers; call bl_filter_outliers() if needed:
 #   # bl_dat <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
+
 {
   bl_dat <- bl_prepare_data(
     data           = loan_filtered,
@@ -229,7 +241,7 @@
 
   # Project all observations and overlay on the biplot
   test_pts <- bl_project_points(bl_results$test_data, bl_results, filter_to_polygon = TRUE )   # removes out-of-polygon points before plotting)
-  plot_biplotEZ(bl_results, points = test_pts)
+  plot(bl_results, points = test_pts)
 }
 
 
@@ -330,7 +342,7 @@
 
   plot_biplotEZ(bl_results_v2)
   test_pts_v2 <- bl_project_points(bl_results_v2$test_data, bl_results_v2)
-  plot_biplotEZ(bl_results_v2, points = test_pts_v2)
+  plot(bl_results_v2, points = test_pts_v2)
 }
 
 
@@ -354,7 +366,15 @@
 {
   bl_surr_v2 <- bl_surrogate(bl_results_v2)
   print(bl_surr_v2)
-  plot(bl_surr_v2)
+  plot(bl_surr_v2,
+       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+       label_offset_var  = c("person_age",
+                             "loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0,0.5,0,0),
+       ticks_v = 5)
 }
 
 
@@ -370,18 +390,31 @@
   pred_summary <- bl_predict(bl_results_v2)
 
   tdp <- 1
-  test_point <- bl_project_points(bl_results_v2$test_data[tdp,], bl_results_v2)
+  test_point <- bl_project_points(bl_results_v2$test_data[tdp:10,], bl_results_v2)
   pred_summary[tdp, ]   # inspect: pred_prob, confusion category, feature values
 
   target_value <- bl_results_v2$test_data[tdp, ]
   # Highlight the target on the main biplot
-  plot_biplotEZ(
+
+  plot(
     bl_results_v2,
     points       = test_point,
     target_point = target_value,
-    target_label = tdp
+    target_label = tdp,
+    label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+    label_offset_var  = c("person_age",
+                          "loan_amnt",
+                          "loan_int_rate",
+                          "loan_percent_income",
+                          "credit_score"),         # or a character/integer vector of variable names/indices
+    label_offset_dist = c(0,0,0.5,0,0),
+    ticks_v = 3
+    
   )
 }
+
+
+
 
 
 # ---- Step 10: Set actionability constraints ---------------------------
@@ -398,11 +431,10 @@
 
   flt <- set_filters(
     tgt,
-  #  person_age     = "fixed",       # not actionable
-   # person_gender  = "fixed",       # not actionable
-  #  person_emp_exp = "increase",    # can only grow over time
-    loan_amnt      = "decrease",    # borrow less to reduce repayment risk
-    loan_int_rate  = "fixed"        # set by the lender, not the applicant
+    person_age     = "fixed",       # not actionable
+   # loan_amnt      = "fixed",    # borrow less to reduce repayment risk
+    loan_int_rate  = "increase",        # set by the lender, not the applicant
+    credit_score = "increase"
   )
   print(flt)
 }
@@ -412,16 +444,30 @@
 {
   bl_local <- bl_find_local_cf(
     bl_result   = bl_results_v2,
-    bl_target   = tgt,
-    set_filters = flt
-  )
+    set_filters = flt,
+    bl_target   = tgt
+    )
   print(bl_local)
 }
 
 
 # ---- Step 12: Local biplot plot ----------------------------------------
 {
-  plot(bl_local)
+  plot(bl_local,
+       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+       label_offset_var  = c("person_age",
+                             "loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0.5,0,0,0),
+       ticks_var = c("person_age",
+                      "loan_amnt",
+                      "loan_int_rate",
+                      "loan_percent_income",
+                      "credit_score"),
+       ticks_n = c(2,4,200,200,20)
+  )
 }
 
 
@@ -449,7 +495,21 @@
 {
   bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
   print(bl_local_free)
-  plot(bl_local_free)
+  plot(bl_local_free,
+       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
+       label_offset_var  = c("person_age",
+                             "loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0,0,0,1),
+       ticks_var = c("person_age",
+                     "loan_amnt",
+                     "loan_int_rate",
+                     "loan_percent_income",
+                     "credit_score"),
+       ticks_n = c(2,4,200,200,20)
+  )
 
   bl_shap_free   <- bl_shapley(bl_local_free)
   bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)

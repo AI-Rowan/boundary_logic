@@ -697,30 +697,43 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param x               A \code{"bl_local_result"} object.
 #' @param no_grid         Logical; if \code{TRUE} the prediction grid is hidden.
 #'   Default \code{FALSE}.
-#' @param no_points       Logical; if \code{TRUE} training points are hidden.
-#'   Default \code{TRUE} (show only the target and counterfactual). To also
-#'   show training data, pass \code{no_points = FALSE}. To overlay test or
-#'   holdout data instead, use \code{\link{plot_biplotEZ}} with its
-#'   \code{points} argument (which accepts a \code{bl_points} object from
-#'   \code{\link{bl_project_points}}).
+#' @param plot_points     Logical; if \code{FALSE} (default) training points are
+#'   hidden (show only the target and counterfactual). Set to \code{TRUE} to
+#'   also show training data. To overlay test or holdout data instead, use
+#'   \code{\link{plot_biplotEZ}} with its \code{points} argument.
 #' @param no_contour      Logical; if \code{TRUE} boundary contour lines are
 #'   hidden. Default \code{FALSE}.
 #' @param cex_z           Numeric; size of training data points. Default
 #'   \code{0.5}.
-#' @param label_dir       Character; biplotEZ axis label direction. \code{"Hor"}
-#'   (default) or \code{"Rad"}.
+#' @param label_dir       Character; biplotEZ axis label direction.
+#'   \code{"Paral"} (default) follows the plot border -- left/right borders are
+#'   vertical, top/bottom are horizontal. \code{"Hor"} forces horizontal.
+#'   \code{"Orthog"} draws labels perpendicular to the axis.
+#' @param label_cex       Numeric; variable name (axis label) size. Default
+#'   \code{1}.
 #' @param tick_label_cex  Numeric; axis tick label size. Default \code{0.6}.
 #' @param ticks_v         Integer; number of ticks per variable axis. Default
 #'   \code{1L}.
+#' @param ticks_var       Integer, integer vector, character, or character
+#'   vector; variable(s) whose tick-mark count should override \code{ticks_v}.
+#'   Supply variable names (e.g. \code{"Sepal.Length"}) or integer indices
+#'   (e.g. \code{c(1L, 3L)}). \code{0} (default) means no override -- every
+#'   axis uses \code{ticks_v}.
+#' @param ticks_n         Integer or integer vector; tick-mark count(s) for
+#'   the variable(s) named in \code{ticks_var}. A single value applies to all
+#'   listed variables; a vector must match the length of \code{ticks_var}.
+#'   Default \code{5L}.
 #' @param which           Integer vector; indices of variables to draw axes for.
 #'   Defaults to all variables.
 #' @param X_names         Character vector; custom variable names for axis
 #'   labels. Defaults to \code{bl_result$var_names}.
-#' @param label_offset_var Integer or integer vector; index/indices of variables
-#'   whose axis labels should be shifted outward. \code{0} (default) means no
-#'   offset.
-#' @param label_offset_dist Numeric or numeric vector; outward offset
-#'   distance(s) for \code{label_offset_var}. Default \code{0.5}.
+#' @param label_offset_var Integer, integer vector, character, or character
+#'   vector; variable(s) whose axis labels should be shifted outward. Supply
+#'   variable names or integer indices. \code{0} (default) means no offset.
+#' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
+#'   in margin lines. Useful range 1--3. Default \code{1.5}.
+#' @param rotate_deg      Numeric; additional clockwise rotation in degrees
+#'   applied on top of the SVD-derived local rotation. Default \code{0}.
 #' @param show_arrows     Logical; if \code{TRUE} (default) an arrow is drawn
 #'   from the target to its counterfactual.
 #' @param arrow_col       Character; colour for the CF cross and arrow. Default
@@ -742,16 +755,20 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @export
 plot.bl_local_result <- function(x,
                                  no_grid           = FALSE,
-                                 no_points         = TRUE,
+                                 plot_points       = FALSE,
                                  no_contour        = FALSE,
                                  cex_z             = 0.5,
-                                 label_dir         = "Hor",
+                                 label_dir         = "Paral",
+                                 label_cex         = 1,
                                  tick_label_cex    = 0.6,
                                  ticks_v           = 1L,
+                                 ticks_var         = 0L,
+                                 ticks_n           = 5L,
                                  which             = NULL,
                                  X_names           = NULL,
                                  label_offset_var  = 0L,
-                                 label_offset_dist = 0.5,
+                                 label_offset_dist = 1.5,
+                                 rotate_deg        = 0,
                                  show_arrows       = TRUE,
                                  arrow_col         = "grey30",
                                  contour_col       = "black",
@@ -763,6 +780,8 @@ plot.bl_local_result <- function(x,
     message("No solution found -- nothing to plot.")
     return(invisible(x))
   }
+
+  label_dir <- match.arg(label_dir, c("Paral", "Hor", "Orthog"))
 
   if (grDevices::dev.cur() == 1L) grDevices::dev.new()
 
@@ -784,13 +803,9 @@ plot.bl_local_result <- function(x,
   if (is.null(which))   which   <- seq_len(num_vars)
   if (is.null(X_names)) X_names <- var_names
 
-  label_line_vec <- rep(0, num_vars)
-  valid_idx <- label_offset_var[label_offset_var >= 1L &
-                                label_offset_var <= num_vars]
-  if (length(valid_idx) > 0L) {
-    dist_vec <- rep_len(label_offset_dist, length(valid_idx))
-    label_line_vec[valid_idx] <- dist_vec
-  }
+  label_line_vec <- .make_label_line_vec(label_offset_var, label_offset_dist,
+                                         num_vars, var_names)
+  ticks_vec <- .make_ticks_vec(ticks_v, ticks_var, ticks_n, num_vars, var_names)
 
   # Confusion colours for training points
   train_df         <- bl_result$train_data
@@ -859,27 +874,45 @@ plot.bl_local_result <- function(x,
     row_label, best_pair[1L], best_pair[2L], pred_prob, pred_class
   )
 
+  # ---- Optional additional rotation ------------------------------------
+  rot         <- .apply_biplot_rotation(biplot_plot, rotate_deg, proj_dims)
+  biplot_plot <- rot$biplot_obj
+  R_mat       <- rot$R_mat
+  if (!is.null(R_mat)) {
+    Z_train_rot <- Z_train_rot %*% R_mat
+    Z_target    <- Z_target    %*% R_mat
+    B_z         <- B_z         %*% R_mat
+    x_grid      <- x$Zgrid     %*% R_mat
+    ct_local    <- lapply(x$ct_local, function(cl) {
+      pts  <- cbind(cl$x, cl$y) %*% R_mat
+      cl$x <- pts[, 1L]; cl$y <- pts[, 2L]; cl
+    })
+  } else {
+    x_grid   <- x$Zgrid
+    ct_local <- x$ct_local
+  }
+
   # ---- Step 1: biplotEZ base plot (axes canvas) ------------------------
   biplot_plot |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey",
                    label.dir      = label_dir,
+                   label.cex      = label_cex,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec) |>
     plot()
 
   # ---- Step 2: prediction grid -----------------------------------------
   if (!isTRUE(no_grid)) {
-    graphics::points(x$Zgrid[, 1L], x$Zgrid[, 2L],
+    graphics::points(x_grid[, 1L], x_grid[, 2L],
                      col = x$col_value, pch = 15L, cex = 0.5)
   }
 
   # ---- Step 3: training points (confusion colours) ---------------------
-  # Hidden by default (no_points = TRUE). Pass no_points = FALSE to show them.
-  if (!isTRUE(no_points)) {
+  if (isTRUE(plot_points)) {
     graphics::points(Z_train_rot[, 1L], Z_train_rot[, 2L],
                      col = train_col, pch = 16L, cex = cex_z)
   }
@@ -889,17 +922,18 @@ plot.bl_local_result <- function(x,
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
+                   label.cex      = label_cex,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec)
   graphics::par(new = TRUE)
   plot(bp_overlay)
 
   # ---- Step 5: decision boundary contour lines -------------------------
   if (!isTRUE(no_contour)) {
-    for (cl in x$ct_local) {
+    for (cl in ct_local) {
       graphics::lines(cl$x, cl$y,
                       col = contour_col, lwd = contour_lwd, lty = contour_lty)
     }

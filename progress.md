@@ -1,5 +1,268 @@
 # Progress
 
+## Session summary (2026-06-08, continued further) — biplotEZ visual-features documentation note
+
+### Completed this session
+
+1. **Added a new subsection to `.claude/reference/review_section4_to_6.md`** (Step 7,
+   immediately after the "What it renders (in layer order)" table, before the
+   "`points` here:" paragraph — line ~421) titled *"biplotEZ visual features: what
+   `plot_biplotEZ()` uses, and what's available for later"*. It:
+   - explains *why* `plot_biplotEZ()` only uses a thin slice of biplotEZ's rendering
+     API (full control over confusion-category colours, prediction surface, contours,
+     and synchronised rotation — none of which map onto biplotEZ's group-aesthetic
+     sample styling);
+   - lists the 4 biplotEZ functions currently used (`biplot()`, `PCA()`/`CVA()`,
+     `samples()` canvas-only, `axes()`);
+   - catalogues 13 unused biplotEZ visual building blocks (`means()`, `alpha.bags()`,
+     `ellipses()`, `density1D()`/`density2D()`, `legend.type()`, `newsamples()`/
+     `newaxes()`, `interpolate()`, `classification()`/`prediction()`, `regress()`,
+     `rotate()`/`reflect()`/`translate_axes()`, `fit.measures()`, and the
+     categorical/distance-matrix constructions `CA()`/`CATPCA()`/`PCO()`/`AoD()`/
+     `CLPs()`/`CLRs()`) as candidates for future feature work, each with a one-line
+     note on what it would add and how it relates to the package's existing approach.
+   - Plan archived at `.claude/plans/i-have-updated-to-golden-backus.md` (overwrote an
+     older, already-implemented plan at the same path per the "different task → start
+     fresh" rule).
+2. **Verified placement** — `git diff .claude/reference/review_section4_to_6.md`
+   confirms the new `####` subsection sits cleanly between the table (ending line 419)
+   and the `points` paragraph (now line 459); re-read in place to confirm valid
+   Markdown rendering.
+3. **No code/doc regeneration needed** — pure documentation addition; no R source or
+   `man/` files touched, so no `devtools::document()`/`devtools::test()` run required
+   (per the plan's verification section).
+4. **Memory-sync check** — confirmed `reference_docs.md` in the auto-memory folder is
+   only an index pointer (no content mirror of `review_section4_to_6.md`), so no
+   memory-file edit was needed to satisfy the CLAUDE.md memory-to-reference sync rule.
+
+### Dead ends / non-issues this session
+
+- None for this piece of work — the plan was approved as written and the insertion
+  landed exactly where planned on the first attempt.
+
+### Current state (end of this session)
+
+- Branch: `method_developments`
+- Newly modified file this session: `.claude/reference/review_section4_to_6.md`
+  (plus `progress.md`, plus the overwritten plan file
+  `.claude/plans/i-have-updated-to-golden-backus.md`)
+- This is in addition to the still-uncommitted tick-mark feature work documented
+  in the section immediately below — both belong to the same accumulated, unpushed
+  `method_developments` changeset.
+- Tests: unaffected — still **77 PASS, 0 FAIL, 4 WARN** (no source change this round)
+
+### Next steps
+
+1. **Commit all accumulated changes** — both the per-variable tick-mark feature
+   (below) and this documentation note are awaiting an explicit commit instruction
+   (commit-gate rule). Nothing further to implement before that.
+2. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments`
+   to `main`.
+
+---
+
+## Session summary (2026-06-08, continued) — per-variable axis tick-mark counts
+
+### Completed this session
+
+1. **Added `ticks_var`/`ticks_n` parameters** to `plot_biplotEZ()` (`R/plot_biplot.R`), `plot.bl_local_result()` (`R/local_cf.R`), and `plot.bl_surrogate()` (`R/surrogate.R`) — lets users override the axis tick-mark count for specific variables (by name or index), mirroring the existing `label_offset_var`/`label_offset_dist` pattern. The base `ticks_v` scalar is unchanged and still applies to every axis not overridden.
+   - New private helper `.make_ticks_vec()` added to `R/plot_biplot.R` immediately after `.make_label_line_vec()` — structurally identical, builds a length-`num_vars` vector seeded with `ticks_v` and overwritten at name/index-resolved slots with `ticks_n`.
+   - Plan archived at `.claude/plans/per_variable_tick_marks.md` (includes biplotEZ `axes(ticks = ...)` exploration notes — confirmed it already supports per-axis vectors recycled positionally over `which`).
+2. **Regenerated docs** — `devtools::document()` updated `man/plot_biplotEZ.Rd`, `man/plot.bl_local_result.Rd`, `man/plot.bl_surrogate.Rd` with the two new `@param` entries each.
+3. **Verified** via a throwaway `Rscript verify_ticks.R` (deleted after use, per the biplotEZ Windows-segfault rule) — covered named overrides, vectors, integer indices, unknown-name warnings, custom base `ticks_v`, and all three plot methods (`plot_biplotEZ`, `plot.bl_local_result`, `plot.bl_surrogate`). All 7 cases + 4 helper sanity checks passed.
+4. **Test status** — `devtools::test()`: **77 PASS, 0 FAIL, 4 WARN** (baseline unaffected — additive change, no existing test references `ticks_v`/`ticks_var`/`ticks_n`).
+
+### Dead ends this session
+
+- **`Rscript` not found via Bash** — the shell PATH didn't resolve it; fixed by using
+  the full path `/c/Program Files/R/R-4.6.0/bin/Rscript.exe` for all subsequent
+  `Rscript verify_ticks.R` invocations.
+- **Pre-existing untracked scratch files** (`verify_labels.R`,
+  `verify_labels_output.pdf`, `Rplots.pdf`, `Rplots1.pdf`) — leftovers from a prior
+  session's verification work; deleted them while exploring, then transparently told
+  the user what was removed and why (untracked verification artifacts, not source
+  code). User did not push back.
+- **Verification script test 7 initially failed** — `bl_surrogate(bl_results, bl_bnd)`
+  (mirroring the old `verify_labels.R` call pattern) errored with `'data' must be a
+  data frame`. Root cause: `bl_surrogate()`'s actual signature is
+  `function(bl_result, data = NULL)` — it doesn't take a boundary object as its
+  second argument. Fixed by calling `bl_surrogate(bl_results)`; passed afterwards
+  ("Surrogate accuracy vs model: 0.8636 / vs labels: 0.7091 / OK").
+- **`devtools::document()` warnings** for `boundary_plot.R:83` and
+  `shapley.R:19,252` (`@importFrom` line length, unresolved link "R x p") — confirmed
+  pre-existing and unrelated to this change; left untouched (out of scope).
+
+### Current state (end of this session)
+
+- Branch: `method_developments`
+- New modified files this session: `R/plot_biplot.R`, `R/local_cf.R`, `R/surrogate.R`, `man/plot_biplotEZ.Rd`, `man/plot.bl_local_result.Rd`, `man/plot.bl_surrogate.Rd`, `progress.md`, plus the new plan file `.claude/plans/per_variable_tick_marks.md`
+- Tests: **77 PASS, 0 FAIL, 4 WARN** ✓
+
+### Next steps
+
+1. **Commit all accumulated changes** (this session's tick-mark feature + the prior session's cleanup/sync work) — explicit user instruction required (commit-gate rule).
+2. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+---
+
+## Session summary (2026-06-08) — cleanup + plot interface + sync reference docs
+
+### Completed this session
+
+1. **Updated `scripts/00_pima_Boundary_Logic.R`** — changed all 4 comment references from `no_points` to `plot_points` for consistency with the unified plot interface (lines 266, 271, 275, 325).
+
+2. **Removed unused loan scripts** — deleted `scripts/04_loan_wrap_data_demo.R` and `scripts/05_loan_custom_xgb.R` via `git rm`. Updated `.claude/reference/reference_data_prep_functions.md` to remove the reference to the deleted demo script.
+
+3. **Synced reference docs with user's edits to `scripts/03_loan_status_Boundary_Logic.R`** — the user hand-edited the loan script; updated both `.claude/reference/review_section4_to_6.md` and `.claude/reference/review_section11_to_17.md` to match:
+   - Step 6 code block: `plot_biplotEZ()` → `plot()` (alias)
+   - Step 9c code block: updated call signature with `label_*` biplot customisation args; changed `test_pts_v2` to `test_point` (10-row subset)
+   - Step 10 constraints: `loan_amnt="decrease", loan_int_rate="fixed"` → `person_age="fixed", loan_int_rate="increase", credit_score="increase"`
+   - Step 10 console output: updated example to match new constraints
+   - Step 11 `bl_find_local_cf()` call: removed bogus `bl_model` param; swapped argument order to `set_filters` before `bl_target`
+   - Object flow diagram: updated constraint set and function calls
+   - Fixed pre-existing stale line reference: "script 03 line 185" → "script 03 line 234" (location of `filter_to_polygon = TRUE`)
+
+4. **Test status** — tests remain passing: **77 PASS, 0 FAIL, 4 WARN** (unchanged).
+
+### Current state
+
+- Branch: `method_developments`
+- Modified files: 13 (source, docs, scripts, reference docs)
+- Deleted files: 2 (scripts marked for deletion in git)
+- Tests: **77 PASS, 0 FAIL, 4 WARN** ✓
+
+### Next steps
+
+1. **Commit all changes** — explicit user instruction required (commit-gate rule).
+2. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+---
+
+## Session summary (2026-06-05) — second session
+
+### Completed this session
+
+1. **Unified biplot `plot()` interface** — single `plot()` call now works for all biplot-producing
+   objects: `bl_result`, `bl_local_result`, `bl_sparse_result`, `bl_surrogate`.
+   - `plot.bl_result()` added to `R/plot_biplot.R` as a one-liner S3 method delegating to
+     `plot_biplotEZ()` with full `...` pass-through.
+   - `plot.bl_sparse_result()` already delegated via `...` to `plot.bl_local_result()`, so
+     no direct changes needed there.
+
+2. **Two private helpers added to `R/plot_biplot.R`**
+   - `.make_label_line_vec(label_offset_var, label_offset_dist, num_vars, var_names)` — builds
+     the per-variable `label.line` vector; accepts character variable names or integer indices;
+     warns (does not error) on unknown names.
+   - `.apply_biplot_rotation(biplot_obj, rotate_deg, proj_dims)` — applies a clockwise visual
+     rotation by patching `biplot_obj$Lmat`, `$ax.one.unit`, and `$Z`; returns the modified
+     object plus the 2x2 `R_mat` for callers to rotate their own overlay data.
+   - Both helpers eliminate code that was previously duplicated across all three plot functions.
+
+3. **`plot_biplotEZ()` updated** (`R/plot_biplot.R`)
+   - `label_dir` default: `"Hor"` → `"Paral"` (border-adaptive: vertical on left/right borders,
+     horizontal on top/bottom). `match.arg` validation added.
+   - `label_offset_dist` default: `0.5` → `1.5` (pushes labels to useful distance by default).
+   - `label_offset_var` now accepts character variable names, not just integer indices.
+   - Rotation block replaced by `.apply_biplot_rotation()` helper call.
+   - Label vector block replaced by `.make_label_line_vec()` helper call.
+   - `no_points = FALSE` renamed to `plot_points = TRUE` (positive semantics: `TRUE` = show points).
+
+4. **`plot.bl_local_result()` updated** (`R/local_cf.R`)
+   - Added `rotate_deg = 0` parameter (additional visual rotation on top of the SVD-derived
+     local rotation already applied by `.bl_rotate()`).
+   - Added `label_cex = 1` parameter.
+   - `no_points = TRUE` renamed to `plot_points = FALSE`.
+   - Same `label_dir`, `label_offset_dist`, `match.arg`, helper-call updates as above.
+
+5. **`plot.bl_surrogate()` updated** (`R/surrogate.R`)
+   - Added `rotate_deg = 0` parameter.
+   - Same `label_dir`, `label_offset_dist`, `match.arg`, helper-call updates.
+
+6. **Reference documents updated**
+   - `.claude/reference/review_section4_to_6.md` — updated `plot_biplotEZ()` section to note
+     `plot(bl_results)` works, new defaults, `plot_points` rename, and character name support
+     for `label_offset_var`.
+   - `.claude/reference/review_section11_to_17.md` — updated `plot(bl_local)` and
+     `plot(bl_sparse)` examples to note `plot_points`, `rotate_deg`, `label_cex`.
+
+7. **`devtools::document()` and `devtools::test()` both pass**
+   - Regenerated: `man/plot_biplotEZ.Rd`, `man/plot.bl_result.Rd` (new),
+     `man/plot.bl_local_result.Rd`, `man/plot.bl_surrogate.Rd`, `NAMESPACE`.
+   - Test result: **77 PASS, 0 FAIL, 4 WARN** (unchanged).
+
+8. **Verification script `verify_labels.R`** — 12-scenario script in project root.
+   - Tests 1–10: all pass (alias, Paral default, name-based offset, rotation, `plot_points`, etc.).
+   - Tests 11–12: pre-existing failures unrelated to this work (`bl_find_sparse_cf` "non-numeric
+     argument" bug; `bl_surrogate` on iris "'data' must be a data frame" bug), guarded with
+     `tryCatch`.
+
+---
+
+### Dead ends this session
+
+- **Prior session's changes were uncommitted** — 23+ files from the 2026-05-29 and 2026-06-05
+  step-renaming sessions had never been committed (commit-gate rule). These were committed at the
+  start of this session as commit `1719c73` before any new code changes were made.
+
+- **`no_points` defaults were opposite between the two functions** — `plot_biplotEZ()` had
+  `no_points = FALSE` (show points by default) while `plot.bl_local_result()` had
+  `no_points = TRUE` (hide points by default). Both were correctly inverted when renamed to
+  `plot_points` (`TRUE` and `FALSE` respectively) — the semantics were already opposite,
+  consistent behaviour was preserved.
+
+- **`plot.bl_sparse_result()` needed no changes** — it already passes `...` through to
+  `plot.bl_local_result()`, so `rotate_deg`, `label_cex`, and `plot_points` are automatically
+  available without touching `shapley.R`.
+
+---
+
+### Architecture decisions / new conventions
+
+- **`plot(bl_result_object)` is now the canonical way to render any biplot.** `plot_biplotEZ()`
+  remains available for users who want to be explicit, but `plot()` works for all four biplot
+  classes: `bl_result`, `bl_local_result`, `bl_sparse_result`, `bl_surrogate`. CLAUDE.md Section
+  3 R/ File Map updated to note `plot.bl_result()` and private helpers in `plot_biplot.R`.
+
+- **Private helpers in `plot_biplot.R` are the canonical rotation and label implementations.**
+  Do not re-implement label-line vector construction or biplot rotation inline. Any new biplot
+  plot function should call `.make_label_line_vec()` and `.apply_biplot_rotation()`.
+
+- **`plot_points` replaces `no_points` everywhere.** Positive semantics: `TRUE` = show points,
+  `FALSE` = hide. Default is `TRUE` for `plot_biplotEZ()` (global biplot, points expected) and
+  `FALSE` for `plot.bl_local_result()` / `plot.bl_sparse_result()` (local biplot, points add
+  clutter). Not added to CLAUDE.md as a "Never Do" since no existing callers use `no_points`.
+
+---
+
+### Current state
+
+- Branch: `method_developments` — uncommitted changes (commit-gate rule)
+- Modified files: `R/plot_biplot.R`, `R/local_cf.R`, `R/surrogate.R`, `NAMESPACE`,
+  `man/plot_biplotEZ.Rd`, `man/plot.bl_local_result.Rd`, `man/plot.bl_surrogate.Rd`,
+  `man/plot.bl_result.Rd` (new), `.claude/reference/review_section4_to_6.md`,
+  `.claude/reference/review_section11_to_17.md`
+- Untracked: `verify_labels.R`, `verify_labels_output.pdf`, `Rplots.pdf`, `Rplots1.pdf`
+- Test suite: **77 PASS, 0 FAIL, 4 WARN**
+
+---
+
+### Next steps
+
+1. **Update `scripts/00_pima_Boundary_Logic.R`** — ✅ COMPLETED. Updated lines 266, 271, 275, 325
+   to change `no_points` references to `plot_points`.
+
+2. **Commit all session changes** — explicit user instruction required (commit-gate rule).
+   All modified files listed above.
+
+3. **Mac tester confirmation** — awaiting; once confirmed, merge `method_developments` to `main`.
+
+### Verification commands
+```r
+"/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
+```
+
+---
+
 ## Session summary (2026-06-05)
 
 ### Completed this session

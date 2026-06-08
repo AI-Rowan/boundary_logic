@@ -7,16 +7,20 @@
 \method{plot}{bl_local_result}(
   x,
   no_grid = FALSE,
-  no_points = TRUE,
+  plot_points = FALSE,
   no_contour = FALSE,
   cex_z = 0.5,
-  label_dir = "Hor",
+  label_dir = "Paral",
+  label_cex = 1,
   tick_label_cex = 0.6,
   ticks_v = 1L,
+  ticks_var = 0L,
+  ticks_n = 5L,
   which = NULL,
   X_names = NULL,
   label_offset_var = 0L,
-  label_offset_dist = 0.5,
+  label_offset_dist = 1.5,
+  rotate_deg = 0,
   show_arrows = TRUE,
   arrow_col = "grey30",
   contour_col = "black",
@@ -32,12 +36,10 @@
 \item{no_grid}{Logical; if \code{TRUE} the prediction grid is hidden.
 Default \code{FALSE}.}
 
-\item{no_points}{Logical; if \code{TRUE} training points are hidden.
-Default \code{TRUE} (show only the target and counterfactual). To also
-show training data, pass \code{no_points = FALSE}. To overlay test or
-holdout data instead, use \code{\link{plot_biplotEZ}} with its
-\code{points} argument (which accepts a \code{bl_points} object from
-\code{\link{bl_project_points}}).}
+\item{plot_points}{Logical; if \code{FALSE} (default) training points are
+hidden (show only the target and counterfactual). Set to \code{TRUE} to
+also show training data. To overlay test or holdout data instead, use
+\code{\link{plot_biplotEZ}} with its \code{points} argument.}
 
 \item{no_contour}{Logical; if \code{TRUE} boundary contour lines are
 hidden. Default \code{FALSE}.}
@@ -45,13 +47,29 @@ hidden. Default \code{FALSE}.}
 \item{cex_z}{Numeric; size of training data points. Default
 \code{0.5}.}
 
-\item{label_dir}{Character; biplotEZ axis label direction. \code{"Hor"}
-(default) or \code{"Rad"}.}
+\item{label_dir}{Character; biplotEZ axis label direction.
+\code{"Paral"} (default) follows the plot border -- left/right borders are
+vertical, top/bottom are horizontal. \code{"Hor"} forces horizontal.
+\code{"Orthog"} draws labels perpendicular to the axis.}
+
+\item{label_cex}{Numeric; variable name (axis label) size. Default
+\code{1}.}
 
 \item{tick_label_cex}{Numeric; axis tick label size. Default \code{0.6}.}
 
 \item{ticks_v}{Integer; number of ticks per variable axis. Default
 \code{1L}.}
+
+\item{ticks_var}{Integer, integer vector, character, or character
+vector; variable(s) whose tick-mark count should override \code{ticks_v}.
+Supply variable names (e.g. \code{"Sepal.Length"}) or integer indices
+(e.g. \code{c(1L, 3L)}). \code{0} (default) means no override -- every
+axis uses \code{ticks_v}.}
+
+\item{ticks_n}{Integer or integer vector; tick-mark count(s) for
+the variable(s) named in \code{ticks_var}. A single value applies to all
+listed variables; a vector must match the length of \code{ticks_var}.
+Default \code{5L}.}
 
 \item{which}{Integer vector; indices of variables to draw axes for.
 Defaults to all variables.}
@@ -59,12 +77,15 @@ Defaults to all variables.}
 \item{X_names}{Character vector; custom variable names for axis
 labels. Defaults to \code{bl_result$var_names}.}
 
-\item{label_offset_var}{Integer or integer vector; index/indices of variables
-whose axis labels should be shifted outward. \code{0} (default) means no
-offset.}
+\item{label_offset_var}{Integer, integer vector, character, or character
+vector; variable(s) whose axis labels should be shifted outward. Supply
+variable names or integer indices. \code{0} (default) means no offset.}
 
-\item{label_offset_dist}{Numeric or numeric vector; outward offset
-distance(s) for \code{label_offset_var}. Default \code{0.5}.}
+\item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
+in margin lines. Useful range 1--3. Default \code{1.5}.}
+
+\item{rotate_deg}{Numeric; additional clockwise rotation in degrees
+applied on top of the SVD-derived local rotation. Default \code{0}.}
 
 \item{show_arrows}{Logical; if \code{TRUE} (default) an arrow is drawn
 from the target to its counterfactual.}

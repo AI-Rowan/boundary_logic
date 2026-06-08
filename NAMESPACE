@@ -3,6 +3,7 @@
 S3method(plot,bl_boundary)
 S3method(plot,bl_local_result)
 S3method(plot,bl_projection)
+S3method(plot,bl_result)
 S3method(plot,bl_shapley)
 S3method(plot,bl_sparse_result)
 S3method(plot,bl_surrogate)

@@ -69,7 +69,7 @@ Script: `scripts/03_loan_status_Boundary_Logic.R`
 | `projection.R` | `bl_build_projection()` — PCA / CVA loading matrix |
 | `biplot_grid.R` | `bl_build_grid()` — m×m prediction grid and contours |
 | `result.R` | `bl_assemble()`, `bl_build_result()` — Phase 1 anchor |
-| `plot_biplot.R` | `plot_biplotEZ()` — main biplot renderer |
+| `plot_biplot.R` | `plot_biplotEZ()`, `plot.bl_result()` — biplot rendering; private helpers `.make_label_line_vec()`, `.make_ticks_vec()`, and `.apply_biplot_rotation()` |
 | `project_points.R` | `bl_project_points()`, `bl_predict()` |
 | `boundary.R` | `bl_find_boundary()` — global counterfactual search |
 | `boundary_plot.R` | `plot.bl_boundary()`, `bl_robustness()` |

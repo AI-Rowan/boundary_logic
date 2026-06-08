@@ -271,20 +271,33 @@ print.bl_surrogate <- function(x, ...) {
 #' @param x                A `"bl_surrogate"` object from `bl_surrogate()`.
 #' @param cex_z            Numeric; size of observation points. Default `0.7`.
 #' @param label_dir        Character; biplotEZ axis label direction.
-#'   `"Hor"` (horizontal, default) or `"Rad"` (radial).
+#'   `"Paral"` (default) follows the plot border -- left/right are vertical,
+#'   top/bottom are horizontal. `"Hor"` forces horizontal. `"Orthog"` draws
+#'   labels perpendicular to the axis.
 #' @param label_cex        Numeric; variable name (axis label) size. Default `1`.
 #' @param tick_label_cex   Numeric; axis tick label size. Default `0.6`.
 #' @param ticks_v          Integer; number of ticks per variable axis.
 #'   Default `1L`.
+#' @param ticks_var        Integer, integer vector, character, or character
+#'   vector; variable(s) whose tick-mark count should override `ticks_v`.
+#'   Supply variable names (e.g. `"Sepal.Length"`) or integer indices
+#'   (e.g. `c(1L, 3L)`). `0` (default) means no override -- every axis uses
+#'   `ticks_v`.
+#' @param ticks_n          Integer or integer vector; tick-mark count(s) for
+#'   the variable(s) named in `ticks_var`. A single value applies to all
+#'   listed variables; a vector must match the length of `ticks_var`.
+#'   Default `5L`.
 #' @param which            Integer vector; indices of variables to draw axes
 #'   for. Defaults to all variables.
 #' @param X_names          Character vector; custom variable names for axis
 #'   labels. Defaults to `bl_result$var_names`.
-#' @param label_offset_var Integer or integer vector; index/indices of variables
-#'   whose axis labels should be shifted outward. `0` (default) means no
-#'   offset.
-#' @param label_offset_dist Numeric or numeric vector; outward offset
-#'   distance(s) for `label_offset_var`. Default `0.5`.
+#' @param label_offset_var Integer, integer vector, character, or character
+#'   vector; variable(s) whose axis labels should be shifted outward. Supply
+#'   variable names or integer indices. `0` (default) means no offset.
+#' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
+#'   in margin lines. Useful range 1--3. Default `1.5`.
+#' @param rotate_deg       Numeric; clockwise rotation in degrees for the entire
+#'   plot. Default `0` (no rotation).
 #' @param ... Unused; for S3 compatibility.
 #'
 #' @importFrom graphics points lines legend
@@ -292,14 +305,17 @@ print.bl_surrogate <- function(x, ...) {
 #' @export
 plot.bl_surrogate <- function(x,
                                cex_z             = 0.7,
-                               label_dir         = "Hor",
+                               label_dir         = "Paral",
                                label_cex         = 1,
                                tick_label_cex    = 0.6,
                                ticks_v           = 1L,
+                               ticks_var         = 0L,
+                               ticks_n           = 5L,
                                which             = NULL,
                                X_names           = NULL,
                                label_offset_var  = 0L,
-                               label_offset_dist = 0.5,
+                               label_offset_dist = 1.5,
+                               rotate_deg        = 0,
                                ...) {
 
   bl_result <- x$bl_result
@@ -307,21 +323,38 @@ plot.bl_surrogate <- function(x,
   polygon   <- bl_result$polygon
   num_vars  <- bl_result$num_vars
   var_names <- bl_result$var_names
+  proj_dims <- bl_result$proj_dims
+
+  label_dir <- match.arg(label_dir, c("Paral", "Hor", "Orthog"))
 
   if (is.null(which))   which   <- seq_len(num_vars)
   if (is.null(X_names)) X_names <- var_names
 
   # ---- Label offset vector ---------------------------------------------
-  label_line_vec <- rep(0, num_vars)
-  valid_idx <- label_offset_var[label_offset_var >= 1L &
-                                label_offset_var <= num_vars]
-  if (length(valid_idx) > 0L) {
-    dist_vec <- rep_len(label_offset_dist, length(valid_idx))
-    label_line_vec[valid_idx] <- dist_vec
+  label_line_vec <- .make_label_line_vec(label_offset_var, label_offset_dist,
+                                         num_vars, var_names)
+  ticks_vec <- .make_ticks_vec(ticks_v, ticks_var, ticks_n, num_vars, var_names)
+
+  # ---- Optional rotation -----------------------------------------------
+  biplot_obj  <- bl_result$biplot_obj
+  rot         <- .apply_biplot_rotation(biplot_obj, rotate_deg, proj_dims)
+  biplot_obj  <- rot$biplot_obj
+  R_mat       <- rot$R_mat
+  if (!is.null(R_mat)) {
+    Zgrid_plot <- gr$Zgrid %*% R_mat
+    Z_obs_plot <- x$Z_obs  %*% R_mat
+    ct_surr    <- lapply(gr$ct_surrogate, function(cl) {
+      pts  <- cbind(cl$x, cl$y) %*% R_mat
+      cl$x <- pts[, 1L]; cl$y <- pts[, 2L]; cl
+    })
+  } else {
+    Zgrid_plot <- gr$Zgrid
+    Z_obs_plot <- x$Z_obs
+    ct_surr    <- gr$ct_surrogate
   }
 
   # ---- Step 1: biplotEZ axis skeleton ----------------------------------
-  bl_result$biplot_obj |>
+  biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey",
                    label.dir      = label_dir,
@@ -329,31 +362,30 @@ plot.bl_surrogate <- function(x,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec) |>
     plot()
 
   # ---- Step 2: prediction grid, clipped to hull -----------------------
-  Zgrid     <- gr$Zgrid
   col_value <- gr$col_value
 
   if (inherits(polygon, "SpatialPolygons")) {
-    G_df <- as.data.frame(Zgrid)
+    G_df <- as.data.frame(Zgrid_plot)
     sp::coordinates(G_df) <- ~x + y
     inside_grid <- !is.na(sp::over(G_df, polygon))
-    Zgrid     <- Zgrid[inside_grid, , drop = FALSE]
-    col_value <- col_value[inside_grid]
+    Zgrid_plot <- Zgrid_plot[inside_grid, , drop = FALSE]
+    col_value  <- col_value[inside_grid]
   }
 
-  graphics::points(Zgrid, type = "p", col = col_value, pch = 15L, cex = 0.5)
+  graphics::points(Zgrid_plot, type = "p", col = col_value, pch = 15L, cex = 0.5)
 
   # ---- Step 3: surrogate-coloured observation points ------------------
   surr_col <- ifelse(x$surrogate_pred == 1L, "red", "blue")
-  graphics::points(x$Z_obs[, 1L], x$Z_obs[, 2L],
+  graphics::points(Z_obs_plot[, 1L], Z_obs_plot[, 2L],
                    col = surr_col, pch = 16L, cex = cex_z)
 
   # ---- Step 4: axes redrawn on top ------------------------------------
-  bp_overlay <- bl_result$biplot_obj |>
+  bp_overlay <- biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
     biplotEZ::axes(col            = "grey22",
                    label.dir      = label_dir,
@@ -361,14 +393,13 @@ plot.bl_surrogate <- function(x,
                    which          = which,
                    X.names        = X_names,
                    tick.label.cex = tick_label_cex,
-                   ticks          = ticks_v,
+                   ticks          = ticks_vec,
                    label.line     = label_line_vec)
   graphics::par(new = TRUE)
   plot(bp_overlay)
 
   # ---- Step 5: hull-clipped surrogate contour lines -------------------
-  # ct_surrogate contours are already bounded within the training hull
-  for (cl in gr$ct_surrogate) {
+  for (cl in ct_surr) {
     graphics::lines(cl$x, cl$y, col = "black", lwd = 1.5)
   }
 

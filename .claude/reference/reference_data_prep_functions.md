@@ -150,5 +150,3 @@ bl_dat_raw <- bl_wrap_data(train_data, test_data, var_names = feature_cols)
 bl_dat_90  <- bl_filter_outliers(bl_dat_raw, hull_fraction = 0.90)
 bl_dat_95  <- bl_filter_outliers(bl_dat_raw, hull_fraction = 0.95)
 ```
-
-See `scripts/04_loan_wrap_data_demo.R` for a full working example of the external-data path.

@@ -7,14 +7,17 @@
 \method{plot}{bl_surrogate}(
   x,
   cex_z = 0.7,
-  label_dir = "Hor",
+  label_dir = "Paral",
   label_cex = 1,
   tick_label_cex = 0.6,
   ticks_v = 1L,
+  ticks_var = 0L,
+  ticks_n = 5L,
   which = NULL,
   X_names = NULL,
   label_offset_var = 0L,
-  label_offset_dist = 0.5,
+  label_offset_dist = 1.5,
+  rotate_deg = 0,
   ...
 )
 }
@@ -24,7 +27,9 @@
 \item{cex_z}{Numeric; size of observation points. Default \code{0.7}.}
 
 \item{label_dir}{Character; biplotEZ axis label direction.
-\code{"Hor"} (horizontal, default) or \code{"Rad"} (radial).}
+\code{"Paral"} (default) follows the plot border -- left/right are vertical,
+top/bottom are horizontal. \code{"Hor"} forces horizontal. \code{"Orthog"} draws
+labels perpendicular to the axis.}
 
 \item{label_cex}{Numeric; variable name (axis label) size. Default \code{1}.}
 
@@ -33,18 +38,32 @@
 \item{ticks_v}{Integer; number of ticks per variable axis.
 Default \code{1L}.}
 
+\item{ticks_var}{Integer, integer vector, character, or character
+vector; variable(s) whose tick-mark count should override \code{ticks_v}.
+Supply variable names (e.g. \code{"Sepal.Length"}) or integer indices
+(e.g. \code{c(1L, 3L)}). \code{0} (default) means no override -- every axis uses
+\code{ticks_v}.}
+
+\item{ticks_n}{Integer or integer vector; tick-mark count(s) for
+the variable(s) named in \code{ticks_var}. A single value applies to all
+listed variables; a vector must match the length of \code{ticks_var}.
+Default \code{5L}.}
+
 \item{which}{Integer vector; indices of variables to draw axes
 for. Defaults to all variables.}
 
 \item{X_names}{Character vector; custom variable names for axis
 labels. Defaults to \code{bl_result$var_names}.}
 
-\item{label_offset_var}{Integer or integer vector; index/indices of variables
-whose axis labels should be shifted outward. \code{0} (default) means no
-offset.}
+\item{label_offset_var}{Integer, integer vector, character, or character
+vector; variable(s) whose axis labels should be shifted outward. Supply
+variable names or integer indices. \code{0} (default) means no offset.}
 
-\item{label_offset_dist}{Numeric or numeric vector; outward offset
-distance(s) for \code{label_offset_var}. Default \code{0.5}.}
+\item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
+in margin lines. Useful range 1--3. Default \code{1.5}.}
+
+\item{rotate_deg}{Numeric; clockwise rotation in degrees for the entire
+plot. Default \code{0} (no rotation).}
 
 \item{...}{Unused; for S3 compatibility.}
 }
