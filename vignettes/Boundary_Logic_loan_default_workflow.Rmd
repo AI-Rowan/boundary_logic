@@ -1,0 +1,790 @@
+---
+title: "Boundary Logic with Credit Data: Loan-Default Prediction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Boundary Logic with Credit Data: Loan-Default Prediction}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+
+# The SHAP comparison section needs two optional packages. Every SHAP chunk
+# is gated on this flag, so the vignette still builds without them installed.
+has_shap <- requireNamespace("fastshap", quietly = TRUE) &&
+            requireNamespace("shapviz",  quietly = TRUE)
+```
+
+## Overview
+
+This vignette walks through the complete three-phase Boundary Logic
+workflow on a **credit-risk** problem: predicting loan default from a
+dataset of 45,000 loan applications with a binary `loan_status` outcome
+(1 = default, 0 = repaid). It closes with a section that places Boundary
+Logic's interpretation **side by side with SHAP** for the very same
+model.
+
+The loan dataset exercises features that the simple iris example does
+not:
+
+-   **A non-linear, tree-based model** — an XGBoost classifier, wrapped
+    via `bl_wrap_model()`.
+-   **Domain filtering** — the credit-risk question is posed for the
+    sub-population of applicants with no prior default on file.
+-   **Feature pruning driven by Phase 2** — the global
+    distance-to-boundary importance is used to drop weak variables and
+    refit a leaner model.
+-   **Business-motivated actionability constraints** — some variables
+    (interest rate, credit score) move in defined directions; others
+    (age) are fixed.
+-   **External-applicant analysis** — scoring and explaining a brand new
+    application not in the training data.
+
+The workflow follows three phases:
+
+-   **Phase 1:** Data preparation, model fitting, CVA biplot
+    construction.
+-   **Phase 2:** Global interpretation — distance to boundary,
+    per-variable importance, surrogate model, and feature pruning.
+-   **Phase 3:** Local interpretation of a single applicant — local
+    counterfactual, Shapley attribution, sparse counterfactual.
+-   **Comparison with SHAP:** global and local SHAP for the same XGBoost
+    model, contrasted with the Boundary Logic output.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{r load-pkg}
+library(boundarylogic)
+library(dplyr)
+```
+
+The final section also uses **fastshap** and **shapviz**. They are
+optional (`Suggests`); if they are not installed the SHAP chunks are
+skipped automatically.
+
+------------------------------------------------------------------------
+
+## Phase 1: Build the pipeline
+
+### Step 1 — Load and encode
+
+The raw dataset ships with the package in `inst/extdata`. It mixes
+numeric and categorical columns, so the categorical variables are
+integer-encoded first. Three high-cardinality categoricals
+(`loan_intent`, `person_education`, `person_home_ownership`) are dropped
+to keep the biplot legible.
+
+```{r step1-load}
+loan_raw <- read.csv(
+  system.file("extdata", "loan_data.csv", package = "boundarylogic")
+)
+
+loan_encoded <- loan_raw
+
+gender_map    <- c(female = 0, male = 1)
+ownership_map <- c("MORTGAGE" = 0, "OTHER" = 1, "OWN" = 2, "RENT" = 3)
+intent_map    <- c("DEBTCONSOLIDATION" = 0, "EDUCATION" = 1,
+                   "HOMEIMPROVEMENT" = 2, "MEDICAL" = 3,
+                   "PERSONAL" = 4, "VENTURE" = 5)
+education_map <- c("High School" = 0, "Associate" = 1,
+                   "Bachelor" = 2, "Master" = 3, "Doctorate" = 4)
+defaults_map  <- c("No" = 0, "Yes" = 1)
+
+loan_encoded$person_gender                  <- gender_map[loan_encoded$person_gender]
+loan_encoded$person_education               <- education_map[loan_encoded$person_education]
+loan_encoded$person_home_ownership          <- ownership_map[loan_encoded$person_home_ownership]
+loan_encoded$loan_intent                    <- intent_map[loan_encoded$loan_intent]
+loan_encoded$previous_loan_defaults_on_file <- defaults_map[loan_encoded$previous_loan_defaults_on_file]
+
+# Coerce all columns to double so the training data and the prediction grid
+# share the same type (read.csv() reads integer-valued columns as integer,
+# but the grid builder generates sequences as double).
+loan_encoded[] <- lapply(loan_encoded, as.numeric)
+
+# Drop high-cardinality categoricals
+vars_to_remove <- c("loan_intent", "person_education", "person_home_ownership")
+loan_encoded   <- loan_encoded[, setdiff(names(loan_encoded), vars_to_remove),
+                               drop = FALSE]
+
+names(loan_encoded)
+```
+
+> **Vignette note:** to keep build time short, the steps below draw a
+> seeded random subsample of the data. The full 45,000-row dataset is
+> shipped in `inst/extdata/loan_data.csv` — re-run with the complete data
+> for production analysis.
+
+------------------------------------------------------------------------
+
+### Step 2 — Exploratory biplot (no model)
+
+A PCA biplot coloured by `loan_status` — built **before** any model — shows
+the class structure and the variable loading directions. Passing no
+`bl_model` to `bl_build_result()` returns a projection-only object that
+`plot_biplotEZ()` renders in the usual style.
+
+```{r step2-explore}
+set.seed(121L)
+loan_explore <- loan_encoded[sample(nrow(loan_encoded), 4000L), ]
+
+bl_dat_exp <- bl_prepare_data(
+  data           = loan_explore,
+  class_col      = "loan_status",
+  train_fraction = 1,
+  seed           = 121L,
+  hull_fraction  = 1
+)
+
+bl_proj <- bl_build_result(
+  bl_data = bl_dat_exp,
+  method  = "PCA",
+  title   = "Loan default - exploratory PCA biplot"
+)
+
+plot_biplotEZ(
+  bl_proj,
+  label_dir         = "Paral",
+  label_offset_var  = c("person_age", "person_gender", "person_income",
+                        "person_emp_exp", "loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "cb_person_cred_hist_length",
+                        "credit_score", "previous_loan_defaults_on_file"),
+  label_offset_dist = c(0, 0, 0.5, 1, 0.5, 1, 0, 1.5, 0, 0)
+)
+```
+
+------------------------------------------------------------------------
+
+### Step 3 — Domain filter
+
+The credit-risk model targets applicants with **no prior default on
+file**. After filtering, `previous_loan_defaults_on_file` is constant and
+is excluded from the feature set (zero variance). The modelling
+population is then subsampled to 4,000 rows for a fast build.
+
+```{r step3-filter}
+loan_filtered <- loan_encoded[loan_encoded$previous_loan_defaults_on_file == 0, ]
+
+set.seed(121L)
+loan_filtered <- loan_filtered[sample(nrow(loan_filtered), 4000L), ]
+
+feature_cols <- setdiff(
+  names(loan_filtered),
+  c("loan_status", "previous_loan_defaults_on_file")
+)
+
+cat("Rows:", nrow(loan_filtered), "\n")
+cat("Features:", paste(feature_cols, collapse = ", "), "\n")
+```
+
+------------------------------------------------------------------------
+
+### Steps 4-6 — Prepare data, fit XGBoost, build the biplot
+
+`bl_prepare_data()` makes a reproducible 80/20 split, encodes the class,
+and trims the outermost 10% of training points (`hull_fraction = 0.9`).
+An XGBoost classifier is then fitted directly and registered with
+`bl_wrap_model()` using the built-in `"XGB"` dispatch — the model must be
+supplied as `list(model = <booster>, features = <character vector>)`.
+
+```{r steps4-6}
+bl_dat <- bl_prepare_data(
+  data           = loan_filtered,
+  class_col      = "loan_status",
+  feature_cols   = feature_cols,
+  train_fraction = 0.8,
+  seed           = 121L,
+  hull_fraction  = 0.9
+)
+
+xgb_data <- xgboost::xgb.DMatrix(
+  data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
+  label = bl_dat$train_data$class
+)
+xgb_fit <- xgboost::xgb.train(
+  params  = list(objective     = "binary:logistic",
+                 eval_metric   = "logloss",
+                 max_depth     = 3,
+                 learning_rate = 0.1),
+  data    = xgb_data,
+  nrounds = 200,
+  verbose = 0
+)
+
+bl_mod <- bl_wrap_model(
+  model      = list(model = xgb_fit, features = bl_dat$var_names),
+  model_type = "XGB",
+  var_names  = bl_dat$var_names,
+  train_data = bl_dat$train_data
+)
+
+bl_results <- bl_build_result(
+  bl_data  = bl_dat,
+  bl_model = bl_mod,
+  method   = "CVA",
+  title    = "Loan default (no prior default) - XGB, CVA biplot",
+  b_margin = 0.001
+)
+
+print(bl_results)
+```
+
+**CVA projection** is the default for this workflow: it maximises
+between-class separation in the 2D plane, making the decision boundary
+clearly visible.
+
+```{r biplot-train}
+plot_biplotEZ(
+  bl_results,
+  label_dir         = "Hor",
+  label_offset_var  = 0L,
+  label_offset_dist = 0.5
+)
+```
+
+Overlay the test observations (`filter_to_polygon = TRUE` drops points
+that project outside the training hull):
+
+```{r biplot-test}
+test_pts <- bl_project_points(bl_results$test_data, bl_results,
+                              filter_to_polygon = TRUE)
+plot(bl_results, points = test_pts)
+```
+
+------------------------------------------------------------------------
+
+## Phase 2: Global interpretation
+
+### Step 7 — Find nearest boundary point: `bl_find_boundary()`
+
+`bl_find_boundary()` finds, for every observation, the nearest point on
+the decision boundary and back-projects it to feature space. The search
+is constrained to the training feature envelope (`train_ranges`).
+
+```{r step7-boundary}
+bl_bnd <- bl_find_boundary(bl_results)
+print(bl_bnd)
+
+plot_biplotEZ(bl_results, points = test_pts)
+```
+
+```{r step7-pick, eval=FALSE}
+# Interactive: click an observation to see its counterfactual arrow
+bl_pick_point(bl_results, bl_boundary = bl_bnd)
+```
+
+------------------------------------------------------------------------
+
+### Step 8 — Distance-to-boundary plot
+
+`plot(bl_bnd)` decomposes each observation's distance to the boundary
+into a signed, standardised contribution per variable, sorted from least
+to most important.
+
+-   **Y-axis:** `variable : total absolute standardised distance`.
+-   **X-axis:** signed standardised distance.
+-   **Colours:** TP = red, TN = blue, FP = purple, FN = orange.
+
+```{r step8-jitter}
+plot(bl_bnd)
+```
+
+```{r step8-boxplot}
+plot(bl_bnd, type = "boxplot")
+```
+
+------------------------------------------------------------------------
+
+### Step 9 — Surrogate model: `bl_surrogate()`
+
+`bl_surrogate()` classifies each training observation purely from its
+position relative to the surrogate contour lines in Z-space, giving a
+spatial approximation of the classifier confined to the training hull.
+
+```{r step9-surrogate}
+bl_surr <- bl_surrogate(bl_results)
+print(bl_surr)
+plot(bl_surr)
+```
+
+------------------------------------------------------------------------
+
+### Step 10 — Prune weak variables and refit
+
+The per-variable totals from `bl_find_boundary()` act as a global
+importance ranking. `bl_robustness()` exposes them programmatically as
+`sum_of_distance`. The weakest variables are dropped and the model is
+refit on the leaner feature set.
+
+```{r step10-prune}
+rob     <- bl_robustness(bl_bnd)
+var_imp <- sort(rob$sum_of_distance)        # ascending: weakest first
+print(round(var_imp, 2))
+
+# Drop the four weakest variables; keep the five strongest.
+vars_to_drop    <- c("person_gender", "person_emp_exp",
+                     "cb_person_cred_hist_length", "person_income")
+feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
+cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
+```
+
+Refit the whole pipeline on the reduced feature set:
+
+```{r step10-refit}
+bl_dat_v2 <- bl_prepare_data(
+  data           = loan_filtered,
+  class_col      = "loan_status",
+  feature_cols   = feature_cols_v2,
+  train_fraction = 0.8,
+  seed           = 121L,
+  hull_fraction  = 0.9
+)
+
+xgb_data_v2 <- xgboost::xgb.DMatrix(
+  data  = as.matrix(bl_dat_v2$train_data[, bl_dat_v2$var_names]),
+  label = bl_dat_v2$train_data$class
+)
+xgb_fit_v2 <- xgboost::xgb.train(
+  params  = list(objective     = "binary:logistic",
+                 eval_metric   = "logloss",
+                 max_depth     = 3,
+                 learning_rate = 0.1),
+  data    = xgb_data_v2,
+  nrounds = 200,
+  verbose = 0
+)
+bl_mod_v2 <- bl_wrap_model(
+  model      = list(model = xgb_fit_v2, features = bl_dat_v2$var_names),
+  model_type = "XGB",
+  var_names  = bl_dat_v2$var_names,
+  train_data = bl_dat_v2$train_data
+)
+
+bl_results_v2 <- bl_build_result(
+  bl_data  = bl_dat_v2,
+  bl_model = bl_mod_v2,
+  method   = "CVA",
+  title    = "Loan default - XGB, reduced features, CVA biplot",
+  b_margin = 0.01
+)
+
+plot_biplotEZ(bl_results_v2)
+test_pts_v2 <- bl_project_points(bl_results_v2$test_data, bl_results_v2)
+plot(bl_results_v2, points = test_pts_v2)
+```
+
+Re-inspect the reduced model globally:
+
+```{r step10-refit-global}
+bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
+plot(bl_bnd_v2)
+
+bl_surr_v2 <- bl_surrogate(bl_results_v2)
+plot(bl_surr_v2,
+     label_dir         = "Paral",
+     label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 0.5, 0, 0),
+     ticks_v = 5)
+```
+
+------------------------------------------------------------------------
+
+## Phase 3: Local interpretation
+
+All of Phase 3 uses the reduced model `bl_results_v2`.
+
+### Step 11 — Inspect predictions and select a target
+
+`bl_predict()` scores every test observation. **False Negatives** (true
+class 1, predicted 0) are the most actionable: the applicant will default
+but the model clears them — what would have to change to flag them
+correctly?
+
+```{r step11-select}
+pred_summary <- bl_predict(bl_results_v2)
+
+# Pick the first false-negative applicant; fall back to the first true
+# defaulter so the vignette knits regardless of the data split.
+fn_idx <- which(pred_summary$true_class == 1 & pred_summary$pred_class == 0)
+tdp    <- if (length(fn_idx) > 0) fn_idx[1] else which(pred_summary$true_class == 1)[1]
+pred_summary[tdp, ]
+
+tgt <- bl_select_target(bl_results_v2, target = tdp)
+print(tgt)
+
+plot(
+  bl_results_v2,
+  points       = test_pts_v2,
+  target_point = bl_results_v2$test_data[tdp, ],
+  target_label = tdp,
+  label_dir         = "Paral",
+  label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "credit_score"),
+  label_offset_dist = c(0, 0, 0.5, 0, 0),
+  ticks_v = 3
+)
+```
+
+------------------------------------------------------------------------
+
+### Step 12 — Set actionability constraints: `set_filters()`
+
+Not every variable can move freely in a lending decision. `set_filters()`
+encodes the business constraints:
+
+-   **`"decrease"`** — counterfactual value must be ≤ observed.
+-   **`"increase"`** — counterfactual value must be ≥ observed.
+-   **`"fixed"`** — not actionable; the search allows ±0.5 of observed and
+    the sparse counterfactual always reverts it.
+-   **`c(min, max)`** — counterfactual must lie within this absolute
+    range.
+
+Here `person_age` is fixed (not actionable), while `loan_int_rate` and
+`credit_score` are constrained to increase. Only variables still in the
+reduced model may be named.
+
+```{r step12-filters}
+flt <- set_filters(
+  tgt,
+  person_age    = "fixed",      # not actionable
+  loan_int_rate = "increase",   # set by the lender, not the applicant
+  credit_score  = "increase"
+)
+print(flt)
+```
+
+------------------------------------------------------------------------
+
+### Step 13 — Find local counterfactual: `bl_find_local_cf()`
+
+`bl_find_local_cf()` rotates the biplot around the target, builds a local
+prediction grid, applies `train_ranges` and the actionability filters,
+and finds the nearest opposing-class boundary point — repeating across
+eigenvector pairs and keeping the closest.
+
+```{r step13-local-cf}
+bl_local <- bl_find_local_cf(
+  bl_result   = bl_results_v2,
+  bl_target   = tgt,
+  set_filters = flt
+)
+print(bl_local)
+```
+
+------------------------------------------------------------------------
+
+### Step 14 — Local biplot
+
+`plot(bl_local)` renders the rotated eigenvector plane that minimises the
+distance to the boundary, showing the target (filled circle) and the
+counterfactual (grey cross with arrow).
+
+```{r step14-local-biplot}
+plot(bl_local,
+     label_dir         = "Paral",
+     label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0.5, 0, 0, 0),
+     ticks_var = c("person_age", "loan_amnt", "loan_int_rate",
+                   "loan_percent_income", "credit_score"),
+     ticks_n = c(2, 4, 200, 200, 20))
+```
+
+------------------------------------------------------------------------
+
+### Step 15 — Shapley attribution: `bl_shapley()`
+
+`bl_shapley()` decomposes the path from the target to the counterfactual
+into per-variable contributions. Each variable is classified as
+**Supports** (helps cross the boundary) or **Contradicts** (works against
+it). Y-axis labels read `variable: observed_value -> required_change`.
+
+```{r step15-shapley}
+bl_shapley_values <- bl_shapley(bl_local)
+print(bl_shapley_values)
+plot(bl_shapley_values)
+```
+
+------------------------------------------------------------------------
+
+### Step 16 — Sparse counterfactual: `bl_find_sparse_cf()`
+
+`bl_find_sparse_cf()` reverts every **Contradicts** variable (and every
+`"fixed"` variable) to its observed value, so only the **Supports**
+variables change. `solution_valid = TRUE` confirms the sparse change
+still flips the prediction.
+
+```{r step16-sparse}
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
+print(bl_sparse)
+plot(bl_sparse)
+```
+
+------------------------------------------------------------------------
+
+## Alternative: unconstrained local search
+
+Running `bl_find_local_cf()` without actionability constraints gives the
+geometrically nearest boundary point — a useful baseline.
+
+```{r step17-unconstrained}
+bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
+plot(bl_local_free,
+     label_dir         = "Paral",
+     label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 0, 0, 1),
+     ticks_var = c("person_age", "loan_amnt", "loan_int_rate",
+                   "loan_percent_income", "credit_score"),
+     ticks_n = c(2, 4, 200, 200, 20))
+
+bl_shap_free   <- bl_shapley(bl_local_free)
+bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
+plot(bl_shap_free)
+plot(bl_sparse_free)
+```
+
+------------------------------------------------------------------------
+
+## External applicant
+
+Phase 3 is not limited to the train/test set. Pass a single-row data
+frame as the `target` to score and explain a new application. Only the
+retained features are needed.
+
+```{r step18-external}
+new_applicant <- data.frame(
+  person_age          = 32,
+  loan_amnt           = 12000,
+  loan_int_rate       = 13.5,
+  loan_percent_income = 12000 / 248000,
+  credit_score        = 420
+)
+new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
+                               drop = FALSE]
+
+plot_biplotEZ(
+  bl_results_v2,
+  points       = test_pts_v2,
+  target_point = new_applicant,
+  target_label = "new"
+)
+
+tgt_ext       <- bl_select_target(bl_results_v2, target = new_applicant)
+bl_local_ext  <- bl_find_local_cf(bl_results_v2, tgt_ext)
+bl_shap_ext   <- bl_shapley(bl_local_ext)
+bl_sparse_ext <- bl_find_sparse_cf(bl_shap_ext)
+
+plot(bl_local_ext)
+plot(bl_shap_ext)
+plot(bl_sparse_ext)
+```
+
+------------------------------------------------------------------------
+
+## Comparison with SHAP
+
+SHAP (SHapley Additive exPlanations) is the most widely used post-hoc
+attribution method, so it is the natural yardstick for Boundary Logic.
+Both rest on Shapley values, but they answer **different questions**:
+
+-   **SHAP** attributes the *model's predicted probability* for an
+    observation, relative to the average (baseline) prediction over the
+    training data. It says *why the score is what it is*.
+-   **Boundary Logic** attributes *distance to the decision boundary*
+    (globally) and *the minimal change that flips the prediction*
+    (locally). It says *what would have to change to alter the decision*.
+
+The chunks below fit real SHAP on the **same XGBoost models** using
+`fastshap` and `shapviz`. Each chunk is guarded with `if (has_shap)`, so
+the section renders only when both packages are installed (and the
+vignette still builds when they are not).
+
+```{r shap-missing, echo = FALSE, results = "asis"}
+if (!has_shap) {
+  cat("> **SHAP packages not available.** Install `fastshap` and `shapviz`",
+      "to render this section:\n>\n>",
+      "`install.packages(c(\"fastshap\", \"shapviz\"))`\n")
+}
+```
+
+```{r shap-setup}
+if (has_shap) {
+  # fastshap needs a prediction wrapper f(object, newdata) -> numeric vector.
+  # For XGBoost the new data must be wrapped in an xgb.DMatrix.
+  pred_fn <- function(object, newdata) {
+    as.numeric(predict(object, xgboost::xgb.DMatrix(as.matrix(newdata))))
+  }
+
+  # Background / explanation data for each model
+  X_train_full <- bl_dat$train_data[,    bl_dat$var_names,    drop = FALSE]
+  X_train_v2   <- bl_dat_v2$train_data[, bl_dat_v2$var_names, drop = FALSE]
+  X_test_v2    <- bl_dat_v2$test_data[,  bl_dat_v2$var_names, drop = FALSE]
+
+  # SHAP baseline = mean predicted probability over the (reduced-model)
+  # training background. fastshap does not attach one, so shapviz needs it.
+  shap_baseline <- mean(pred_fn(xgb_fit_v2, X_train_v2))
+}
+```
+
+### Global: SHAP vs. Boundary Logic variable selection
+
+**(a) Which five variables would SHAP have kept?**
+
+In Phase 2 the *distance-to-boundary* importance picked the five
+variables in `feature_cols_v2`. Here we ask SHAP the same question on the
+**full nine-feature** model: rank the variables by mean absolute SHAP
+value and take its top five.
+
+```{r shap-global-select}
+if (has_shap) {
+  set.seed(42L)
+  shap_full <- fastshap::explain(
+    object       = xgb_fit,            # full-feature model
+    X            = X_train_full,
+    pred_wrapper = pred_fn,
+    nsim         = 50L
+  )
+
+  shap_imp  <- sort(colMeans(abs(as.matrix(shap_full))), decreasing = TRUE)
+  shap_top5 <- names(shap_imp)[1:5]
+
+  # Distance-to-boundary ranking (strongest first) from Phase 2
+  dist_top5 <- names(sort(rob$sum_of_distance, decreasing = TRUE))[1:5]
+
+  print(data.frame(
+    rank          = 1:5,
+    SHAP          = shap_top5,
+    dist_to_bound = dist_top5
+  ))
+}
+```
+
+The two criteria usually agree on the dominant credit-risk drivers
+(interest rate, loan-to-income, credit score) but can disagree in the
+tail: SHAP ranks a variable by how much it moves the *predicted
+probability* away from the average applicant, whereas Boundary Logic
+ranks it by its total standardised contribution to *distance from the
+decision boundary*. A variable can shift many scores a little (high SHAP)
+yet rarely be the lever that carries a point across the boundary (low
+distance contribution), and vice versa.
+
+**(b) Global SHAP of the retained five variables**
+
+Now run SHAP on the reduced model — exactly the five variables the
+workflow proceeded with — and view the standard global summaries.
+
+```{r shap-global-plots}
+if (has_shap) {
+  set.seed(42L)
+  shap_v2 <- fastshap::explain(
+    object       = xgb_fit_v2,         # reduced model
+    X            = X_train_v2,
+    pred_wrapper = pred_fn,
+    nsim         = 50L
+  )
+  sv_v2 <- shapviz::shapviz(as.matrix(shap_v2), X = X_train_v2,
+                            baseline = shap_baseline)
+
+  print(shapviz::sv_importance(sv_v2, kind = "bar") +
+          ggplot2::labs(title = "Global SHAP importance - reduced XGB model"))
+}
+```
+
+```{r shap-global-beeswarm}
+if (has_shap) {
+  print(shapviz::sv_importance(sv_v2, kind = "beeswarm") +
+          ggplot2::labs(title = "Global SHAP beeswarm - reduced XGB model"))
+}
+```
+
+Compare these against `plot(bl_bnd_v2)` (Step 10) and `bl_surrogate()`
+(Step 9). SHAP's bar chart and the Boundary Logic distance ranking are
+both global importance measures, but the SHAP beeswarm additionally shows
+the *direction* in which high/low feature values push the predicted
+probability, while the Boundary Logic plot shows the *signed distance*
+each observation sits from the boundary along each variable.
+
+### Local: SHAP vs. `bl_shapley` attribution
+
+For the **same target applicant** explained in Phase 3, compute local
+SHAP and view the waterfall and force plots.
+
+```{r shap-local}
+if (has_shap) {
+  set.seed(42L)
+  shap_local <- fastshap::explain(
+    object       = xgb_fit_v2,
+    X            = X_train_v2,
+    pred_wrapper = pred_fn,
+    nsim         = 200L,
+    newdata      = X_test_v2[tdp, , drop = FALSE],
+    adjust       = TRUE          # force additivity: sum(shap) = f(x) - baseline
+  )
+  sv_local <- shapviz::shapviz(as.matrix(shap_local),
+                               X = X_test_v2[tdp, , drop = FALSE],
+                               baseline = shap_baseline)
+
+  print(shapviz::sv_waterfall(sv_local) +
+          ggplot2::labs(title = sprintf("Local SHAP waterfall - applicant %d", tdp)))
+}
+```
+
+```{r shap-local-force}
+if (has_shap) {
+  print(shapviz::sv_force(sv_local) +
+          ggplot2::labs(title = sprintf("Local SHAP force plot - applicant %d", tdp)))
+}
+```
+
+Put next to `plot(bl_shapley_values)` (Step 15), the contrast is sharp:
+
+| Aspect | Local SHAP (waterfall/force) | `bl_shapley()` |
+|---|---|---|
+| What it explains | The predicted probability for this applicant | The path from this applicant to the boundary counterfactual |
+| Baseline | Mean training prediction | The applicant's observed feature values |
+| Reading | Each bar pushes the score up/down | Each bar **Supports** or **Contradicts** crossing the boundary |
+| Output | A number (the score decomposition) | An actionable change (`observed -> required`) |
+| Constraints | None | Honours `set_filters()` actionability |
+
+SHAP tells you **why the model scored this applicant as it did**;
+`bl_shapley()` tells you **the minimal, constraint-respecting change that
+would flip the decision**. They are complementary: SHAP for understanding
+the score, Boundary Logic for acting on it.
+
+------------------------------------------------------------------------
+
+## Summary
+
+| Phase | Step | Function | Purpose |
+|-------|------|----------|---------|
+| 1 | 1-3 | `bl_prepare_data()` | Load, encode, domain-filter, split, hull-trim |
+| 1 | 2 | `bl_build_result(method="PCA")` | Exploratory biplot (no model) |
+| 1 | 4-6 | `bl_wrap_model()` + `bl_build_result()` | XGBoost + CVA biplot |
+| 2 | 7 | `bl_find_boundary()` | Global counterfactual search |
+| 2 | 8 | `plot(bl_bnd)` | Distance-to-boundary importance |
+| 2 | 9 | `bl_surrogate()` | Spatial surrogate model |
+| 2 | 10 | `bl_robustness()` | Prune weak variables, refit |
+| 3 | 11 | `bl_predict()` + `bl_select_target()` | Select target applicant |
+| 3 | 12 | `set_filters()` | Encode actionability constraints |
+| 3 | 13 | `bl_find_local_cf()` | Nearest constrained counterfactual |
+| 3 | 14 | `plot(bl_local)` | Local biplot |
+| 3 | 15 | `bl_shapley()` | Shapley attribution of the flip |
+| 3 | 16 | `bl_find_sparse_cf()` | Sparse counterfactual |
+| - | - | `fastshap` / `shapviz` | SHAP comparison (global + local) |
+
+Boundary Logic and SHAP are best used together. SHAP explains the
+model's score relative to an average applicant; Boundary Logic locates
+each applicant relative to the decision boundary and identifies the
+smallest, business-feasible change that would alter the lending decision.

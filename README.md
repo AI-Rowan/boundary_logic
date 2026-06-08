@@ -251,17 +251,16 @@ bl_local <- bl_find_local_cf(bl_results, tgt, set_filters = flt)
 
 ## Vignettes
 
-Two vignettes cover the complete workflow:
+The package vignette covers the complete workflow:
 
-- **Iris dataset** (`Boundary_Logic-workflow.Rmd`) — introductory walkthrough
-  using the built-in iris dataset; covers Phases 1–3 step by step.
-- **Pima diabetes dataset** (`Boundary_Logic_Pima_diabetes_workflow.Rmd`) —
-  clinical context with a custom GAM, CVA biplot, actionability constraints,
-  and external patient analysis (Phases 1–3).
+- **Loan-default dataset** (`Boundary_Logic_loan_default_workflow.Rmd`) —
+  credit-risk walkthrough with an XGBoost model and CVA biplot: Phase 2
+  feature pruning, actionability constraints, external-applicant analysis,
+  and a side-by-side comparison of the global and local interpretation
+  against SHAP (`fastshap` / `shapviz`) for the same model (Phases 1–3).
 
 ```r
-vignette("Boundary_Logic-workflow",              package = "boundarylogic")
-vignette("Boundary_Logic_Pima_diabetes_workflow", package = "boundarylogic")
+vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")
 ```
 
 ---
@@ -299,8 +298,8 @@ devtools::test()
 boundary_logic/
 ├── R/                   ← Package source
 ├── tests/testthat/      ← Unit tests
-├── vignettes/           ← Iris and Pima diabetes workflows
-├── inst/extdata/        ← Bundled datasets (pima_diabetes.csv)
+├── vignettes/           ← Loan-default workflow
+├── inst/extdata/        ← Bundled datasets (loan_data.csv, pima_diabetes.csv)
 ├── scripts/             ← Interactive example scripts
 └── docs/                ← Flow diagram, implementation summary
 ```

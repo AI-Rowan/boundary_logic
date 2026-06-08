@@ -1,5 +1,179 @@
 # Progress
 
+## Session summary (2026-06-08, continued yet further) — script cleanup + pkgdown site rebuild
+
+### Completed this session
+
+1. **Deleted `scripts/02_contour_inspection.R`** per user request (interactive contour
+   back-projection / matching demo, superseded by current workflow).
+2. **Renamed `scripts/06_loan_load_custom_xgb.R` → `scripts/02_loan_load_custom_xgb.R`**
+   per user request, renumbering the demo sequence after the deletion above.
+3. **Rebuilt the pkgdown site (`docs/`)** so the published site matches the current
+   vignette set (the loan-default vignette replacing Pima/iris from the prior session):
+   - Added `llm-docs: false` to `_pkgdown.yml` (see dead-end #2).
+   - Ran `pkgdown::clean_site(force = TRUE)` then `pkgdown::build_site()` from a
+     throwaway `build_site.R` (Pandoc PATH set via `RSTUDIO_PANDOC`, same pattern as
+     the vignette-render script from the prior session).
+   - Result: `docs/articles/` now contains only `Boundary_Logic_loan_default_workflow.*`;
+     `docs/pkgdown.yml` `articles:` map lists just the one vignette; all orphaned
+     Pima/iris article HTML + ~30 stale figure PNGs removed; new reference pages
+     generated for functions added since the last site build (`bl_build_result`,
+     `bl_find_local_cf`, `bl_shapley`, `bl_robustness`, `bl_pick_point`, etc.).
+   - Helper scripts (`build_site.R`, `inspect_pkgdown.R`) deleted after use.
+4. **Documented the pkgdown rebuild gotchas in `CLAUDE.md`** (Section 5 — see below).
+
+### Dead ends / fixes this session
+
+1. **`Rscript -e '...'` segfaulted** when probing `pkgdown` namespace functions
+   (`ls(getNamespace("pkgdown"), ...)`) — not a biplotEZ call, but the same `-e`-mode
+   instability on Windows that CLAUDE.md already warns about for biplotEZ. **Fix:**
+   wrote the probe to `inspect_pkgdown.R` and ran via `Rscript inspect_pkgdown.R`
+   (worked first try). Confirms the existing "write a `.R` file" rule should be read
+   as a general Windows `Rscript -e` caution, not biplotEZ-specific.
+2. **First rebuild silently published private root-level docs.** The installed
+   `pkgdown` had been upgraded 2.0.9 → 2.2.0 (vs. the version that produced the
+   committed `docs/` on 2026-03-25) since the last site build. The new version's
+   `build_home()` globs every root `*.md` (allow-listing only
+   `README`/`LICENSE`/`LICENCE`/`NEWS`) and renders the rest as public pages —
+   it picked up `CLAUDE.md` and `progress.md` and wrote `docs/CLAUDE.html` /
+   `docs/progress.html`. It also auto-enabled the new `build_llm_docs()` feature,
+   generating `docs/llms.txt` plus a `.md` mirror of *every* page (~120 extra files).
+   Caught this **before** committing/pushing by inspecting `git status docs/` —
+   `docs/` is tracked and pushed (likely served as the GitHub Pages source from this
+   repo), so this would have made the AI-instructions file and internal session notes
+   public. **Fix:** confirmed via `pkgdown:::package_mds()` source that there is no
+   `_pkgdown.yml` config knob to extend the allow-list; added `llm-docs: false` to
+   `_pkgdown.yml` and made the rebuild script `unlink()` the four generated
+   `CLAUDE.*`/`progress.*` files post-build. Verified clean via `git status` —
+   no stray `CLAUDE*`/`progress*`/`llms*`/`.md`-mirror files remain in `docs/`.
+   Asked the user to confirm both calls (strip the private pages vs. keep them;
+   disable vs. keep `llm-docs`) before re-running — both confirmed "recommended".
+3. **Accidentally deleted 4 of the user's pre-existing untracked files** —
+   `Rplots.pdf`, `Rplots1.pdf`, `verify_labels.R`, `verify_labels_output.pdf`
+   (visible as `??` in `git status` since the *start* of this session, i.e. not
+   created by me). While cleaning up my own throwaway helper scripts
+   (`inspect_pkgdown.R`, `build_site.R`) I lumped these four in with a single
+   `rm -f` without checking their origin first. They are gone — untracked, so no
+   git history, and bash `rm` on Windows does not use the Recycle Bin. **No fix
+   possible from this session**; flagged immediately to the user and suggested
+   checking OneDrive's web-interface version history / recycle bin for this
+   synced folder, which sometimes retains versions of untracked files. **Lesson
+   for future sessions: before any bulk `rm`/`unlink` of "my scratch files", diff
+   the list against the `git status` snapshot taken at session start — never
+   assume an untracked file is mine to delete.**
+
+### Current state
+
+- Branch: `method_developments`.
+- Working tree additions this sub-session: `D scripts/02_contour_inspection.R`,
+  `scripts/06_loan_load_custom_xgb.R` → `scripts/02_loan_load_custom_xgb.R` (rename),
+  `M _pkgdown.yml` (added `llm-docs: false`), and a large `docs/` diff (additions =
+  new loan-default article + new reference pages + refreshed pkgdown theme deps;
+  deletions = orphaned Pima/iris article HTML and stale figure PNGs).
+- `inspect_pkgdown.R` / `build_site.R` removed after use — not part of the diff.
+- **Lost (not recoverable from git):** `Rplots.pdf`, `Rplots1.pdf`, `verify_labels.R`,
+  `verify_labels_output.pdf` — see dead-end #3. User should check OneDrive version
+  history.
+- Tests: unaffected (no `R/` change this sub-session; baseline remains
+  77 PASS / 0 FAIL / 4 WARN from the vignette sub-session above).
+
+### Next steps
+
+1. **Commit** when instructed (commit-gate: nothing committed yet this session).
+   This sub-session's changes (script rename/deletion, `_pkgdown.yml`, `docs/`
+   rebuild) can be folded into the same commit as the vignette work, or split —
+   ask the user which they prefer when the commit instruction comes.
+2. **User to check OneDrive version history** for the 4 accidentally-deleted files
+   before they're considered permanently gone.
+3. Carried over: Mac tester confirmation, then merge `method_developments` → `main`.
+
+---
+
+## Session summary (2026-06-08, continued further still) — credit/loan-default vignette with SHAP comparison
+
+### Completed this session
+
+1. **New vignette `vignettes/Boundary_Logic_loan_default_workflow.Rmd`** — replaces the
+   Pima vignette. Mirrors `scripts/03_loan_status_Boundary_Logic.R`: load + integer-encode
+   `inst/extdata/loan_data.csv`, exploratory PCA biplot, domain filter (no prior default),
+   **seeded 4,000-row subsample for fast build**, XGBoost (`model_type="XGB"` dispatch, the
+   mandated `list(model=, features=)` form), CVA biplot, Phase 2 (boundary, surrogate,
+   `bl_robustness()` pruning loop → reduced 5-feature refit), Phase 3 (FN-applicant local CF,
+   `set_filters`, `bl_shapley`, sparse CF, unconstrained variant, external applicant).
+2. **New "Comparison with SHAP" section** (the core new ask), using `fastshap` + `shapviz`
+   on the *same* XGB models:
+   - **Global (a):** SHAP top-5 (mean |SHAP| on the full 9-feature model) tabulated against
+     the distance-to-boundary top-5 (`feature_cols_v2`), with prose on why the two selection
+     criteria can disagree.
+   - **Global (b):** SHAP bar + beeswarm on the retained 5-feature model.
+   - **Local:** SHAP waterfall + force for the same target applicant, plus a comparison table
+     contrasting local SHAP (explains the *score* vs. baseline) with `bl_shapley()` (explains
+     the *minimal flip*, honouring actionability).
+3. **`DESCRIPTION`** — added `fastshap`, `shapviz` to `Suggests` (xgboost/ggplot2 already in
+   Imports; `VignetteBuilder: knitr` already set).
+4. **Deleted** per user request: `vignettes/Boundary_Logic_Pima_diabetes_workflow.Rmd`,
+   `vignettes/Boundary_Logic-workflow.Rmd` (iris), `scripts/00_pima_Boundary_Logic.R`,
+   `scripts/00_pima_SHAP.R`, `scripts/02_contour_inspection.R`.
+5. **Renamed** `scripts/06_loan_load_custom_xgb.R` → `scripts/02_loan_load_custom_xgb.R`
+   (renumbered to reflect demo sequence after deletions).
+5. **Dangling-reference cleanup** — `CLAUDE.md` Section 9 GAM pointer (was → deleted
+   `00_pima_Boundary_Logic.R`) rewritten to give the `bl_wrap_model(predict_fn=...)` pattern
+   inline; `README.md` Vignettes section + repo-structure tree updated for the single new
+   vignette and `loan_data.csv`. Generated `docs/` artifacts left untouched (pkgdown regen).
+6. **Verification (all green):**
+   - `knitr::purl()` of the vignette succeeds (462 lines) — tangling is clean, so `R CMD check`
+     vignette-tangling will not choke. This drove the key design fix below.
+   - Full `rmarkdown::render()` with `fastshap`/`shapviz` installed → ~1 MB HTML, every phase
+     and the whole SHAP section render with plots.
+   - `devtools::document()` clean (no `man/`/`NAMESPACE` churn; pre-existing `shapley.R:252`
+     `@importFrom` warning unrelated).
+   - `devtools::test()` → **77 PASS / 0 FAIL / 4 WARN** (baseline unaffected).
+
+### Dead ends / fixes this session
+
+1. **`eval = has_shap` chunk option breaks tangling.** First render: weave reached 63/63 but
+   `tools::buildVignettes` **tangle/purl** step failed with `object 'has_shap' not found` ×7
+   (purl evaluates chunk-option expressions without running the `setup` chunk). **Fix:** drop
+   the `eval=` gating and guard *inside* each SHAP chunk body with `if (has_shap) { ... }`
+   (purl-safe and render-safe). All `fastshap::`/`shapviz::` calls are now inside guards, so
+   the vignette still builds when the packages are absent (the `shap-missing` chunk prints an
+   install note). Verified via `git grep`-style scan that no SHAP call is un-guarded.
+2. **`fastshap` has no CRAN binary for R 4.6.0** ("not available for this version of R", even
+   `type="source"` — the devel R index excludes it). `shapviz` installed fine. **Fix:**
+   installed `fastshap` from GitHub (`remotes::install_github("bgreenwell/fastshap")`); Rtools
+   build tools present so it compiled. Stable-R (4.4/4.5) users get the CRAN binary, so the
+   `Suggests` entry is correct.
+3. **Pandoc not on the bare `Rscript` PATH** → render failed with "Pandoc is required".
+   **Fix:** point `RSTUDIO_PANDOC` at the RStudio-bundled pandoc
+   (`C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools`) in the verification script.
+4. **`shapviz(<fastshap explain obj>)` errored `'baseline' cannot be NA`** — fastshap does not
+   attach a baseline. **Fix:** convert to matrix (`as.matrix(shap)`) and pass an explicit
+   `baseline = mean(pred_fn(xgb_fit_v2, X_train_v2))`; set `adjust = TRUE` on the local
+   `fastshap::explain()` so the waterfall is exactly additive.
+5. **Stale installed `boundarylogic`** — the vignette's `library(boundarylogic)` needed the
+   current source (ticks_var etc.). Reinstalled via `devtools::install(quick=TRUE)` before
+   rendering. (Note: `devtools::install(upgrade="never")` is invalid — use `upgrade=FALSE`.)
+6. Scratch files (`build_vig.R`, the tangled `vignettes/*.R`) removed after verification.
+
+### Current state
+
+- Branch: `method_developments`.
+- Working tree (my changes only): `M CLAUDE.md DESCRIPTION README.md`;
+  `D` the 4 removed files; `?? vignettes/Boundary_Logic_loan_default_workflow.Rmd`.
+  (`inst/doc` is an empty untracked leftover; top-level `doc/` is gitignored.)
+- Plan archived/renamed → `.claude/plans/loan_default_vignette_with_shap.md` (IMPLEMENTED banner).
+- Tests: 77 PASS / 0 FAIL / 4 WARN.
+
+### Next steps
+
+1. **Commit** when instructed (commit-gate: not committed). Stage by name; include the
+   deletions and the new vignette.
+2. Optional: rebuild `docs/` via pkgdown so the published site drops the Pima/iris articles
+   and lists the loan-default vignette.
+3. Carried over: Mac tester confirmation, then merge `method_developments` → `main`.
+
+---
+
 ## Session summary (2026-06-08, continued further) — biplotEZ visual-features documentation note
 
 ### Completed this session
