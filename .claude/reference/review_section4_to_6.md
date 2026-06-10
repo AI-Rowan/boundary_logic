@@ -133,7 +133,7 @@ Outlier filtering is now integrated into  via . See Step 4 above for the full me
 
 **Files:** `R/model_fit.R` (dispatcher) + `R/model_utils.R` (internal fitter) + `R/predict_utils.R` (prediction)
 
-`bl_fit_model()` supports four parsnip/tidymodels types directly: GLM, SVM, NNET, RForrest. For XGBoost (used in this script) the model must be fitted externally and registered via `bl_wrap_model()`. Both paths return the same `"bl_model"` S3 object.
+`bl_fit_model()` supports four parsnip/tidymodels types directly: GLM, SVM, NNET, RForest. For XGBoost (used in this script) the model must be fitted externally and registered via `bl_wrap_model()`. Both paths return the same `"bl_model"` S3 object.
 
 ---
 
@@ -241,6 +241,8 @@ bl_mod <- bl_wrap_model(
 > )
 > ```
 > The `custom` + `predict_fn` approach is shown here because it makes the prediction contract explicit and generalises to any model type not natively supported.
+
+The script's Step 5b comments also document two ways to substitute a previously-saved booster instead of fitting `xgb_fit` fresh: **Option A** loads an XGBoost binary file via `xgboost::xgb.load()` (saved earlier with `xgboost::xgb.save()`), and **Option B** loads an R object via `readRDS()` (saved earlier with `saveRDS()`). Either option's result can replace the demo `xgb.train()` call; the rest of the `bl_wrap_model()` call (`predict_fn`, `var_names`, `train_data`) is unchanged. This pattern previously lived standalone in `scripts/02_loan_load_custom_xgb.R`, which has been removed now that script 03 covers it.
 
 **`bl_mod` fields:**
 
@@ -394,7 +396,7 @@ Combines all artifacts into the final `bl_result` object.
 
 **Call:**
 ```r
-plot_biplotEZ(
+plot(
   bl_results,
   label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
   label_offset_var  = 0L,        # or a character/integer vector of variable names/indices
@@ -518,10 +520,10 @@ External (user-facing) callers — the canonical pattern is to overlay non-train
 
 ```r
 test_pts <- bl_project_points(bl_results$test_data, bl_results)
-plot_biplotEZ(bl_results, points = test_pts)
+plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
 ```
 
-Used this way in all loan scripts (03–06), the iris and Pima scripts, both vignettes, and the README. Variants: `filter_to_polygon = TRUE` (only one explicit use, in script 03 line 234) drops out-of-hull observations before plotting; `filter_to_train_ranges = TRUE` (no current scripted use) drops X-space-extrapolated rows. Without an explicit `bl_project_points()` call, `plot_biplotEZ()` only ever shows training data because of the auto-project on line ~145 of `plot_biplot.R`.
+Used this way in all loan scripts (03–06), the iris and Pima scripts, both vignettes, and the README. Variants: `filter_to_polygon = TRUE` (only one explicit use, in script 03 line 263) drops out-of-hull observations before plotting; `filter_to_train_ranges = TRUE` (no current scripted use) drops X-space-extrapolated rows. Without an explicit `bl_project_points()` call, `plot_biplotEZ()` only ever shows training data because of the auto-project on line ~145 of `plot_biplot.R`.
 
 ---
 
@@ -576,7 +578,7 @@ bl_results  [bl_result]              ← THE CENTRAL ANCHOR OBJECT
   ├── accuracy, gini, b_margin=0.01
   └── call, created_at
      │
-     │  plot_biplotEZ(bl_results)   → renders training biplot
+     │  plot(bl_results)   → renders training biplot   # or plot_biplotEZ(...)
      │
      │  bl_project_points(bl_results$test_data, bl_results)
      │  → project using same V, X_center → Z_test

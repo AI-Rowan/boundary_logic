@@ -14,7 +14,7 @@ This document continues from `review_section4_to_6.md`. At this point `bl_result
 ```r
 bl_bnd <- bl_find_boundary(bl_results)
 print(bl_bnd)
-plot_biplotEZ(bl_results, points = test_pts, boundary = bl_bnd)
+plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
 ```
 
 ### What `bl_find_boundary()` does
@@ -197,14 +197,14 @@ Prints to console:
 
 ---
 
-### `plot_biplotEZ(bl_results, points = test_pts)`
+### `plot(bl_results, points = test_pts)` (or `plot_biplotEZ(bl_results, points = test_pts)`)
 
 `plot_biplotEZ()` no longer accepts a `boundary =` parameter. The biplot renders without
 arrow overlays. To inspect boundary counterfactuals for individual observations, call
 `bl_pick_point()` on the active plot after rendering:
 
 ```r
-plot_biplotEZ(bl_results, points = test_pts)
+plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
 bl_pick_point(bl_results, bl_boundary = bl_bnd)
 ```
 
@@ -403,7 +403,7 @@ bl_bnd  [bl_boundary]
      ├── print(bl_bnd)
      │     └─→ console: n, boundaries, mean distances, B_pred range
      │
-     ├── plot_biplotEZ(bl_results, points=test_pts)
+     ├── plot(bl_results, points=test_pts)   [or plot_biplotEZ(...)]
      │     └─→ clean biplot (no boundary overlay)
      │
      ├── bl_pick_point(bl_results, bl_boundary=bl_bnd)    [interactive]
