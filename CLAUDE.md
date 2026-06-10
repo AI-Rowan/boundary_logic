@@ -50,7 +50,7 @@ Detailed walkthroughs tracing every function call, parameter, and returned objec
 |---|---|---|
 | `.claude/reference/review_section4_to_6.md` | Steps 3–6 (Phase 1) | `data_prepare.R`, `outlier_filter.R`, `model_fit.R`, `model_utils.R`, `result.R`, `biplot_grid.R`, `projection.R`, `plot_biplot.R`, `project_points.R` |
 | `.claude/reference/review_section7_to_8.md` | Step 7 (Phase 2) | `boundary.R`, `boundary_plot.R`, `hull_utils.R`, `feasibility_utils.R` |
-| `.claude/reference/review_section11_to_17.md` | Steps 9–15 (Phase 3) | `local_cf.R`, `shapley.R`, `project_points.R` |
+| `.claude/reference/review_section9_to_15.md` | Steps 9–15 (Phase 3) | `local_cf.R`, `shapley.R`, `project_points.R` |
 
 Script: `scripts/03_loan_status_Boundary_Logic.R`
 

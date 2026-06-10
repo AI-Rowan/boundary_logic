@@ -8,7 +8,7 @@ Note: Phase 3 uses `bl_results_v2` (6-feature reduced model), not `bl_results` (
 
 ---
 
-## Step 9 — `bl_predict()` + `bl_select_target()` + `plot_biplotEZ()` with target
+## Step 9 — `bl_predict()` + `bl_select_target()` + `plot()` (or `plot_biplotEZ()`) with target
 
 ### 9a — `bl_predict()` → `pred_summary`
 
@@ -111,7 +111,7 @@ When `target` is a data frame instead of an integer, `x_obs` is taken directly f
 ```r
 plot(
   bl_results_v2,
-  points       = test_point,           # bl_project_points(test_data[tdp:10, ], ...)
+  points       = test_points,          # bl_project_points(test_data[tdp, ], ...)
   target_point = target_value,         # bl_results_v2$test_data[tdp, ]
   target_label = tdp,
   label_dir         = "Paral",
@@ -121,7 +121,9 @@ plot(
 )
 ```
 
-Note: `test_point` is a small 10-row subset of test observations (rows `tdp:10`) — kept distinct from the full `test_pts_v2` overlay so the highlight plot remains readable. The `label_*` arguments are the same cosmetic biplot-label controls documented in `review_section4_to_6.md` Step 7, passed here via `plot()`'s `...` argument to `plot_biplotEZ()`.
+Note: `test_points` is the projection of just the target row (`bl_results_v2$test_data[tdp, ]`), used so the highlight plot shows only the target observation rather than a wider subset -- per the script's Step 9 comment, "Can be empty, or only the target data point to avoid unnecessary information on the biplot." The `label_*` arguments are the same cosmetic biplot-label controls documented in `review_section4_to_6.md` Step 7, passed here via `plot()`'s `...` argument to `plot_biplotEZ()`.
+
+If the points layer should be suppressed entirely -- the "can be empty" case in the script's Step 9 comment -- pass `plot_points = FALSE` to `plot()`/`plot_biplotEZ()`. This skips the data-points layer regardless of what `points` resolves to, including the `points = NULL` default (which would otherwise auto-project and draw the full training set).
 
 Same 5-layer biplot as before (grid, test points, axes, contour), plus:
 
@@ -629,11 +631,11 @@ bl_shap_free   <- bl_shapley(bl_local_free)
 bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
 ```
 
-Identical pipeline to Steps 13–16, with `set_filters = NULL`. The unconstrained search finds the geometrically nearest boundary point without any actionability restrictions. Comparing `bl_local` (constrained) vs `bl_local_free` (unconstrained) shows the cost of the constraints: how much farther the boundary is when `loan_amnt` must decrease and `loan_int_rate` must stay fixed.
+Identical pipeline to Steps 11–14, with `set_filters = NULL`. The unconstrained search finds the geometrically nearest boundary point without any actionability restrictions. Comparing `bl_local` (constrained) vs `bl_local_free` (unconstrained) shows the cost of the constraints: how much farther the boundary is when `loan_amnt` must decrease and `loan_int_rate` must stay fixed.
 
 ---
 
-## Complete Object Flow: Steps 10–16
+## Complete Object Flow: Steps 10–14
 
 ```
 bl_results_v2  [bl_result]          ← Phase 1 anchor (reduced 6-feature model)

@@ -382,7 +382,7 @@ All paths below are relative to this file (`documentation/`).
     attribution as remaining deferred work)
   - `../.claude/reference/review_section7_to_8.md` Step 8 (Phase 2
     walkthrough)
-  - `../.claude/reference/review_section11_to_17.md` Stage G (Phase 3
+  - `../.claude/reference/review_section9_to_15.md` Stage G (Phase 3
     walkthrough)
   - `../.claude/reference/mahalanobis_implementation_plan.md` -- the
     approved plan that drove this implementation

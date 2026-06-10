@@ -32,6 +32,9 @@
 #    15. (Optional) Unconstrained local search
 #    16. External applicant
 #
+#   Comparison with SHAP: validate global/local attributions against
+#                          fastshap + shapviz (optional Suggests packages)
+#
 # Run interactively: place cursor inside a {} block and press Ctrl+Enter
 ############################################################
 
@@ -39,8 +42,8 @@
 {
   rm(list = ls())
   devtools::load_all()
+  # library(boundary_logic) # alternative if downloaded the package from github
 }
-
 #devtools::check()
 
 # ===========================================================
@@ -106,7 +109,7 @@
     title   = "Loan default — exploratory PCA biplot (all data)"
   )
 
-  plot_biplotEZ(
+  plot(
     bl_proj,
     label_dir         = "Paral",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
     label_offset_var  = c("person_age",
@@ -191,10 +194,23 @@ names(loan_encoded)
   # print(bl_mod_svm)
 
   # ---- Step 5b: XGB via bl_wrap_model() with explicit predict_fn ---------
+  
+  # ---- Option A: XGBoost binary format ----------------------------------
+  # Saved previously with: xgboost::xgb.save(xgb_fit, "path/to/model.xgb")
+  # xgb_fit <- xgboost::xgb.load("path/to/model.xgb")
+  
+  # ---- Option B: R object format ----------------------------------------
+  # Saved previously with: saveRDS(xgb_fit, "path/to/model.rds")
+  # xgb_fit <- readRDS("path/to/model.rds")
+
+  # For demonstration, fit a quick model here so the script is self-contained.
+  # Replace these lines with one of the xgb.load / readRDS calls above.
+  
   # Using model_type = "custom" makes the prediction contract explicit.
-  # Alternative: model_type = "XGB" with model = list(model = xgb_fit,
-  # features = bl_dat$var_names) also works via the built-in XGB dispatch
-  # in .pred_function() — no predict_fn required in that case.
+
+  
+
+  
   xgb_data <- xgboost::xgb.DMatrix(
     data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
     label = bl_dat$train_data$class
@@ -208,6 +224,8 @@ names(loan_encoded)
     nrounds = 200,
     verbose = 0
   )
+  
+  # wrap the custom model into a "bl_model" object (bl_mod), as required by bl_build_result()'s bl_model argument
   bl_mod <- bl_wrap_model(
     model      = xgb_fit,
     model_type = "custom",
@@ -232,7 +250,7 @@ names(loan_encoded)
   print(bl_results)
   bl_results$test_data
   # Reference biplot — training data coloured by confusion category
-  plot_biplotEZ(
+  plot(
     bl_results,
     label_dir         = "Hor",  # "Hor" = horizontal, "Orthog" = orthogonal to axis
     label_offset_var  = 0L,     # variable index/indices to shift, e.g. c(1L, 3L)
@@ -240,6 +258,11 @@ names(loan_encoded)
   )
 
   # Project all observations and overlay on the biplot
+  # Create test data points to plot instead of the default training data
+  # bl_results$test_data can be any data.frame with the necessary column names.
+  # Convert to the format required by plot() using the bl_project_points() function. 
+  # filter_to_polygon = TRUE removes new data points that are outside the training data biplot polygon
+  
   test_pts <- bl_project_points(bl_results$test_data, bl_results, filter_to_polygon = TRUE )   # removes out-of-polygon points before plotting)
   plot(bl_results, points = test_pts)
 }
@@ -258,7 +281,7 @@ names(loan_encoded)
   bl_bnd <- bl_find_boundary(bl_results)
   hist(bl_bnd$B_pred)
 
-  plot_biplotEZ(bl_results, points = test_pts)
+  plot(bl_results, points = test_pts)
   # To inspect individual counterfactuals: bl_pick_point(bl_results, bl_boundary = bl_bnd)
 
   plot(bl_bnd)
@@ -340,7 +363,7 @@ names(loan_encoded)
   )
   print(bl_results_v2)
 
-  plot_biplotEZ(bl_results_v2)
+  plot(bl_results_v2)
   test_pts_v2 <- bl_project_points(bl_results_v2$test_data, bl_results_v2)
   plot(bl_results_v2, points = test_pts_v2)
 }
@@ -354,7 +377,7 @@ names(loan_encoded)
 {
   bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
   print(bl_bnd_v2)
-  plot_biplotEZ(bl_results_v2, points = test_pts_v2)
+  plot(bl_results_v2, points = test_pts_v2)
   # To inspect individual counterfactuals: bl_pick_point(bl_results_v2, bl_boundary = bl_bnd_v2)
 
   plot(bl_bnd_v2)
@@ -390,15 +413,18 @@ names(loan_encoded)
   pred_summary <- bl_predict(bl_results_v2)
 
   tdp <- 1
-  test_point <- bl_project_points(bl_results_v2$test_data[tdp:10,], bl_results_v2)
-  pred_summary[tdp, ]   # inspect: pred_prob, confusion category, feature values
+  
+  # Generate a subset of data to plot on the biplot. Use bl_project_points to convert a data.frame bl_results_v2$test_data[tdp,] into the format required for plotting on biplot
+  # Can be empty, or only the target data point to avoid unnecessary information on the biplot
+  test_points <- bl_project_points(bl_results_v2$test_data[tdp:10,], bl_results_v2)
 
   target_value <- bl_results_v2$test_data[tdp, ]
   # Highlight the target on the main biplot
 
   plot(
     bl_results_v2,
-    points       = test_point,
+    points       = test_points, # specify the points to plot. If emply, will plot the training data
+    plot_points  = FALSE, # removes the points from the plot
     target_point = target_value,
     target_label = tdp,
     label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
@@ -409,7 +435,6 @@ names(loan_encoded)
                           "credit_score"),         # or a character/integer vector of variable names/indices
     label_offset_dist = c(0,0,0.5,0,0),
     ticks_v = 3
-    
   )
 }
 
@@ -572,14 +597,6 @@ names(loan_encoded)
                                   drop = FALSE]
 
 
-  # Highlight on main biplot
-  plot_biplotEZ(
-    bl_results_v2,
-    points       = test_pts_v2,
-    target_point = new_applicant,
-    target_label = "new"
-  )
-
   # Local search — no actionability constraints for this new applicant
   tgt_ext       <- bl_select_target(bl_results_v2, target = new_applicant)
   bl_local_ext  <- bl_find_local_cf(bl_results_v2, tgt_ext)
@@ -588,8 +605,138 @@ names(loan_encoded)
 
   bl_shap_ext   <- bl_shapley(bl_local_ext)
   bl_sparse_ext <- bl_find_sparse_cf(bl_shap_ext)
-
+  print(bl_sparse_ext)
   plot(bl_shap_ext)
   plot(bl_sparse_ext)
 }
+
+
+# ===========================================================
+# COMPARISON WITH SHAP
+# Validate Boundary Logic's global (Phase 2) and local (Step 13)
+# attributions against real SHAP values for the same XGBoost models,
+# using fastshap + shapviz (optional Suggests packages).
+# ===========================================================
+
+# ---- SHAP setup ----------------------------------------------------------
+{
+  has_shap <- requireNamespace("fastshap", quietly = TRUE) &&
+              requireNamespace("shapviz",  quietly = TRUE)
+
+  if (!has_shap) {
+    cat("SHAP packages not available. Install fastshap and shapviz to run",
+        "this section:\n  install.packages(c(\"fastshap\", \"shapviz\"))\n")
+  }
+
+  if (has_shap) {
+    # fastshap needs a prediction wrapper f(object, newdata) -> numeric vector.
+    # For XGBoost the new data must be wrapped in an xgb.DMatrix.
+    pred_fn <- function(object, newdata) {
+      as.numeric(predict(object, xgboost::xgb.DMatrix(as.matrix(newdata))))
+    }
+
+    # Background / explanation data for each model
+    X_train_full <- bl_dat$train_data[,    bl_dat$var_names,    drop = FALSE]
+    X_train_v2   <- bl_dat_v2$train_data[, bl_dat_v2$var_names, drop = FALSE]
+    X_test_v2    <- bl_dat_v2$test_data[,  bl_dat_v2$var_names, drop = FALSE]
+
+    # SHAP baseline = mean predicted probability over the (reduced-model)
+    # training background. fastshap does not attach one, so shapviz needs it.
+    shap_baseline <- mean(pred_fn(xgb_fit_v2, X_train_v2))
+  }
+}
+
+
+# ---- Global: SHAP vs Boundary Logic variable selection --------------------
+# Phase 2's distance-to-boundary importance (rob$sum_of_distance) picked the
+# five variables in feature_cols_v2. Ask SHAP the same question on the full
+# nine-feature model: rank by mean absolute SHAP value and compare its top
+# five against the distance-to-boundary top five.
+{
+  if (has_shap) {
+    set.seed(42L)
+    shap_full <- fastshap::explain(
+      object       = xgb_fit,            # full-feature model
+      X            = X_train_full,
+      pred_wrapper = pred_fn,
+      nsim         = 50L
+    )
+
+    shap_imp  <- names(sort(colMeans(abs(as.matrix(shap_full))), decreasing = TRUE))
+    shap_top5 <- shap_imp[1:5]
+
+    # Distance-to-boundary ranking (strongest first) from Phase 2
+    dist_imp <- names(sort(rob$sum_of_distance, decreasing = TRUE))
+    dist_top5 <- names(sort(rob$sum_of_distance, decreasing = TRUE))[1:5]
+
+    print(data.frame(
+     # rank          = 1:5,
+      SHAP          = shap_imp,
+      dist_to_bound = dist_imp
+    ))
+  }
+}
+
+
+# ---- Global SHAP of the retained five variables ----------------------------
+# Run SHAP on the reduced model -- the five variables the workflow proceeded
+# with -- and view the standard global summaries. Compare against
+# plot(bl_bnd_v2) and bl_surrogate(bl_results_v2) above.
+{
+  if (has_shap) {
+    set.seed(42L)
+    shap_v2 <- fastshap::explain(
+      object       = xgb_fit_v2,         # reduced model
+      X            = X_train_v2,
+      pred_wrapper = pred_fn,
+      nsim         = 50L
+    )
+    sv_v2 <- shapviz::shapviz(as.matrix(shap_v2), X = X_train_v2,
+                              baseline = shap_baseline)
+
+    print(shapviz::sv_importance(sv_v2, kind = "bar") +
+            ggplot2::labs(title = "Global SHAP importance - reduced XGB model"))
+  }
+}
+
+plot(bl_bnd_v2)
+
+{
+  if (has_shap) {
+    print(shapviz::sv_importance(sv_v2, kind = "beeswarm") +
+            ggplot2::labs(title = "Global SHAP beeswarm - reduced XGB model"))
+  }
+}
+
+
+# ---- Local: SHAP vs bl_shapley attribution ----------------------------------
+# For the same target applicant explained in Step 13, compute local SHAP and
+# view the waterfall and force plots. Compare against plot(bl_shapley_values).
+{
+  if (has_shap) {
+    set.seed(42L)
+    shap_local <- fastshap::explain(
+      object       = xgb_fit_v2,
+      X            = X_train_v2,
+      pred_wrapper = pred_fn,
+      nsim         = 200L,
+      newdata      = X_test_v2[tdp, , drop = FALSE],
+      adjust       = TRUE          # force additivity: sum(shap) = f(x) - baseline
+    )
+    sv_local <- shapviz::shapviz(as.matrix(shap_local),
+                                 X = X_test_v2[tdp, , drop = FALSE],
+                                 baseline = shap_baseline)
+
+    print(shapviz::sv_waterfall(sv_local) +
+            ggplot2::labs(title = sprintf("Local SHAP waterfall - applicant %d", tdp)))
+  }
+}
+
+{
+  if (has_shap) {
+    print(shapviz::sv_force(sv_local) +
+            ggplot2::labs(title = sprintf("Local SHAP force plot - applicant %d", tdp)))
+  }
+}
+
 

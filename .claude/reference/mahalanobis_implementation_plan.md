@@ -386,7 +386,7 @@ Add two new fields to the returned object:
   computed during projection and consumed during local CF selection. See the
   drafted subsection below for the Cholesky-decomposition explanation that
   must be added.
-- `.claude/reference/review_section11_to_17.md` Stage G ("Update best result"):
+- `.claude/reference/review_section9_to_15.md` Stage G ("Update best result"):
   describe the new Mahalanobis selector.
 - `CLAUDE.md` Section 6 ("Key Architectural Facts"): add bullet that
   `bl_find_local_cf()` selects the best pair via Mahalanobis distance in X-space
