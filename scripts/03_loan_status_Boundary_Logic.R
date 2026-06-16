@@ -309,7 +309,7 @@ names(loan_encoded)
   print(round(var_imp, 2))
 
   # List variables to remove based on the var_imp output above.
-  vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length", "person_income")
+  vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length", "person_income", "person_age")
   
   feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
   cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
@@ -412,7 +412,7 @@ names(loan_encoded)
 {
   pred_summary <- bl_predict(bl_results_v2)
 
-  tdp <- 1
+  tdp <- 13
   
   # Generate a subset of data to plot on the biplot. Use bl_project_points to convert a data.frame bl_results_v2$test_data[tdp,] into the format required for plotting on biplot
   # Can be empty, or only the target data point to avoid unnecessary information on the biplot
@@ -456,7 +456,7 @@ names(loan_encoded)
 
   flt <- set_filters(
     tgt,
-    person_age     = "fixed",       # not actionable
+   # person_age     = "fixed",       # not actionable
    # loan_amnt      = "fixed",    # borrow less to reduce repayment risk
     loan_int_rate  = "increase",        # set by the lender, not the applicant
     credit_score = "increase"
@@ -480,18 +480,19 @@ names(loan_encoded)
 {
   plot(bl_local,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c("person_age",
+       label_offset_var  = c(#"person_age",
                              "loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",
                              "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0.5,0,0,0),
-       ticks_var = c("person_age",
+       label_offset_dist = c(0,0,0,1,0),
+       ticks_var = c(#"person_age",
                       "loan_amnt",
                       "loan_int_rate",
                       "loan_percent_income",
                       "credit_score"),
-       ticks_n = c(2,4,200,200,20)
+       ticks_n = c(#2,
+                   4,5,5,5)
   )
 }
 
@@ -509,19 +510,21 @@ names(loan_encoded)
   bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
   print(bl_sparse)
   plot(bl_sparse,
-       label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c("person_age",
-                             "loan_amnt",
-                             "loan_int_rate",
-                             "loan_percent_income",
-                             "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0.5,0,0,0),
-       ticks_var = c("person_age",
-                     "loan_amnt",
-                     "loan_int_rate",
-                     "loan_percent_income",
-                     "credit_score"),
-       ticks_n = c(2,4,200,200,20))
+       new_title = "xx",
+       label_offset_var  = c(#"person_age",
+         "loan_amnt",
+         "loan_int_rate",
+         "loan_percent_income",
+         "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0,0,1,0),
+       ticks_var = c(#"person_age",
+         "loan_amnt",
+         "loan_int_rate",
+         "loan_percent_income",
+         "credit_score"),
+       ticks_n = c(#2,
+         4,5,5,5)
+  )
 }
 
 
@@ -699,7 +702,7 @@ names(loan_encoded)
   }
 }
 
-plot(bl_bnd_v2)
+plot(bl_bnd_v2, type = "boxplot")
 
 {
   if (has_shap) {
