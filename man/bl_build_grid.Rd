@@ -49,7 +49,7 @@ boundary. If \code{NULL} (default), a new polygon is computed from
 
 \item{calc_hull}{Logical; if \code{TRUE}, grid points outside the polygon
 are removed from the returned grid object. This affects only the visual
-prediction surface in the biplot — the coloured background is trimmed to
+prediction surface in the biplot -- the coloured background is trimmed to
 the hull shape. It does \strong{not} affect counterfactual search:
 \code{bl_find_boundary()} always clips contour segments to the hull polygon
 independently. Default \code{TRUE}.}
@@ -57,11 +57,11 @@ independently. Default \code{TRUE}.}
 \value{
 A list of class \code{"bl_grid"} with components:
 \describe{
-\item{\code{Zgrid}}{Numeric matrix (m² x 2); grid coordinates in Z-space.}
-\item{\code{Xgrid}}{Data frame (m² x p); grid back-projected to X-space.}
-\item{\code{grid_prob}}{Numeric vector (length m²); model scores per grid
+\item{\code{Zgrid}}{Numeric matrix (m^2 x 2); grid coordinates in Z-space.}
+\item{\code{Xgrid}}{Data frame (m^2 x p); grid back-projected to X-space.}
+\item{\code{grid_prob}}{Numeric vector (length m^2); model scores per grid
 point, in \verb{[0, 1]}.}
-\item{\code{col_value}}{Character vector (length m²); colour per grid point
+\item{\code{col_value}}{Character vector (length m^2); colour per grid point
 on a blue-white-red scale.}
 \item{\code{min_val}}{Numeric; lower bound of the square plot region.}
 \item{\code{max_val}}{Numeric; upper bound of the square plot region.}
@@ -95,9 +95,9 @@ research script.
 
 Two sets of contour lines are always computed and stored:
 \itemize{
-\item \strong{\code{ct}} — standard boundary contours at \verb{cutoff ± b_margin}. These
+\item \strong{\code{ct}} -- standard boundary contours at \verb{cutoff +/- b_margin}. These
 are used by \code{bl_find_boundary()} for counterfactual search.
-\item \strong{\code{ct_surrogate}} — hull-clipped contours for the surrogate model.
+\item \strong{\code{ct_surrogate}} -- hull-clipped contours for the surrogate model.
 Grid cells outside the training-data convex hull are set to \code{cutoff}
 before extraction, so contour lines are fully enclosed within the hull.
 Used exclusively by \code{bl_surrogate()}. Do not use these for biplot

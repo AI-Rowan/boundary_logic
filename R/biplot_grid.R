@@ -74,10 +74,10 @@
 #' @section Contour lines:
 #' Two sets of contour lines are always computed and stored:
 #'
-#' * **`ct`** — standard boundary contours at `cutoff ± b_margin`. These
+#' * **`ct`** -- standard boundary contours at `cutoff +/- b_margin`. These
 #'   are used by `bl_find_boundary()` for counterfactual search.
 #'
-#' * **`ct_surrogate`** — hull-clipped contours for the surrogate model.
+#' * **`ct_surrogate`** -- hull-clipped contours for the surrogate model.
 #'   Grid cells outside the training-data convex hull are set to `cutoff`
 #'   before extraction, so contour lines are fully enclosed within the hull.
 #'   Used exclusively by `bl_surrogate()`. Do not use these for biplot
@@ -107,18 +107,18 @@
 #'   `polygon` is `NULL`. Default `0.9`.
 #' @param calc_hull     Logical; if `TRUE`, grid points outside the polygon
 #'   are removed from the returned grid object. This affects only the visual
-#'   prediction surface in the biplot — the coloured background is trimmed to
+#'   prediction surface in the biplot -- the coloured background is trimmed to
 #'   the hull shape. It does **not** affect counterfactual search:
 #'   `bl_find_boundary()` always clips contour segments to the hull polygon
 #'   independently. Default `TRUE`.
 #'
 #' @return A list of class `"bl_grid"` with components:
 #' \describe{
-#'   \item{`Zgrid`}{Numeric matrix (m² x 2); grid coordinates in Z-space.}
-#'   \item{`Xgrid`}{Data frame (m² x p); grid back-projected to X-space.}
-#'   \item{`grid_prob`}{Numeric vector (length m²); model scores per grid
+#'   \item{`Zgrid`}{Numeric matrix (m^2 x 2); grid coordinates in Z-space.}
+#'   \item{`Xgrid`}{Data frame (m^2 x p); grid back-projected to X-space.}
+#'   \item{`grid_prob`}{Numeric vector (length m^2); model scores per grid
 #'     point, in `[0, 1]`.}
-#'   \item{`col_value`}{Character vector (length m²); colour per grid point
+#'   \item{`col_value`}{Character vector (length m^2); colour per grid point
 #'     on a blue-white-red scale.}
 #'   \item{`min_val`}{Numeric; lower bound of the square plot region.}
 #'   \item{`max_val`}{Numeric; upper bound of the square plot region.}
@@ -132,7 +132,6 @@
 #' }
 #'
 #' @importFrom grDevices contourLines colorRampPalette
-#' @importFrom dplyr case_when
 #' @importFrom sp coordinates over
 #'
 #' @examples
@@ -261,7 +260,7 @@ bl_build_grid <- function(train_data,
 
   # Surrogate contours: outside-hull cells set to cutoff so contour lines
   # are fully enclosed within the training-data hull. Used only by
-  # bl_surrogate() — do not use for biplot rendering or boundary search.
+  # bl_surrogate() -- do not use for biplot rendering or boundary search.
   grid_contour_surr <- grid_contour
   grid_contour_surr[!inside_grid] <- cutoff
   ct_surrogate <- grDevices::contourLines(

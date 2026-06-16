@@ -62,8 +62,53 @@ CLAUDE.md (file map, S5 axis-relabel Always-Do, S9 entries flipped to IMPLEMENTE
 per-variable-methods future item); memory sync (`reference_data_prep_functions.md`); three
 plans archived to `.claude/reference/` with IMPLEMENTED banners.
 
-**Not done / deferred**: per-variable transform families (CLAUDE.md S9). The untracked
-`scripts/16_*`/`18_*` are the user's own files, untouched by this work.
+**Committed + pushed**: `00b43a5` on `method_developments` (24 files, +1515/-28), pushed
+`10a81f3..00b43a5` (also carries the earlier `f540607` person_age script edit). Commit used the
+auto-configured identity `Rowan <adriaan.rowan@yala.co.za>` (no `user.name`/`user.email` set).
+
+### Dead ends / corrections this session
+
+1. **CVA `scaled=FALSE` worry was a false alarm.** During planning I feared the `$means`/`$sd`
+   override wouldn't relabel CVA axes correctly (CVA stores `sd = 1` and skips the sd term in
+   biplotEZ's `Xhat` reconstruction). Algebra showed the transform is in fact uniform across
+   PCA(T/F) and CVA (`sd_new = scale` supplies the missing `d(raw)/d(std)` factor); confirmed
+   empirically (geometry byte-identical, labels on raw scale). No special-casing needed.
+2. **Test used a named-vector subset and hit the wrong validation branch.** `d$center[1:2]` is
+   still *named*, so `.align_scaling_vec()` took the name-match path and raised "missing entries"
+   instead of the expected "length" error. Fix: test with `unname(d$center)[1:2]`.
+3. **`.scale_to_raw()` strips names** (it does `unname(values) * ...`). `print.bl_target()` /
+   `print.bl_counterfactual()` must re-attach `names()` after calling it, or the printed vector
+   loses its variable labels. (The NULL-scaling path returns the value unchanged *with* names, so
+   the bug only showed when scaling was set.)
+4. **Value-reporting was initially deferred, then pulled back in.** The first round shipped only
+   raw *axes* and explicitly deferred raw *values* (Shapley/sparse/target) as CLAUDE.md S9. The
+   user then asked for the values too, so it was implemented in a second round — Shapley
+   *contributions* stay in prediction-impact units (not feature units, not convertible).
+5. **Script 03 standardised on the full dataset (test leakage)** — caught by the user. Fixed to
+   fit the scaling on the (filtered) training rows only and apply those stats to the test split;
+   the split now happens first on raw data (the hull filter self-standardises, so filtering on
+   raw vs standardised is equivalent).
+
+### Architecture decisions / conventions
+
+- **Display-only raw-unit conversion.** Computation, storage, projection geometry, and the model
+  all stay in model (standardised) units; only plot/print methods convert, via
+  `.bl_rescale_biplot_axes()` (axes) and `.scale_to_raw()` (values). Gated on
+  `bl_result$scaling`; no-op for older objects. Added as CLAUDE.md S5 conventions.
+- **Level vs delta is the key correctness rule** for `.scale_to_raw()`: a *level* (observed, CF,
+  sparse) maps `v*scale + center`; a *delta* (Shapley `data_to_boundary`) maps `v*scale` (no
+  centre). Any future feature-value display must pick the right `kind`.
+- **`scaling` is a separate field** from `X_center`/`X_sd` (internal PCA standardisation) and the
+  `standardise` flag — never conflate them.
+
+### Next steps
+
+1. **Mac-tester confirmation, then merge `method_developments` -> `main`** (standing carry-over).
+2. **Optional follow-ups** (only on request): per-variable transform families (non-affine needs
+   spline-calibrated axes — CLAUDE.md S9); a convenience accessor if reading `B_x`/CF in raw
+   units programmatically becomes common.
+3. The untracked `scripts/16_*`/`18_*` are the user's own files — confirm with the user whether
+   they should be tracked; not touched by this work.
 
 ---
 
