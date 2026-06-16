@@ -377,6 +377,10 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 Default: `plot_points = FALSE` (training points hidden), `no_grid = FALSE`, `no_contour = FALSE`.
 `rotate_deg = 0` and `label_cex = 1` are now available. `label_offset_var` accepts variable names or integer indices. `label_dir = "Paral"` (border-adaptive) is the new default.
 
+`new_title` (default `NA`) overrides the auto-generated `"Local biplot -- target N [pair (i,j) | p=..., class ...]"` title; `NA` keeps the auto-generated title.
+
+**Base-graphics title-error note:** `new_title` is written straight to `biplot_plot$Title` (no validation, matching `plot_biplotEZ()`), and biplotEZ forwards that field to `graphics::title(main = ...)` at plot-flush time. A length-1 character string (or `NA` to keep the default) is the intended contract. `title()` is tolerant: it coerces most atomic and even recursive inputs (numeric, multi-element character vectors, lists, data.frames) to a label via `as.character()`, so those do *not* error — they just produce an odd/recycled title. The error case is a value base R cannot coerce to a character vector at all — a **function/closure** or an **environment** — which raises `"cannot coerce type 'closure' to vector of type 'character'"` from *inside* the biplotEZ `plot()` call, not from the plot function's own argument handling. A length-1 character is the safe, intended input.
+
 **What it renders (8 layers):**
 
 | Layer | Content | Data source |
@@ -594,7 +598,7 @@ The `used_in_sparse` column shows which features actually changed. Features with
 
 **`plot(bl_sparse)` — sparse CF biplot overlay:**
 
-1. **Calls `plot.bl_local_result(x$bl_shapley$bl_local_result, print_summary = FALSE, ...)`** — renders the full local biplot (all 7 layers: grid, axes, target circle, full CF cross + arrow). The `print_summary = FALSE` suppresses the local CF console summary.
+1. **Calls `plot.bl_local_result(x$bl_shapley$bl_local_result, print_summary = FALSE, ...)`** — renders the full local biplot (all 7 layers: grid, axes, target circle, full CF cross + arrow). The `print_summary = FALSE` suppresses the local CF console summary. Because every `plot.bl_local_result()` argument is forwarded through `...`, `new_title` passes straight through: `plot(bl_sparse, new_title = "...")` retitles the underlying local biplot (see Step 12 for the base-graphics title-error caveat).
 
 2. **Projects `x_sparse` to rotated Z-space:**
    ```

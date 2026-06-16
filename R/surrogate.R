@@ -298,6 +298,8 @@ print.bl_surrogate <- function(x, ...) {
 #'   in margin lines. Useful range 1--3. Default `1.5`.
 #' @param rotate_deg       Numeric; clockwise rotation in degrees for the entire
 #'   plot. Default `0` (no rotation).
+#' @param new_title        Character; overrides the biplot title inherited from
+#'   the underlying `bl_result` biplot object. `NA` (default) keeps it.
 #' @param ... Unused; for S3 compatibility.
 #'
 #' @importFrom graphics points lines legend
@@ -316,6 +318,7 @@ plot.bl_surrogate <- function(x,
                                label_offset_var  = 0L,
                                label_offset_dist = 1.5,
                                rotate_deg        = 0,
+                               new_title         = NA,
                                ...) {
 
   bl_result <- x$bl_result
@@ -335,8 +338,11 @@ plot.bl_surrogate <- function(x,
                                          num_vars, var_names)
   ticks_vec <- .make_ticks_vec(ticks_v, ticks_var, ticks_n, num_vars, var_names)
 
-  # ---- Optional rotation -----------------------------------------------
+  # ---- Optional title override -----------------------------------------
   biplot_obj  <- bl_result$biplot_obj
+  if (!is.na(new_title)) biplot_obj$Title <- new_title
+
+  # ---- Optional rotation -----------------------------------------------
   rot         <- .apply_biplot_rotation(biplot_obj, rotate_deg, proj_dims)
   biplot_obj  <- rot$biplot_obj
   R_mat       <- rot$R_mat

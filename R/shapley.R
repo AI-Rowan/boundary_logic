@@ -441,7 +441,7 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 #'   \code{"grey30"}.
 #' @param ...       Additional arguments passed to
 #'   \code{\link{plot.bl_local_result}} (e.g. \code{no_grid},
-#'   \code{label_offset_var}, \code{which}).
+#'   \code{label_offset_var}, \code{which}, \code{new_title}).
 #'
 #' @importFrom graphics points legend
 #' @export

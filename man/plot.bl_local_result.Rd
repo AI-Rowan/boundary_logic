@@ -27,6 +27,7 @@
   contour_lwd = 1.5,
   contour_lty = 1L,
   print_summary = TRUE,
+  new_title = NA,
   ...
 )
 }
@@ -105,6 +106,10 @@ from the target to its counterfactual.}
 \item{print_summary}{Logical; print a local CF summary to the console.
 Default \code{TRUE}. Set to \code{FALSE} when called from
 \code{\link{plot.bl_sparse_result}}.}
+
+\item{new_title}{Character; overrides the auto-generated local biplot
+title (\code{"Local biplot -- target N [pair ...]"}). \code{NA} (default)
+keeps the auto-generated title.}
 
 \item{...}{Additional arguments (currently ignored).}
 }

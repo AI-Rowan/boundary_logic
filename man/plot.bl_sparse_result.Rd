@@ -18,7 +18,7 @@ to control the CF arrow. Default \code{TRUE}.}
 
 \item{...}{Additional arguments passed to
 \code{\link{plot.bl_local_result}} (e.g. \code{no_grid},
-\code{label_offset_var}, \code{which}).}
+\code{label_offset_var}, \code{which}, \code{new_title}).}
 }
 \description{
 Renders the rotated local biplot via \code{\link{plot.bl_local_result}}

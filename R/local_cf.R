@@ -747,6 +747,9 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param print_summary   Logical; print a local CF summary to the console.
 #'   Default \code{TRUE}. Set to \code{FALSE} when called from
 #'   \code{\link{plot.bl_sparse_result}}.
+#' @param new_title       Character; overrides the auto-generated local biplot
+#'   title (\code{"Local biplot -- target N [pair ...]"}). \code{NA} (default)
+#'   keeps the auto-generated title.
 #' @param ...             Additional arguments (currently ignored).
 #'
 #' @importFrom graphics points lines arrows text
@@ -775,6 +778,7 @@ plot.bl_local_result <- function(x,
                                  contour_lwd       = 1.5,
                                  contour_lty       = 1L,
                                  print_summary     = TRUE,
+                                 new_title         = NA,
                                  ...) {
   if (!x$solution_found) {
     message("No solution found -- nothing to plot.")
@@ -873,6 +877,7 @@ plot.bl_local_result <- function(x,
     "Local biplot \u2013 target %s  [pair (%d,%d) | p=%.3f, class %d]",
     row_label, best_pair[1L], best_pair[2L], pred_prob, pred_class
   )
+  if (!is.na(new_title)) biplot_plot$Title <- new_title
 
   # ---- Optional additional rotation ------------------------------------
   rot         <- .apply_biplot_rotation(biplot_plot, rotate_deg, proj_dims)

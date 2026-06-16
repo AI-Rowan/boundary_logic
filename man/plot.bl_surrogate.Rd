@@ -18,6 +18,7 @@
   label_offset_var = 0L,
   label_offset_dist = 1.5,
   rotate_deg = 0,
+  new_title = NA,
   ...
 )
 }
@@ -64,6 +65,9 @@ in margin lines. Useful range 1--3. Default \code{1.5}.}
 
 \item{rotate_deg}{Numeric; clockwise rotation in degrees for the entire
 plot. Default \code{0} (no rotation).}
+
+\item{new_title}{Character; overrides the biplot title inherited from
+the underlying \code{bl_result} biplot object. \code{NA} (default) keeps it.}
 
 \item{...}{Unused; for S3 compatibility.}
 }
