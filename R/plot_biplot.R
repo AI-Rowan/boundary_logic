@@ -58,6 +58,47 @@
   list(biplot_obj = biplot_obj, R_mat = R_mat)
 }
 
+#' Relabel biplot axis ticks into the original (raw) feature units
+#'
+#' biplotEZ computes axis tick *labels* as an affine function of the object's
+#' `$means` and `$sd` (see `.calibrate.axis()` in biplotEZ); the 2D geometry
+#' (`$Z`, `$Lmat`, `$ax.one.unit`) is independent of those two fields. When the
+#' data fed to the package was standardised as `std = (raw - center) / scale`,
+#' the labels read in standardised units. Transforming
+#' `means_new = means * scale + center` and `sd_new = sd * scale`
+#' (and forcing `$scaled`/`$center` TRUE so biplotEZ reconstructs the tick range
+#' on the raw scale) makes every axis read in raw units while leaving the plotted
+#' geometry byte-identical. This holds uniformly for PCA (`scaled` TRUE/FALSE)
+#' and CVA (`scaled` FALSE, where `sd = 1` so `sd_new = scale`).
+#'
+#' @param biplot_obj A biplotEZ S3 object (possibly already rotated).
+#' @param scaling    The `bl_result$scaling` list (`center`, `scale`, `method`)
+#'   or `NULL`.
+#' @param var_names  Feature names in the column order of the biplot's data
+#'   matrix; `scaling$center`/`scale` are aligned to this order.
+#' @return The biplot object with `$means`/`$sd` relabelled, or unchanged when
+#'   `scaling` is `NULL`.
+#' @noRd
+.bl_rescale_biplot_axes <- function(biplot_obj, scaling, var_names) {
+  if (is.null(scaling)) return(biplot_obj)
+
+  center <- scaling$center[var_names]
+  scale  <- scaling$scale[var_names]
+  if (any(is.na(center)) || any(is.na(scale))) {
+    warning("bl_result$scaling does not cover all biplot features; ",
+            "axes left in model (standardised) units.", call. = FALSE)
+    return(biplot_obj)
+  }
+  center <- unname(center)
+  scale  <- unname(scale)
+
+  biplot_obj$means  <- biplot_obj$means * scale + center
+  biplot_obj$sd     <- biplot_obj$sd * scale
+  biplot_obj$scaled <- TRUE
+  biplot_obj$center <- TRUE
+  biplot_obj
+}
+
 # ---------------------------------------------------------------------------
 
 #' Plot the Phase 1 biplot
@@ -242,6 +283,9 @@ plot_biplotEZ <- function(bl_result,
   rot         <- .apply_biplot_rotation(biplot_plot, rotate_deg, proj_dims)
   biplot_plot <- rot$biplot_obj
   R_mat       <- rot$R_mat
+
+  # ---- Optional raw-unit axis relabel (display only) -------------------
+  biplot_plot <- .bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)
   if (!is.null(R_mat)) {
     gr$Zgrid <- gr$Zgrid %*% R_mat
     points$Z <- points$Z %*% R_mat

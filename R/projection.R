@@ -366,6 +366,10 @@ plot.bl_projection <- function(x,
   col <- if (!is.null(col)) col else x$point_col
   if (is.null(col)) col <- "grey40"
 
+  # Optional raw-unit axis relabel (display only); no-op when x$scaling is NULL.
+  x$biplot_obj <- .bl_rescale_biplot_axes(x$biplot_obj, x$scaling,
+                                          names(x$X_center))
+
   # Use the same pattern as plot_biplotEZ(): hide biplotEZ's own sample
   # rendering (opacity = 0) then draw points manually via graphics::points().
   # This avoids biplotEZ::samples(col=...) mapping colours to class levels

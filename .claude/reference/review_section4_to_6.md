@@ -72,6 +72,53 @@ entry point was used.
 
 ---
 
+### Optional: raw-unit biplot axes via `bl_set_scaling()`
+
+**File:** `R/data_prepare.R` (setter), `R/plot_biplot.R` (`.bl_rescale_biplot_axes()`),
+`R/result.R` / `R/projection.R` (propagation).
+
+When features are standardised *before* model fitting (common for scale-sensitive models),
+the data the package holds is in standardised units, so biplotEZ labels every axis in those
+units. In the loan script this is the v2 (reduced-model) flow: the `feature_cols_v2` columns
+are standardised with `scale()`, the XGB model and projection are built on the standardised
+data, and the transform is recorded so the axes display in raw loan units:
+
+```r
+# Split first on raw data (the hull filter self-standardises), then fit the
+# scaling on the TRAINING rows only and apply those stats to the test split --
+# computing the scaling on the full data would leak test information.
+bl_dat_v2  <- bl_prepare_data(loan_filtered, "loan_status",
+                              feature_cols = feature_cols_v2, ...)
+train_scl  <- scale(bl_dat_v2$train_data[, feature_cols_v2])
+scl_center <- attr(train_scl, "scaled:center")
+scl_scale  <- attr(train_scl, "scaled:scale")
+bl_dat_v2$train_data[, feature_cols_v2] <- train_scl
+bl_dat_v2$test_data[,  feature_cols_v2] <-
+  scale(bl_dat_v2$test_data[, feature_cols_v2],
+        center = scl_center, scale = scl_scale)
+bl_dat_v2  <- bl_set_scaling(bl_dat_v2, center = scl_center,
+                             scale = scl_scale, method = "z-score")
+```
+
+`bl_set_scaling(x, center, scale, method)` accepts a `bl_data` or `bl_filter_result`, validates
+and reorders the per-feature vectors to `var_names` (via private `.align_scaling_vec()`), and
+stores `x$scaling = list(center, scale, method)`. It rejects zero/`NA`/non-finite scales and
+names that do not cover every feature. The scaling passes through `bl_filter_outliers()` and is
+copied by `bl_assemble()` into `bl_result$scaling` (and by `bl_build_result()` onto
+`bl_projection$scaling` for the model-free exploratory biplot).
+
+**It is display-only:** the model, grid, and `predict_fn` still operate on the standardised
+data the package holds; only the plot methods consume `scaling`. At plot time each biplot
+method calls `.bl_rescale_biplot_axes(biplot_obj, scaling, var_names)`, which transforms only
+the biplotEZ `$means`/`$sd` (`means_new = means*scale + center`, `sd_new = sd*scale`; `$scaled`/
+`$center` forced TRUE) and leaves `$Z`/`$Lmat`/`$ax.one.unit` untouched -- so axis labels read
+in raw units while plotted positions are byte-identical. No-op when `scaling` is `NULL`. Note
+this is distinct from `bl_result$X_center`/`X_sd` (the internal PCA standardisation) and the
+`standardise` flag. See `2 implementation_summary.txt` §4.4.1 for the derivation, and the
+`plot.bl_*` walkthroughs in `review_section9_to_15.md` for the rotated local/sparse cases.
+
+---
+
 ### 4 — `bl_prepare_data()` → `bl_dat`
 
 **File:** `R/data_prepare.R`

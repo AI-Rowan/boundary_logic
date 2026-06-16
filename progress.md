@@ -10,11 +10,15 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 - **Mac tester confirmation pending** — once macOS install is confirmed, merge
   `method_developments` -> `main`.
-- **`scripts/03_loan_status_Boundary_Logic.R` has an uncommitted user working-edit**
-  (`tdp <- 13`, `person_age` dropped, `new_title = "xx"` placeholder, `type = "boxplot"`).
-  Deliberately kept out of feature commits — left for the user to commit/clean up.
+- **`scripts/03_loan_status_Boundary_Logic.R` working-edit committed** (`f540607`, 2026-06-16):
+  `person_age` dropped from the reduced (v2) model, `tdp <- 13`, v2 boundary plot
+  `type = "boxplot"`. Committed as-is at user request — not pushed. Known leftovers the user
+  chose to keep: Steps 8b/9/15 still pass `person_age` to plot label/tick vectors (harmless
+  `variable not found` warnings at plot time), and Step 14 retains a `new_title = "xx"`
+  placeholder. Commit used the auto-configured git identity
+  (`Rowan <adriaan.rowan@yala.co.za>`); no `user.name`/`user.email` is set.
 - **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
-- **Baseline test status: 77 PASS / 0 FAIL / 4 WARN** (the 4 WARN are pre-existing biplotEZ
+- **Baseline test status: 136 PASS / 0 FAIL / 4 WARN** (the 4 WARN are pre-existing biplotEZ
   CVA 2-class notices).
 - **Verification command:**
   ```r
@@ -23,7 +27,47 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
-## Session summary (2026-06-16, latest) — `new_title` for all biplot plot functions
+## Session summary (2026-06-16, latest) — raw-unit scaling support
+
+Three linked deliverables let a user who standardised features before model fitting read the
+biplot and counterfactuals in original units. All display-only: stored objects/geometry/model
+stay in model (standardised) units. Test baseline 77 -> 136 PASS / 0 FAIL.
+
+1. **`bl_set_scaling()` + raw-unit biplot axes.** New exported `bl_set_scaling(x, center, scale,
+   method)` (`R/data_prepare.R`, with private `.align_scaling_vec()`) records the per-feature
+   transform `std = (raw - center)/scale` as a `scaling` field on `bl_data`/`bl_filter_result`,
+   threaded through `bl_filter_outliers()` -> `bl_assemble()` -> `bl_result$scaling` (and onto
+   `bl_projection$scaling`). New private `.bl_rescale_biplot_axes()` (`R/plot_biplot.R`)
+   relabels biplotEZ axes into raw units by transforming only `$means`/`$sd` (geometry
+   byte-identical); wired into all biplot plot methods (`plot_biplotEZ`, `plot.bl_projection`,
+   `plot.bl_local_result`, `plot.bl_surrogate`, `plot.bl_sparse_result`). See
+   `documentation/scaling_axis_relabel_note.md` + impl summary §4.4.1.
+
+2. **Raw-unit feature values in Shapley/sparse/target displays.** New private `.scale_to_raw()`
+   (`R/data_prepare.R`; `kind="level"` -> `v*scale+center`, `kind="delta"` -> `v*scale`).
+   `plot.bl_shapley()` label becomes observed -> counterfactual (raw); `print.bl_shapley()`,
+   `print.bl_sparse_result()`, `print.bl_target()` convert (scaling stored on `bl_target`).
+   Shapley *contributions* stay in prediction-impact units (not converted). Impl summary §4.9.
+
+3. **`bl_local$bl_counterfactual`.** `bl_find_local_cf()` now returns a `"bl_counterfactual"`
+   object (private `.make_bl_counterfactual()`) mirroring `bl_target`: stores model-unit `x_cf`
+   (= `B_x`), prints in raw units via `.scale_to_raw()`. `print.bl_local_result()` shows Target
+   and Counterfactual blocks together. Impl summary §4.8.
+
+**Script 03**: v2 block now standardises on the **training** rows only and applies those stats
+to the test split (was: scaled on full data -> test leakage). Split happens first on raw data.
+
+**Docs**: impl summary §4.4.1/§4.8/§4.9; both review reference docs; technical note;
+CLAUDE.md (file map, S5 axis-relabel Always-Do, S9 entries flipped to IMPLEMENTED + new
+per-variable-methods future item); memory sync (`reference_data_prep_functions.md`); three
+plans archived to `.claude/reference/` with IMPLEMENTED banners.
+
+**Not done / deferred**: per-variable transform families (CLAUDE.md S9). The untracked
+`scripts/16_*`/`18_*` are the user's own files, untouched by this work.
+
+---
+
+## Session summary (2026-06-16) — `new_title` for all biplot plot functions
 
 ### Completed this session
 

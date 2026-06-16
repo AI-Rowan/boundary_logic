@@ -121,6 +121,7 @@ bl_filter_outliers <- function(bl_data,
       var_names     = var_names,
       num_vars      = num_vars,
       target_class  = bl_data$target_class,
+      scaling       = bl_data$scaling,   # pass through any user-set raw-unit scaling
       polygon       = polygon,
       hull_fraction = hull_fraction,
       n_retained    = n_retained,

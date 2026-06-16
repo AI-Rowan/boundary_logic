@@ -98,10 +98,13 @@ All objects have `print()` methods. Objects with visual outputs have `plot()` me
 |---|---|---|
 | `bl_prepare_data()` | `(data, class_col, target_class=NULL, feature_cols=NULL, train_fraction=0.8, seed=121L, hull_fraction=0.9, verbose=TRUE)` | `bl_filter_result` |
 | `bl_wrap_data()` | `(train_data, test_data=NULL, var_names=NULL, target_class=NULL)` | `bl_data` |
+| `bl_set_scaling()` | `(x, center, scale, method="z-score")` | same class as `x` (`bl_data`/`bl_filter_result`) |
 
 `bl_prepare_data()` is the standard in-package ingestion path: converts multiclass factors to binary 0/1 indicators, stratified train/test split, then calls `bl_filter_outliers()` internally to remove outliers and returns a `"bl_filter_result"`. The `hull_fraction` parameter (default `0.9`) controls how aggressively the convex hull trims the outermost training points; `hull_fraction = 1` retains all points.
 
 `bl_wrap_data()` is the external-data path: accepts pre-split, pre-coded data and returns a `"bl_data"` object with no outlier filtering. Use it when the data and model are prepared outside the package.
+
+`bl_set_scaling()` records a **display-only** per-feature affine transform `standardised = (raw - center) / scale` on a `bl_data` / `bl_filter_result` object, stored as `x$scaling = list(center, scale, method)` (both vectors named and ordered to `var_names`; a private `.align_scaling_vec()` helper validates finiteness, rejects zero scales, and reorders named or unnamed input). Use it when features were standardised *before* model fitting (common for SVM/NNET/logistic) so the biplot axes can later be relabelled into the original units. The scaling propagates through `bl_filter_outliers()` (pass-through) and `bl_assemble()` into `bl_result$scaling` (and onto `bl_projection$scaling` for the model-free exploratory biplot). It never alters the projection, grid, or what the model/`predict_fn` sees -- it is consumed only by the biplot plot methods (see §4.4). Distinct from `X_center`/`X_sd` (the internal PCA standardisation of whatever data was supplied) and the `standardise` flag. A single `method` label applies to all features; per-variable transform families are future work (CLAUDE.md §9).
 
 **`R/outlier_filter.R`**
 
@@ -198,7 +201,7 @@ The hull polygon (`calc_hull = TRUE` by default) is visual-only and does not aff
 | `bl_assemble()` | `(bl_data, bl_filter_result=NULL, bl_model, bl_projection, bl_grid)` | `bl_result` |
 | `bl_build_result()` | `(bl_data=NULL, bl_model=NULL, method="PCA", proj_dims=c(1L,2L), standardise=TRUE, cva_classes=NULL, title="", m=200L, outlie=1, calc_hull=TRUE, b_margin=0.001)` | `bl_result` or `bl_projection` |
 
-The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, and `b_margin`. The `biplot_obj` from `bl_projection` is carried forward for plotting.
+The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, `b_margin`, and (when set via `bl_set_scaling()`) the display-only `scaling` list. The `biplot_obj` from `bl_projection` is carried forward for plotting.
 
 **`bl_build_result()` early-return behaviour:** When `bl_model = NULL`, the grid and assembly steps are skipped and a `bl_projection` object is returned instead of a `bl_result`. This allows projection-only exploration before a model is fitted.
 
@@ -220,6 +223,18 @@ Eight-step rendering pipeline using biplotEZ:
 8. **Prediction summary** — printed to console (accuracy if labels known, class split if not)
 
 The `rotate_deg` parameter patches the biplotEZ object's `Z`, `Lmat`, and `ax.one.unit` fields to rotate all rendered elements without rerunning the projection pipeline. The optional `grid_col` parameter overrides the blue-white-red gradient with a hard binary two-colour scheme.
+
+#### 4.4.1 Raw-unit axis relabel (`.bl_rescale_biplot_axes()`)
+
+When `bl_result$scaling` is present (set via `bl_set_scaling()`), each biplot plot method relabels its axes into the original feature units via the private helper `.bl_rescale_biplot_axes(biplot_obj, scaling, var_names)`, called after any rotation and `new_title` override and before the first `plot()`.
+
+Mechanism: biplotEZ computes axis tick *labels* in `.calibrate.axis()` as an affine map of the object's `$means` and `$sd` -- `label = means + sd * axis.vals` -- with the nice tick values drawn from `pretty(range(Xhat))`, where `Xhat` is reconstructed from `$means`/`$sd`/`$scaled`/`$center`. The 2D geometry (`$Z`, `$Lmat`, `$ax.one.unit`, `$e.vects`) is independent of these fields, and a data point's displacement along an axis (`axis.vals`) is fixed by geometry alone. So for a user pre-standardisation `std = (raw - center) / scale`, setting
+
+    means_new = means * scale + center
+    sd_new    = sd * scale
+    $scaled <- TRUE ; $center <- TRUE   (geometry fields untouched)
+
+makes every label read `label_new = label_old * scale + center = raw` and reconstructs `Xhat` on the raw range, while plotted positions stay byte-identical. This holds uniformly for PCA (`scaled` TRUE -> `sd` = column SDs; `scaled` FALSE -> `sd` = 1) and CVA (`scaled` FALSE, so `sd_new = scale` supplies the `d(raw)/d(std)` factor that `ax.one.unit` -- built for unit `std` -- otherwise lacks). The helper is a no-op when `scaling` is `NULL` (back-compatible with older `bl_result` objects) and warns, leaving axes in standardised units, if the scaling does not cover every biplot feature. Wired into `plot_biplotEZ()`, `plot.bl_projection()`, `plot.bl_local_result()` (applied to the SVD-rotated object -- `$means`/`$sd` are rotation-invariant), `plot.bl_surrogate()`, and `plot.bl_sparse_result()` (via pass-through to the local plot). Verified by a round-trip test asserting raw-unit labels and geometry invariance across PCA(T/F) and CVA. Distance/value reporting (Shapley contributions, printed counterfactual values) is unchanged and still in model units -- see CLAUDE.md §9.
 
 **`R/project_points.R`**
 
@@ -352,6 +367,8 @@ Within-pair selection (the nearest valid contour vertex) always uses 2D Euclidea
 
 The pair producing the globally minimum value of the chosen selector is selected. The result stores the full grid, contours, rotation matrices (`Vr_rot`, `tVr_rot`), and the `set_filters` object (needed by `bl_find_sparse_cf()`).
 
+**`bl_counterfactual` companion object.** Alongside `bl_target` (the observed point), the result carries `bl_local$bl_counterfactual` -- a `"bl_counterfactual"` S3 object that mirrors `bl_target` and packages the boundary point found by the search (built by private `.make_bl_counterfactual()`; `NULL` when no solution). Fields: `x_cf` (1-row data frame `B_x`, model units), `z_cf` (`B_z`), `pred_prob` (`B_pred`), `pred_class` (`as.integer(B_pred >= cutoff)`), and `scaling`. Its `print.bl_counterfactual()` method displays the feature values in original (raw) units when a scaling was recorded via `bl_set_scaling()` -- using `.scale_to_raw(..., kind = "level")` -- exactly like `print.bl_target()`; storage stays in model units. `print.bl_local_result()` prints the Target and Counterfactual blocks together.
+
 **Important constraint difference from global search:**
 
 | Constraint | Global (`bl_find_boundary`) | Local (`bl_find_local_cf`) |
@@ -399,6 +416,8 @@ class 1 observation:  negative Shapley → Supports,  positive → Contradicts
 ```
 
 `print.bl_shapley()` shows the per-variable Shapley table. `plot.bl_shapley()` renders a ggplot2 horizontal bar chart (darkblue = Supports, grey70 = Contradicts) with y-axis labels `"variable: observed → change_to_boundary"`.
+
+**Raw-unit feature-value display (when `bl_result$scaling` is set via `bl_set_scaling()`).** The observed and counterfactual feature values shown by `plot.bl_shapley()`, `print.bl_shapley()`, `print.bl_sparse_result()`, and `print.bl_target()` are converted back to original units at display time by the private helper `.scale_to_raw(values, scaling, var_names, kind)` (`R/data_prepare.R`). The two conversion kinds matter: a **level** (observed value, full CF `B_x`, sparse CF, counterfactual end) maps as `value * scale + center`, whereas a **delta** (`data_to_boundary = end - start`) maps as `value * scale` with no centre term (a difference is translation-free). When scaling is present the `plot.bl_shapley()` y-axis label switches from `observed → change` to `observed → counterfactual` in raw units (counterfactual = `pred_data + data_to_boundary`, converted as a level). `bl_select_target()` stores `scaling` on the `bl_target` so `print.bl_target()` (and `print.bl_local_result()`, which delegates to it) can convert. Conversion is display-only -- the stored `shapley_df` / `x_sparse` / `x_obs` remain in model units. The Shapley *contributions* (`shapley_cause`) are in prediction-impact units, not feature units, and are deliberately left unconverted. No-op (and warns on incomplete scaling) when `scaling` is absent. See Section 4.4.1 for the axis-relabel counterpart.
 
 **`bl_find_sparse_cf()`** builds a sparse version of the counterfactual:
 

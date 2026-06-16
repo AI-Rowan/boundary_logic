@@ -187,7 +187,8 @@ bl_select_target <- function(bl_result, target, data = NULL) {
       z_obs      = Z_obs,
       pred_prob  = pred_prob,
       pred_class = pred_class,
-      row_id     = row_id
+      row_id     = row_id,
+      scaling    = bl_result$scaling   # display-only raw-unit scaling (or NULL)
     ),
     class = "bl_target"
   )
@@ -351,7 +352,14 @@ set_filters <- function(bl_target, ...) {
 #'       Mahalanobis distance per pair tried.}
 #'     \item{solution_found}{Logical.}
 #'     \item{blocking_constraint}{Character message if no solution, else NULL.}
-#'     \item{bl_target}{The \code{"bl_target"} object.}
+#'     \item{bl_target}{The \code{"bl_target"} object (the observed point).}
+#'     \item{bl_counterfactual}{A \code{"bl_counterfactual"} object (the boundary
+#'       point), or \code{NULL} when no solution was found. Mirrors
+#'       \code{bl_target}: fields \code{x_cf} (1-row data frame, model units),
+#'       \code{z_cf}, \code{pred_prob} (boundary probability), \code{pred_class}
+#'       (from \code{B_pred >= cutoff}), and \code{scaling}. Its print method
+#'       shows the counterfactual in original (raw) units when a scaling was set
+#'       via \code{\link{bl_set_scaling}}.}
 #'     \item{bl_result}{The \code{"bl_result"} object.}
 #'     \item{set_filters}{The \code{"bl_filters"} object passed in, or
 #'       \code{NULL}. Stored so that \code{\link{bl_find_sparse_cf}} can identify
@@ -667,11 +675,43 @@ bl_find_local_cf <- function(bl_result, bl_target,
         solution_found            = solution_found,
         blocking_constraint       = blocking,
         bl_target                 = bl_target,
+        bl_counterfactual         = if (solution_found)
+          .make_bl_counterfactual(best_result, bl_result) else NULL,
         bl_result                 = bl_result,
         set_filters               = set_filters
       )
     ),
     class = "bl_local_result"
+  )
+}
+
+
+# --------------------------------------------------------------------------
+# Private: package the boundary counterfactual as a printable object
+# --------------------------------------------------------------------------
+
+#' Build a bl_counterfactual object from the winning local search result
+#'
+#' Mirrors the `bl_target` object: stores the counterfactual feature values in
+#' model units plus the display-only `scaling`, so `print.bl_counterfactual()`
+#' can show them in original (raw) units. No new computation -- just packages the
+#' already-found boundary point (`B_x`/`B_z`/`B_pred`).
+#'
+#' @param best_result The winning per-pair result list (carries `B_x`, `B_z`,
+#'   `B_pred`).
+#' @param bl_result   The parent `bl_result` (for `cutoff` and `scaling`).
+#' @return A `"bl_counterfactual"` object.
+#' @noRd
+.make_bl_counterfactual <- function(best_result, bl_result) {
+  structure(
+    list(
+      x_cf       = best_result$B_x,
+      z_cf       = best_result$B_z,
+      pred_prob  = best_result$B_pred,
+      pred_class = as.integer(best_result$B_pred >= bl_result$cutoff),
+      scaling    = bl_result$scaling
+    ),
+    class = "bl_counterfactual"
   )
 }
 
@@ -897,6 +937,11 @@ plot.bl_local_result <- function(x,
     ct_local <- x$ct_local
   }
 
+  # ---- Optional raw-unit axis relabel (display only) -------------------
+  # means/sd are unaffected by the rotation above, so the affine relabel is
+  # applied to the rotated object directly. No-op when scaling is NULL.
+  biplot_plot <- .bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)
+
   # ---- Step 1: biplotEZ base plot (axes canvas) ------------------------
   biplot_plot |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
@@ -1005,6 +1050,10 @@ print.bl_local_result <- function(x, ...) {
   }
   cat("\n  Target:\n")
   print(x$bl_target)
+  if (!is.null(x$bl_counterfactual)) {
+    cat("\n  Counterfactual:\n")
+    print(x$bl_counterfactual)
+  }
   cat("\n  Per-pair distances:\n")
   df <- data.frame(
     pair             = names(x$all_distances),
@@ -1029,9 +1078,37 @@ print.bl_target <- function(x, ...) {
   cat(sprintf("  Row ID         : %s\n", rid))
   cat(sprintf("  Predicted prob : %.4f\n", x$pred_prob))
   cat(sprintf("  Predicted class: %d\n",  x$pred_class))
-  cat("  Feature values :\n")
-  vals <- as.numeric(x$x_obs)
-  names(vals) <- names(x$x_obs)
+  unit_note <- if (!is.null(x$scaling)) " (raw units)" else ""
+  cat(sprintf("  Feature values%s :\n", unit_note))
+  vals  <- as.numeric(x$x_obs)
+  nms   <- names(x$x_obs)
+  vals  <- .scale_to_raw(vals, x$scaling, nms, "level")
+  names(vals) <- nms
+  print(round(vals, 4L))
+  invisible(x)
+}
+
+
+#' Print method for bl_counterfactual
+#'
+#' Companion to [print.bl_target()]: shows the boundary counterfactual found by
+#' [bl_find_local_cf()] in original (raw) feature units when a scaling was
+#' recorded via [bl_set_scaling()], otherwise in model units.
+#'
+#' @param x A \code{"bl_counterfactual"} object (the \code{bl_counterfactual}
+#'   field of a \code{"bl_local_result"}).
+#' @param ... Currently ignored.
+#' @export
+print.bl_counterfactual <- function(x, ...) {
+  cat("-- bl_counterfactual --\n")
+  cat(sprintf("  Boundary prob  : %.4f\n", x$pred_prob))
+  cat(sprintf("  Predicted class: %d\n",   x$pred_class))
+  unit_note <- if (!is.null(x$scaling)) " (raw units)" else ""
+  cat(sprintf("  Feature values%s :\n", unit_note))
+  vals <- as.numeric(x$x_cf)
+  nms  <- names(x$x_cf)
+  vals <- .scale_to_raw(vals, x$scaling, nms, "level")
+  names(vals) <- nms
   print(round(vals, 4L))
   invisible(x)
 }

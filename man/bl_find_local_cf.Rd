@@ -63,7 +63,14 @@ or \code{"euclidean"}).}
 Mahalanobis distance per pair tried.}
 \item{solution_found}{Logical.}
 \item{blocking_constraint}{Character message if no solution, else NULL.}
-\item{bl_target}{The \code{"bl_target"} object.}
+\item{bl_target}{The \code{"bl_target"} object (the observed point).}
+\item{bl_counterfactual}{A \code{"bl_counterfactual"} object (the boundary
+point), or \code{NULL} when no solution was found. Mirrors
+\code{bl_target}: fields \code{x_cf} (1-row data frame, model units),
+\code{z_cf}, \code{pred_prob} (boundary probability), \code{pred_class}
+(from \code{B_pred >= cutoff}), and \code{scaling}. Its print method
+shows the counterfactual in original (raw) units when a scaling was set
+via \code{\link{bl_set_scaling}}.}
 \item{bl_result}{The \code{"bl_result"} object.}
 \item{set_filters}{The \code{"bl_filters"} object passed in, or
 \code{NULL}. Stored so that \code{\link{bl_find_sparse_cf}} can identify

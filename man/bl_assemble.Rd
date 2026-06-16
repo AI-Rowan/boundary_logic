@@ -85,6 +85,11 @@ Mahalanobis metric in \code{bl_find_local_cf()} and \code{plot.bl_boundary()}.}
 \item{\code{metric_type}}{\code{"W_cva"}, \code{"W_binary"}, or \code{"Sigma"}.}
 \item{\code{polygon}}{Convex hull polygon (\code{SpatialPolygons} or \code{NULL}).}
 \item{\code{hull_fraction}}{Hull fraction used, or \code{NULL}.}
+\item{\code{scaling}}{Display-only raw-unit scaling from \code{\link[=bl_set_scaling]{bl_set_scaling()}}
+(\code{list(center, scale, method)}), or \code{NULL}. Used by the biplot plot
+methods to relabel axis ticks into original units; does not affect any
+computation. Distinct from \code{X_center}/\code{X_sd} (internal PCA standardisation)
+and the \code{standardise} flag.}
 \item{\code{biplot_grid}}{The full \code{bl_grid} list.}
 \item{\code{accuracy}}{Training accuracy.}
 \item{\code{gini}}{Training Gini coefficient.}

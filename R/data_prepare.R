@@ -242,6 +242,156 @@ bl_wrap_data <- function(train_data,
 
 
 # --------------------------------------------------------------------------
+# bl_set_scaling(): record a pre-standardisation transform for raw-unit axes
+# --------------------------------------------------------------------------
+
+#' Record the feature scaling used before model fitting
+#'
+#' When features are standardised (or otherwise affinely rescaled) *before*
+#' being passed to `boundarylogic` -- a common step to improve model fit for
+#' scale-sensitive models -- every biplot axis is labelled in the standardised
+#' units, which is hard to read. `bl_set_scaling()` records the per-feature
+#' affine transform `standardised = (raw - center) / scale` so that the biplot
+#' plot methods can relabel their axis ticks back into the original (raw) units.
+#'
+#' The scaling is **display-only metadata**. It does not change the projection,
+#' the prediction grid, or what the model sees: the model (including a custom
+#' model wrapped via [bl_wrap_model()]) continues to receive data in the same
+#' (standardised) units it was trained on. Only the plot methods -- and, where
+#' applicable, the printed counterfactual/target values -- consume the scaling.
+#'
+#' Attach it as the final data-preparation step, after [bl_prepare_data()] /
+#' [bl_wrap_data()] (and after any [bl_filter_outliers()]). The recorded scaling
+#' then flows through [bl_build_result()] / [bl_assemble()] into the `bl_result`.
+#'
+#' @param x      A `"bl_data"` object from [bl_wrap_data()] or a
+#'   `"bl_filter_result"` object from [bl_prepare_data()] / [bl_filter_outliers()].
+#' @param center Numeric vector of per-feature centring constants. Either named
+#'   (names must cover `x$var_names`; reordered to match) or unnamed and of
+#'   length `length(x$var_names)` in `var_names` order. The attributes produced
+#'   by base [scale()] can be passed directly, e.g.
+#'   `center = attr(z, "scaled:center")`.
+#' @param scale  Numeric vector of per-feature scale factors, same length and
+#'   naming rules as `center`. Must contain no zero or `NA` entries.
+#' @param method Character scalar naming the transform family, recorded for
+#'   reference only (default `"z-score"`). All features share this single
+#'   affine method; per-variable transform families are future work.
+#'
+#' @return `x` with a `scaling` component added:
+#'   `list(center = <named numeric>, scale = <named numeric>, method = <character>)`,
+#'   both vectors ordered to match `x$var_names`. The object's class is unchanged.
+#'
+#' @examples
+#' df       <- datasets::iris
+#' df$class <- as.numeric(df$Species == "versicolor")
+#' df$Species <- NULL
+#' feats    <- setdiff(names(df), "class")
+#' z        <- scale(df[, feats])
+#' df[, feats] <- z
+#' bl_dat   <- bl_wrap_data(df[1:100, ], df[101:150, ])
+#' bl_dat   <- bl_set_scaling(bl_dat,
+#'                            center = attr(z, "scaled:center"),
+#'                            scale  = attr(z, "scaled:scale"))
+#'
+#' @seealso [bl_wrap_data()], [bl_prepare_data()], [bl_build_result()]
+#' @export
+bl_set_scaling <- function(x, center, scale, method = "z-score") {
+
+  if (!inherits(x, c("bl_data", "bl_filter_result")))
+    stop("'x' must be a 'bl_data' object from bl_wrap_data()/bl_prepare_data() ",
+         "or a 'bl_filter_result' object from bl_filter_outliers().",
+         call. = FALSE)
+
+  var_names <- x$var_names
+  if (!is.character(method) || length(method) != 1L)
+    stop("'method' must be a single character string.", call. = FALSE)
+
+  center <- .align_scaling_vec(center, var_names, "center")
+  scale  <- .align_scaling_vec(scale,  var_names, "scale")
+
+  if (any(scale == 0))
+    stop("'scale' must not contain zero (would make the transform non-invertible).",
+         call. = FALSE)
+
+  x$scaling <- list(center = center, scale = scale, method = method)
+  x
+}
+
+
+#' Validate and order a scaling vector against the feature names
+#'
+#' Coerces a `center`/`scale` vector to numeric, checks for finiteness, and
+#' reorders it to `var_names`. Named vectors are matched by name (must cover
+#' every feature); unnamed vectors must already be in `var_names` order.
+#'
+#' @param v         Numeric vector supplied by the user.
+#' @param var_names Character vector of feature names.
+#' @param arg_name  Character; the argument name for error messages.
+#' @return Numeric vector of length `length(var_names)`, named by `var_names`.
+#' @noRd
+.align_scaling_vec <- function(v, var_names, arg_name) {
+  if (!is.numeric(v))
+    stop(sprintf("'%s' must be numeric.", arg_name), call. = FALSE)
+  if (any(!is.finite(v)))
+    stop(sprintf("'%s' must not contain NA, NaN, or Inf.", arg_name),
+         call. = FALSE)
+
+  p <- length(var_names)
+  if (!is.null(names(v))) {
+    missing_nm <- setdiff(var_names, names(v))
+    if (length(missing_nm) > 0L)
+      stop(sprintf("'%s' is missing entries for: %s.",
+                   arg_name, paste(missing_nm, collapse = ", ")),
+           call. = FALSE)
+    out <- v[var_names]
+  } else {
+    if (length(v) != p)
+      stop(sprintf(
+        "Unnamed '%s' must have length %d (one per feature, in var_names order); got %d.",
+        arg_name, p, length(v)), call. = FALSE)
+    out <- v
+    names(out) <- var_names
+  }
+  out
+}
+
+
+#' Convert standardised feature values back to original (raw) units
+#'
+#' Display-only inverse of a recorded `bl_set_scaling()` transform, used by the
+#' Shapley / sparse / target print and plot methods to report feature values in
+#' the user's original units. For a per-feature transform
+#' `standardised = (raw - center) / scale`:
+#'   - `kind = "level"` (an observed value, counterfactual, sparse value):
+#'     `raw = value * scale + center`.
+#'   - `kind = "delta"` (a difference such as `data_to_boundary = end - start`):
+#'     `raw = value * scale` (no centre term -- differences are translation-free).
+#'
+#' @param values    Numeric vector aligned to `var_names` (one per feature).
+#' @param scaling   The `bl_result$scaling` list (`center`, `scale`, `method`)
+#'   or `NULL`.
+#' @param var_names Feature names matching the order/identity of `values`.
+#' @param kind      `"level"` or `"delta"`.
+#' @return `values` converted to raw units, or unchanged when `scaling` is
+#'   `NULL` or does not cover every feature (with a warning in the latter case).
+#' @noRd
+.scale_to_raw <- function(values, scaling, var_names,
+                          kind = c("level", "delta")) {
+  if (is.null(scaling)) return(values)
+  kind   <- match.arg(kind)
+  center <- scaling$center[var_names]
+  scale  <- scaling$scale[var_names]
+  if (any(is.na(center)) || any(is.na(scale))) {
+    warning("bl_result$scaling does not cover all features; ",
+            "values left in model (standardised) units.", call. = FALSE)
+    return(values)
+  }
+  if (kind == "delta") unname(values) * unname(scale)
+  else                 unname(values) * unname(scale) + unname(center)
+}
+
+
+# --------------------------------------------------------------------------
 # S3 print method
 # --------------------------------------------------------------------------
 
@@ -258,5 +408,8 @@ print.bl_data <- function(x, ...) {
   cat(sprintf("  Target     : %s\n", target_str))
   cat(sprintf("  Train rows : %d  |  Test rows : %d\n",
               nrow(x$train_data), nrow(x$test_data)))
+  if (!is.null(x$scaling))
+    cat(sprintf("  Scaling    : %s (raw-unit biplot axes enabled)\n",
+                x$scaling$method))
   invisible(x)
 }

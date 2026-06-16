@@ -210,6 +210,14 @@ Parameters:
 
 **Why this function exists:** The global `bl_find_boundary()` uses the original biplot projection (fixed `proj_dims = c(1, 2)`). For a single target, we can do better: rotate the entire biplot so the target observation lies along the first axis of the projected plane, then search across multiple eigenvector pairs to find whichever rotation brings the boundary closest. This local rotation maximises the chance of finding a valid counterfactual.
 
+**`bl_local$bl_counterfactual` (companion to `bl_local$bl_target`):** the result carries a
+`"bl_counterfactual"` object packaging the boundary point (`x_cf = B_x` model units, `z_cf`,
+`pred_prob = B_pred`, `pred_class`, `scaling`), `NULL` when no solution was found. Like
+`bl_target`, its print method shows the counterfactual in original (raw) units when a scaling
+was recorded via `bl_set_scaling()` (reuses `.scale_to_raw()`). `print(bl_local)` shows the
+Target and Counterfactual blocks together. The raw counterfactual values are also available in
+the sparse table (`B_x` column, Step 14).
+
 ---
 
 ### The algorithm: 10-pair loop
@@ -379,6 +387,15 @@ Default: `plot_points = FALSE` (training points hidden), `no_grid = FALSE`, `no_
 
 `new_title` (default `NA`) overrides the auto-generated `"Local biplot -- target N [pair (i,j) | p=..., class ...]"` title; `NA` keeps the auto-generated title.
 
+**Raw-unit axis relabel:** if `bl_result$scaling` is set (via `bl_set_scaling()` — see
+`review_section4_to_6.md`), the rotated local biplot's axes are relabelled into original feature
+units. After the SVD rotation has patched `Z`/`Lmat`/`ax.one.unit` (and any extra `rotate_deg`),
+`plot.bl_local_result()` calls `.bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)`.
+The relabel transforms only the biplotEZ `$means`/`$sd`, which are **rotation-invariant**, so it
+composes cleanly with the local rotation and leaves the plotted geometry untouched. The same
+applies to `plot.bl_surrogate()` and, by pass-through, `plot.bl_sparse_result()` (Step 14).
+Counterfactual/Shapley *values* in the console output remain in model (standardised) units.
+
 **Base-graphics title-error note:** `new_title` is written straight to `biplot_plot$Title` (no validation, matching `plot_biplotEZ()`), and biplotEZ forwards that field to `graphics::title(main = ...)` at plot-flush time. A length-1 character string (or `NA` to keep the default) is the intended contract. `title()` is tolerant: it coerces most atomic and even recursive inputs (numeric, multi-element character vectors, lists, data.frames) to a label via `as.character()`, so those do *not* error — they just produce an odd/recycled title. The error case is a value base R cannot coerce to a character vector at all — a **function/closure** or an **environment** — which raises `"cannot coerce type 'closure' to vector of type 'character'"` from *inside* the biplotEZ `plot()` call, not from the plot function's own argument handling. A length-1 character is the safe, intended input.
 
 **What it renders (8 layers):**
@@ -425,6 +442,18 @@ This means the axes, variable label positions, and tick marks are all recalculat
 ```r
 bl_shapley_values <- bl_shapley(bl_local)
 ```
+
+**Raw-unit feature values (when `bl_result$scaling` is set via `bl_set_scaling()`).** The
+observed and counterfactual values shown by `plot.bl_shapley()`, `print.bl_shapley()`, the
+sparse table (Step 14), and `print.bl_target()` are converted back to original units at display
+time by private `.scale_to_raw()` (`R/data_prepare.R`). Levels (observed, `B_x`, sparse,
+counterfactual) map as `value*scale + center`; the `data_to_boundary` **delta** maps as
+`value*scale` (no centre term). When scaling is present the `plot.bl_shapley()` y-axis label
+switches from `observed -> change` to `observed -> counterfactual` (raw units) and the y-title
+notes "raw units"; the print tables gain a "(raw units)" header. `bl_select_target()` stores
+`scaling` on the `bl_target` so `print.bl_target()` can convert. The Shapley *contributions*
+(`shapley_cause`) stay in prediction-impact units -- not converted. No-op when scaling absent.
+See `review_section4_to_6.md` for `bl_set_scaling()` and `2 implementation_summary.txt` §4.9.
 
 ### What `bl_shapley()` does
 

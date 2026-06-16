@@ -261,6 +261,22 @@ plot.bl_shapley <- function(x, ...) {
   df        <- x$shapley_df
   row_label <- if (is.na(x$row_id)) "external" else as.character(x$row_id)
 
+  # Raw-unit relabel (display only): when a scaling was recorded, show each
+  # variable's observed and counterfactual value in original units instead of
+  # the default "observed -> change" in standardised units. Levels convert as
+  # value*scale + center; the counterfactual level is pred_data + data_to_boundary.
+  scaling <- x$bl_local_result$bl_result$scaling
+  y_title <- "Variable (observed value -> change required)"
+  if (!is.null(scaling)) {
+    vn      <- as.character(df$varnames)
+    obs_raw <- .scale_to_raw(df$pred_data, scaling, vn, "level")
+    cf_raw  <- .scale_to_raw(df$pred_data + df$data_to_boundary,
+                             scaling, vn, "level")
+    lbl     <- paste0(vn, ": ", round(obs_raw, 3), " -> ", round(cf_raw, 3))
+    df$varnames_p <- factor(lbl, levels = lbl)   # preserve existing sort order
+    y_title <- "Variable (observed -> counterfactual, raw units)"
+  }
+
   ggplot2::ggplot(
     df,
     ggplot2::aes(fill = Contribute, colour = Contribute,
@@ -285,7 +301,7 @@ plot.bl_shapley <- function(x, ...) {
     ggplot2::theme(legend.position = "bottom") +
     ggplot2::labs(
       x        = "[-> change to reach boundary]: Impact on prediction",
-      y        = "Variable (observed value -> change required)",
+      y        = y_title,
       title    = "Shapley Contribution Plot",
       subtitle = sprintf(
         "ID: %s | Class: %d | Pred: %.3f | Boundary pred: %.3f",
@@ -307,13 +323,20 @@ print.bl_shapley <- function(x, ...) {
   cat(sprintf("  Pred prob      : %.4f\n", x$pred_prob))
   cat(sprintf("  Pred class     : %d\n",   x$pred_class))
   cat(sprintf("  Boundary pred  : %.4f\n", x$pred_boundary))
-  cat("\n  Shapley table:\n")
+  # Raw-unit conversion (display only): pred_data is a level, data_to_boundary
+  # is a delta. No-op when no scaling was recorded.
+  scaling <- x$bl_local_result$bl_result$scaling
+  unit_note <- if (!is.null(scaling)) " (raw units)" else ""
+  cat(sprintf("\n  Shapley table%s:\n", unit_note))
   df_print <- x$shapley_df[, c("varnames", "pred_data", "data_to_boundary",
                                 "shapley_cause", "Contribute"),
                             drop = FALSE]
-  df_print$varnames         <- as.character(df_print$varnames)
-  df_print$pred_data        <- round(df_print$pred_data, 4L)
-  df_print$data_to_boundary <- round(df_print$data_to_boundary, 4L)
+  vn <- as.character(df_print$varnames)
+  df_print$varnames         <- vn
+  df_print$pred_data        <- round(.scale_to_raw(df_print$pred_data,
+                                                   scaling, vn, "level"), 4L)
+  df_print$data_to_boundary <- round(.scale_to_raw(df_print$data_to_boundary,
+                                                   scaling, vn, "delta"), 4L)
   df_print$shapley_cause    <- round(df_print$shapley_cause, 4L)
   print(df_print, row.names = FALSE)
   invisible(x)
@@ -517,20 +540,26 @@ print.bl_sparse_result <- function(x, ...) {
               x$bl_shapley$pred_prob, x$bl_shapley$pred_class))
   cat(sprintf("    Full CF      : %.4f\n", x$bl_shapley$pred_boundary))
   cat(sprintf("    Sparse CF    : %.4f\n", x$pred_sparse))
-  cat("\n  Variable summary:\n")
   df <- x$shapley_df
   bl_local  <- x$bl_shapley$bl_local_result
   bl_target <- bl_local$bl_target
   var_names <- bl_local$bl_result$var_names
 
+  # Raw-unit conversion (display only): x_obs / B_x / x_sparse are all levels.
+  scaling   <- bl_local$bl_result$scaling
+  unit_note <- if (!is.null(scaling)) " (raw units)" else ""
+  cat(sprintf("\n  Variable summary%s:\n", unit_note))
+
   x_obs_vec <- as.numeric(bl_target$x_obs[, var_names])
   B_x_vec   <- as.numeric(bl_local$B_x[, var_names])
+  ord       <- match(as.character(df$varnames), var_names)
+  vn        <- as.character(df$varnames)
 
   df_print <- data.frame(
-    variable      = as.character(df$varnames),
-    x_obs         = round(x_obs_vec[match(as.character(df$varnames), var_names)], 4L),
-    B_x           = round(B_x_vec[match(as.character(df$varnames), var_names)], 4L),
-    x_sparse      = round(df$x_sparse_val, 4L),
+    variable      = vn,
+    x_obs         = round(.scale_to_raw(x_obs_vec[ord], scaling, vn, "level"), 4L),
+    B_x           = round(.scale_to_raw(B_x_vec[ord],   scaling, vn, "level"), 4L),
+    x_sparse      = round(.scale_to_raw(df$x_sparse_val, scaling, vn, "level"), 4L),
     used_in_sparse = df$used_in_sparse,
     stringsAsFactors = FALSE
   )

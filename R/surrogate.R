@@ -359,6 +359,9 @@ plot.bl_surrogate <- function(x,
     ct_surr    <- gr$ct_surrogate
   }
 
+  # ---- Optional raw-unit axis relabel (display only) -------------------
+  biplot_obj <- .bl_rescale_biplot_axes(biplot_obj, bl_result$scaling, var_names)
+
   # ---- Step 1: biplotEZ axis skeleton ----------------------------------
   biplot_obj |>
     biplotEZ::samples(opacity = 0, which = NULL) |>

@@ -208,9 +208,6 @@ names(loan_encoded)
   
   # Using model_type = "custom" makes the prediction contract explicit.
 
-  
-
-  
   xgb_data <- xgboost::xgb.DMatrix(
     data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
     label = bl_dat$train_data$class
@@ -322,6 +319,20 @@ names(loan_encoded)
 
 # ---- Steps 4b-6b: Rebuild pipeline with pruned features ----------------
 {
+  # ---- Standardise the retained features (raw-unit biplot axes demo) ----
+  # Scale-sensitive models (SVM, NNET, logistic regression) often fit better on
+  # standardised inputs, so a common workflow standardises features before
+  # modelling. XGBoost is scale-invariant per feature -- its predictions here are
+  # unchanged -- but the PCA/CVA projection geometry does depend on scale, and
+  # without help the biplot axes would then read in standardised units.
+  # bl_set_scaling() records the transform standardised = (raw - center) / scale
+  # so every biplot axis can be relabelled back into the original loan units.
+  # The scaling is display-only: the model and grid still see standardised data.
+  #
+  # The standardisation is fit on the TRAINING rows only (no test leakage) and
+  # the same training centre/scale are then applied to the test split. So we
+  # split first on raw data -- the hull filter standardises internally, so
+  # filtering on raw vs standardised is equivalent -- then scale.
   bl_dat_v2 <- bl_prepare_data(
     data           = loan_filtered,
     class_col      = "loan_status",
@@ -330,6 +341,23 @@ names(loan_encoded)
     seed           = 121L,
     hull_fraction  = 0.9
   )
+
+  # Scaling derived from the (filtered) training features only.
+  train_scl  <- scale(bl_dat_v2$train_data[, feature_cols_v2])
+  scl_center <- attr(train_scl, "scaled:center")
+  scl_scale  <- attr(train_scl, "scaled:scale")
+
+  # Apply the training transform to both splits (test uses the training stats).
+  bl_dat_v2$train_data[, feature_cols_v2] <- train_scl
+  bl_dat_v2$test_data[,  feature_cols_v2] <-
+    scale(bl_dat_v2$test_data[, feature_cols_v2],
+          center = scl_center, scale = scl_scale)
+
+  # Record the pre-standardisation transform for raw-unit biplot axes.
+  bl_dat_v2 <- bl_set_scaling(bl_dat_v2,
+                              center = scl_center,
+                              scale  = scl_scale,
+                              method = "z-score")
 
   # Direct XGB path — no predict_fn required; see Step 5b for the
   # custom/predict_fn alternative demonstrated on the full feature set.
@@ -361,8 +389,10 @@ names(loan_encoded)
     title    = "Loan default -- XGB, reduced features, CVA biplot",
     b_margin = 0.01
   )
-  print(bl_results_v2)
+  print(bl_results_v2)   # prints "Axis units : raw (z-score scaling stored)"
 
+  # Axes now read in original loan units (years, currency, rate, score) even
+  # though the model and projection operate on standardised features.
   plot(bl_results_v2)
   test_pts_v2 <- bl_project_points(bl_results_v2$test_data, bl_results_v2)
   plot(bl_results_v2, points = test_pts_v2)

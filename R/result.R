@@ -75,6 +75,11 @@
 #'   \item{`metric_type`}{`"W_cva"`, `"W_binary"`, or `"Sigma"`.}
 #'   \item{`polygon`}{Convex hull polygon (`SpatialPolygons` or `NULL`).}
 #'   \item{`hull_fraction`}{Hull fraction used, or `NULL`.}
+#'   \item{`scaling`}{Display-only raw-unit scaling from [bl_set_scaling()]
+#'     (`list(center, scale, method)`), or `NULL`. Used by the biplot plot
+#'     methods to relabel axis ticks into original units; does not affect any
+#'     computation. Distinct from `X_center`/`X_sd` (internal PCA standardisation)
+#'     and the `standardise` flag.}
 #'   \item{`biplot_grid`}{The full `bl_grid` list.}
 #'   \item{`accuracy`}{Training accuracy.}
 #'   \item{`gini`}{Training Gini coefficient.}
@@ -167,6 +172,9 @@ bl_assemble <- function(bl_data,
       polygon       = polygon,
       hull_fraction = hull_fraction,
       train_ranges  = train_ranges,
+
+      # Raw-unit display scaling (NULL unless bl_set_scaling() was used)
+      scaling       = bl_data$scaling,
 
       # Grid (NULL when no model supplied)
       biplot_grid   = bl_grid,
@@ -325,6 +333,10 @@ bl_build_result <- function(bl_data     = NULL,
     title       = title
   )
 
+  # Copy any user-set raw-unit scaling onto the projection so the model-free
+  # exploratory plot.bl_projection() can relabel its axes too.
+  bl_proj$scaling <- bl_data$scaling
+
   # ---- Step 5: build prediction grid (skipped when no model) -----------
   bl_grid <- if (!is.null(bl_model)) {
     bl_build_grid(
@@ -378,6 +390,8 @@ print.bl_result <- function(x, ...) {
   } else {
     cat("  Model        : none (exploratory biplot only)\n")
   }
+  if (!is.null(x$scaling))
+    cat(sprintf("  Axis units   : raw (%s scaling stored)\n", x$scaling$method))
   cat(sprintf("  Created      : %s\n",
               format(x$created_at, "%Y-%m-%d %H:%M:%S")))
   invisible(x)
