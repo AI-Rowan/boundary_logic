@@ -223,7 +223,7 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
   df$varnames   <- factor(df$varnames, levels = df$varnames)
   df$varnames_p <- paste0(
     df$varnames, ": ",
-    round(df$pred_data, 3), " -> ", round(df$data_to_boundary, 3)
+    round(df$pred_data, 3), " -> ", round(df$data_to_boundary, 2)
   )
   df$varnames_p <- factor(df$varnames_p, levels = df$varnames_p)
 
@@ -272,7 +272,7 @@ plot.bl_shapley <- function(x, ...) {
     obs_raw <- .scale_to_raw(df$pred_data, scaling, vn, "level")
     cf_raw  <- .scale_to_raw(df$pred_data + df$data_to_boundary,
                              scaling, vn, "level")
-    lbl     <- paste0(vn, ": ", round(obs_raw, 3), " -> ", round(cf_raw, 3))
+    lbl     <- paste0(vn, ": ", round(obs_raw, 3), " -> ", round(cf_raw, 2))
     df$varnames_p <- factor(lbl, levels = lbl)   # preserve existing sort order
     y_title <- "Variable (observed -> counterfactual, raw units)"
   }
