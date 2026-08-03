@@ -300,7 +300,7 @@ boundary_logic/
 ├── tests/testthat/      ← Unit tests
 ├── vignettes/           ← Loan-default workflow
 ├── inst/extdata/        ← Bundled datasets (loan_data.csv, pima_diabetes.csv)
-├── scripts/             ← Interactive example scripts
+├── development/         ← Dev harness + code walkthroughs
 └── docs/                ← Flow diagram, implementation summary
 ```
 

@@ -8,15 +8,18 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ## Standing items / carry-overs
 
-- **Mac tester confirmation pending** — once macOS install is confirmed, merge
-  `method_developments` -> `main`.
-- **`scripts/03_loan_status_Boundary_Logic.R` working-edit committed** (`f540607`, 2026-06-16):
-  `person_age` dropped from the reduced (v2) model, `tdp <- 13`, v2 boundary plot
-  `type = "boxplot"`. Committed as-is at user request — not pushed. Known leftovers the user
-  chose to keep: Steps 8b/9/15 still pass `person_age` to plot label/tick vectors (harmless
-  `variable not found` warnings at plot time), and Step 14 retains a `new_title = "xx"`
-  placeholder. Commit used the auto-configured git identity
-  (`Rowan <adriaan.rowan@yala.co.za>`); no `user.name`/`user.email` is set.
+- **`main` was merged and pushed on 2026-08-03** (see session below) — the Mac-tester gate was
+  consciously overridden to get the latest code (incl. the loan-default vignette) publicly
+  installable. No further merge is pending unless new `method_developments` work accumulates.
+- **`scripts/` is now gitignored** (`.gitignore`) — it is the user's personal scratch playground
+  and is never published. `17_*`, `18_*`, `LendingClub_PD_Model_R.R`, `loans_full_schema.csv`,
+  `01_iris_SVM_PCA_biplot.R`, and `pima diabetes.csv` all live there, untracked, on disk only.
+  The former main dev/testing harness (`03_loan_status_Boundary_Logic.R`) and its three
+  `review_section*.md` walkthroughs were moved to a new tracked `development/` folder (excluded
+  from the built package via `.Rbuildignore`) — see session below.
+- **`.bl_rotate()` plane under-determination** — found 2026-07-15, **documented and deliberately
+  not actioned**. See `documentation/rotation_plane_underdetermination_note.md`, CLAUDE.md §9.
+  Do not "fix" without an explicit instruction.
 - **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
 - **Baseline test status: 136 PASS / 0 FAIL / 4 WARN** (the 4 WARN are pre-existing biplotEZ
   CVA 2-class notices).
@@ -24,166 +27,180 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
   ```r
   "/c/Program Files/R/R-4.6.0/bin/Rscript" -e "devtools::test()"
   ```
+- **`.claude/plans/` is gitignored** (`.gitignore:16`) — plan files are local-only and never
+  committed. `.claude/reference/` *is* tracked (generic docs + archived plans only, now that the
+  script-specific walkthroughs moved to `development/reference/`).
 
 ---
 
-## Session summary (2026-06-16, latest) — raw-unit scaling support
+## Session summary (2026-08-03, latest) — split scripts/ into playground + tracked development/, merge to main
 
-Three linked deliverables let a user who standardised features before model fitting read the
-biplot and counterfactuals in original units. All display-only: stored objects/geometry/model
-stay in model (standardised) units. Test baseline 77 -> 136 PASS / 0 FAIL.
+Goal: publish the latest code to GitHub `main` for easy access (`main` was 19 commits behind
+`method_developments`, 0 ahead), while keeping personal scratch scripts out of the published repo.
 
-1. **`bl_set_scaling()` + raw-unit biplot axes.** New exported `bl_set_scaling(x, center, scale,
-   method)` (`R/data_prepare.R`, with private `.align_scaling_vec()`) records the per-feature
-   transform `std = (raw - center)/scale` as a `scaling` field on `bl_data`/`bl_filter_result`,
-   threaded through `bl_filter_outliers()` -> `bl_assemble()` -> `bl_result$scaling` (and onto
-   `bl_projection$scaling`). New private `.bl_rescale_biplot_axes()` (`R/plot_biplot.R`)
-   relabels biplotEZ axes into raw units by transforming only `$means`/`$sd` (geometry
-   byte-identical); wired into all biplot plot methods (`plot_biplotEZ`, `plot.bl_projection`,
-   `plot.bl_local_result`, `plot.bl_surrogate`, `plot.bl_sparse_result`). See
-   `documentation/scaling_axis_relabel_note.md` + impl summary §4.4.1.
+### What changed
 
-2. **Raw-unit feature values in Shapley/sparse/target displays.** New private `.scale_to_raw()`
-   (`R/data_prepare.R`; `kind="level"` -> `v*scale+center`, `kind="delta"` -> `v*scale`).
-   `plot.bl_shapley()` label becomes observed -> counterfactual (raw); `print.bl_shapley()`,
-   `print.bl_sparse_result()`, `print.bl_target()` convert (scaling stored on `bl_target`).
-   Shapley *contributions* stay in prediction-impact units (not converted). Impl summary §4.9.
+- **`scripts/`** is now fully gitignored (`.gitignore`) — a personal playground, never published.
+  It still holds all six files on disk (`01_iris_SVM_PCA_biplot.R`, `17_loan-gam-pca-3d-4var-surface.R`,
+  `18_loan-glm-4var-pcabiplot.R`, `LendingClub_PD_Model_R.R`, `loans_full_schema.csv`,
+  `pima diabetes.csv`); `git rm --cached` was used (never a raw `rm`), so nothing was deleted from
+  disk. `outputs_dev_oos/` (an empty artefact dir from `LendingClub_PD_Model_R.R`) was gitignored
+  pre-emptively too.
+- **New tracked `development/` folder** holds what `scripts/` is not scratch for: the main
+  dev/testing harness `development/03_loan_status_Boundary_Logic.R` (`git mv`'d from `scripts/03_...`,
+  history preserved) and its three code walkthroughs, `git mv`'d from `.claude/reference/` to
+  `development/reference/` (`review_section4_to_6.md`, `review_section7_to_8.md`,
+  `review_section9_to_15.md`). Added `^development$` to `.Rbuildignore` so it never ships in the
+  built package (R CMD check NOTE count unaffected).
+- **Path references repaired**: `R/datasets.R` roxygen (now points at the vignette instead of the
+  no-longer-published script path — `man/loan_data.Rd` regenerated via `devtools::document()`),
+  `README.md` repo-structure block, `CLAUDE.md` §2/§5 (script-specific reference table, the
+  reference-folder convention table, the `v2 block` pointer), `documentation/mahalanobis_technical_note.md`,
+  and `documentation/scaling_axis_relabel_note.md`. The three review docs cross-reference each
+  other by bare filename, so those internal links needed no edits. Auto-memory
+  `reference_docs.md` synced to match, per the CLAUDE.md memory-sync rule.
+- **Committed and merged**: this restructure, plus the previously-pending 2026-07-15 documentation
+  work (`CLAUDE.md` §9 rotation-plane entry, `2 implementation_summary.txt` §4.2 caveat, the new
+  `documentation/rotation_plane_underdetermination_note.md`), was committed on `method_developments`
+  and fast-forward-merged into `main` (0 commits diverged, so no merge commit was needed), then both
+  branches pushed to `origin`.
 
-3. **`bl_local$bl_counterfactual`.** `bl_find_local_cf()` now returns a `"bl_counterfactual"`
-   object (private `.make_bl_counterfactual()`) mirroring `bl_target`: stores model-unit `x_cf`
-   (= `B_x`), prints in raw units via `.scale_to_raw()`. `print.bl_local_result()` shows Target
-   and Counterfactual blocks together. Impl summary §4.8.
+**Test status: 136 PASS / 0 FAIL / 4 WARN — baseline unchanged.** Confirmed after `devtools::document()`
+regenerated `man/loan_data.Rd`; no `R/` logic changed, only a roxygen comment.
 
-**Script 03**: v2 block now standardises on the **training** rows only and applies those stats
-to the test split (was: scaled on full data -> test leakage). Split happens first on raw data.
+### Decisions
 
-**Docs**: impl summary §4.4.1/§4.8/§4.9; both review reference docs; technical note;
-CLAUDE.md (file map, S5 axis-relabel Always-Do, S9 entries flipped to IMPLEMENTED + new
-per-variable-methods future item); memory sync (`reference_data_prep_functions.md`); three
-plans archived to `.claude/reference/` with IMPLEMENTED banners.
+- **Mac-tester merge gate consciously overridden.** `progress.md` and CLAUDE.md §10 gate the
+  `method_developments` -> `main` merge on macOS install confirmation, which has not landed. The
+  user weighed "easy access to the latest code" (including the loan-default vignette, which existed
+  only on `method_developments`) as the higher priority and explicitly asked to proceed.
+- **`03_loan_status_Boundary_Logic.R` is not scratch.** Initially proposed folding all of `scripts/`
+  into `.gitignore`; the user corrected this — script 03 is the main tool-logic development/testing
+  harness and the subject of required-reading walkthroughs (CLAUDE.md §2), so it and its docs need a
+  tracked home, not to be discarded. Resulted in the `development/` split rather than a blanket ignore.
+- **Git history left alone.** The six scratch files remain findable in old commits (three were
+  previously tracked). No `filter-repo`, no force-push — user's explicit choice.
 
-**Committed + pushed**: `00b43a5` on `method_developments` (24 files, +1515/-28), pushed
-`10a81f3..00b43a5` (also carries the earlier `f540607` person_age script edit). Commit used the
-auto-configured identity `Rowan <adriaan.rowan@yala.co.za>` (no `user.name`/`user.email` set).
+### Next steps
+
+1. None outstanding from this session — restructure, doc repairs, tests, commit, merge, and push
+   are all complete.
+2. Carried over: the `.bl_rotate()` minimal-rotation option (CLAUDE.md §9 + technical note §7) —
+   still deferred pending an explicit instruction.
+3. Optional, not done: rebuild the pkgdown site (`docs/`) — it still shows the old `scripts/` line
+   in its rendered `README.md` mirror. Cosmetic; see CLAUDE.md §5 for the rebuild gotchas.
+
+---
+
+## Session summary (2026-07-15) — script 17 target-alignment rotation + rotation-plane finding
+
+Three linked pieces of work on `scripts/17_loan-gam-pca-3d-4var-surface.R` (the user's 3D GAM
+decision-surface demo), ending in a significant methodological finding about the package's
+local biplot rotation. **No package code was changed** (`git diff -- R/` is empty).
+
+### Modified files
+
+| File | State | What changed |
+|---|---|---|
+| `scripts/17_loan-gam-pca-3d-4var-surface.R` | **untracked** | rotation added; `proj_pair` knob; retargeted to row 49 / pair (2,3); black curve made exact |
+| `documentation/rotation_plane_underdetermination_note.md` | **untracked (new)** | the finding: derivation, measurements, options |
+| `CLAUDE.md` | modified | §9 entry for the rotation finding (+ the still-uncommitted Shapley d.p. note carried from the previous session) |
+| `2 implementation_summary.txt` | modified | §4.2 caveat under the `.bl_rotate()` description |
+| `.claude/plans/rotate_3d_pca_to_target.md`, `rotate_3d_proj_pair_knob.md`, `compare_3d_vs_2d_biplot_target49.md` | gitignored | three approved plans, updated post-implementation |
+
+**Test status: 136 PASS / 0 FAIL / 4 WARN — baseline unchanged, and NOT re-run.** No `R/` file
+was touched, so the suite cannot have regressed. **Nothing committed.**
+
+### 1. Target-alignment rotation (plan: `rotate_3d_pca_to_target.md`)
+
+Script 17 now rotates the PCA basis onto the target so it lies exactly on the drawn plane,
+simulating what `bl_find_local_cf()` does. A script-local `.bl_rotate_full()` mirrors the
+package's private `.bl_rotate()` (`R/local_cf.R:45`) line-for-line but takes the **full 4x4** `V`
+and returns the **full** rotated basis — the package's version needs a square `V` (it calls
+`solve()`) and returns only 2 columns, while the 3D plot needs 3.
+
+Key property (verified, 13 assertions): the target's rotated coords 3 **and** 4 are both ~1e-17,
+so the 4D -> 3D reduction is **lossless for the target** (reconstruction error 8.88e-16) and
+lossy for everyone else (0.0456 on an ordinary row). This is why the **full** basis must be
+rotated — rotating a truncated 4x3 would merely *project* the target onto the plane.
+
+### 2. `proj_pair` knob (plan: `rotate_3d_proj_pair_knob.md`)
+
+Section 0 config block holds `i` and `proj_pair`. Decisions: **one rotation per run, no pair
+search** (unlike `bl_find_local_cf()`); **provenance axis labels** (`c(2,4)` -> "Rotated PC2",
+"Rotated PC4", "Rotated residual") since the pair's content always lands in slots 1-2 regardless
+of which pair is named; **vertical axis fixed** to rotated column 3; internal `Z$PC1/PC2/PC3`
+kept as *slot* names (renaming would ripple through the GAM formula, `acast`, and plotly refs).
+
+### 3. Comparison against script 18 + the finding (plan: `compare_3d_vs_2d_biplot_target49.md`)
+
+Retargeted to `i <- 49`, `proj_pair <- c(2L, 3L)` (the pair `bl_find_local_cf()` selects) and
+replaced the black curve with an **exact level set** computed directly on the plane, instead of
+contouring a `PC3 ~ s(PC1,PC2,k=60)` smooth fitted through a `|p-0.5|<0.02` cloud. `surf_mat_full`
+became dead and was deleted; the green surface keeps its smooth (it is a genuine 3D object).
+
+**The finding:** script 17's plane and the package's are **65.9 degrees apart** (principal angles
+`0.00, 65.91`) — they share only the target direction. Root cause: `Y <- rbind(-x, 0, x)` is
+**rank 1**, so `M = t(YV) %*% YVr_padded` is rank 1 (singular values `1.63, 6.7e-17, 0, 0`) with a
+3-dim exactly degenerate null space. The Procrustes minimiser is pinned only along the target
+direction; the plane's second direction is LAPACK's arbitrary tie-break. Bases differing by
+**4.6e-15** give planes 66 deg apart. Only **46%** of the package's plane lies in the `span(V2,V3)`
+it is named after. **Inherited from the original PhD method** — `origin/original_PhD_code:scripts/1.3
+Optimal Rotation.R` does the identical padding; the package is a faithful port, not a porting bug.
+
+Decision (user): **document, change nothing.** Written up in
+`documentation/rotation_plane_underdetermination_note.md` with pointers from CLAUDE.md §9 and
+`2 implementation_summary.txt` §4.2.
 
 ### Dead ends / corrections this session
 
-1. **CVA `scaled=FALSE` worry was a false alarm.** During planning I feared the `$means`/`$sd`
-   override wouldn't relabel CVA axes correctly (CVA stores `sd = 1` and skips the sd term in
-   biplotEZ's `Xhat` reconstruction). Algebra showed the transform is in fact uniform across
-   PCA(T/F) and CVA (`sd_new = scale` supplies the missing `d(raw)/d(std)` factor); confirmed
-   empirically (geometry byte-identical, labels on raw scale). No special-casing needed.
-2. **Test used a named-vector subset and hit the wrong validation branch.** `d$center[1:2]` is
-   still *named*, so `.align_scaling_vec()` took the name-match path and raised "missing entries"
-   instead of the expected "length" error. Fix: test with `unname(d$center)[1:2]`.
-3. **`.scale_to_raw()` strips names** (it does `unname(values) * ...`). `print.bl_target()` /
-   `print.bl_counterfactual()` must re-attach `names()` after calling it, or the printed vector
-   loses its variable labels. (The NULL-scaling path returns the value unchanged *with* names, so
-   the bug only showed when scaling was set.)
-4. **Value-reporting was initially deferred, then pulled back in.** The first round shipped only
-   raw *axes* and explicitly deferred raw *values* (Shapley/sparse/target) as CLAUDE.md S9. The
-   user then asked for the values too, so it was implemented in a second round — Shapley
-   *contributions* stay in prediction-impact units (not feature units, not convertible).
-5. **Script 03 standardised on the full dataset (test leakage)** — caught by the user. Fixed to
-   fit the scaling on the (filtered) training rows only and apply those stats to the test split;
-   the split now happens first on raw data (the hull filter self-standardises, so filtering on
-   raw vs standardised is equivalent).
+1. **The planned degenerate `stop()` was justified by a false premise.** The plan specified
+   `stop()` at tol `1e-8` because "`w ~ 0` makes the rotation undefined and the assertion fail
+   opaquely". Measured: the rotation **never breaks** — probed down to a target with *exactly*
+   zero score on both pair members, the basis stayed orthogonal and coords 3/4 stayed at 0. The
+   SVD only needs `w`'s *direction*, which float noise supplies. Shipped a **`warning()` at
+   `1e-12`** instead: what actually degrades is the target's *angular position within* the plane.
+2. **"Rotation angle predicts view quality" — false.** Pair (2,3) rotates 65 deg yet retains
+   *more* variance (0.9025) than pair (1,2) at 25 deg (0.8993); pair (2,4) rotates 86 deg and
+   still retains 0.8989. Retention tracks how close the rotated 4th direction stays to the
+   original PC4. Judge on the SS figure, never the angle. (Also killed the initial worry that
+   pair (2,4) would be a bad choice — it is fine.)
+3. **The prime suspect for the 17-vs-18 mismatch was wrong.** H2 (the `s(PC1,PC2)` smooth forcing
+   single-valuedness) is real — 5.1% of cells hold 2+ separated PC3 roots, median curve error
+   0.138 — but is **secondary** to H3, the plane mismatch (median 0.514). The exact-curve fix is
+   a genuine improvement but does **not** make the two plots agree.
+4. **Suspected a porting bug; there isn't one.** The under-determination is in the original PhD
+   method. Checking `origin/original_PhD_code` before recommending a "fix" changed the entire
+   nature of the recommendation.
+5. **Ruled out early, cheaply:** the GAMs are byte-identical (`max|p17-p18| = 0.000e+00`; only
+   `.pred_function()`'s 3-dp floor-round differs, 9.98e-04); biplotEZ `Lmat` **is** `svd(X)$v`
+   with no sign normalisation and `e.vects` does **not** permute it; the four local-CF filters
+   only shrink the *search set*, never the drawn curve.
 
 ### Architecture decisions / conventions
 
-- **Display-only raw-unit conversion.** Computation, storage, projection geometry, and the model
-  all stay in model (standardised) units; only plot/print methods convert, via
-  `.bl_rescale_biplot_axes()` (axes) and `.scale_to_raw()` (values). Gated on
-  `bl_result$scaling`; no-op for older objects. Added as CLAUDE.md S5 conventions.
-- **Level vs delta is the key correctness rule** for `.scale_to_raw()`: a *level* (observed, CF,
-  sparse) maps `v*scale + center`; a *delta* (Shapley `data_to_boundary`) maps `v*scale` (no
-  centre). Any future feature-value display must pick the right `kind`.
-- **`scaling` is a separate field** from `X_center`/`X_sd` (internal PCA standardisation) and the
-  `standardise` flag — never conflate them.
+- **Script 17 mirrors the package's rotation; it does not call it.** `.bl_rotate()` cannot be
+  reused (square `V` required, only 2 columns returned). The mirror cross-references
+  `R/local_cf.R:45` as the authority.
+- **Measure before guarding.** Two guards this session were designed from theory and corrected by
+  measurement (see dead ends 1 and 2). The surviving guards report *both* diagnostics (angle and
+  SS retained) and warn only on the one that is actually predictive.
+- **`.bl_rotate()` behaviour is frozen pending an explicit instruction** — changing it moves every
+  Phase 3 counterfactual, so it is not covered by the CLAUDE.md §4 "outputs proven equivalent"
+  rule.
 
 ### Next steps
 
-1. **Mac-tester confirmation, then merge `method_developments` -> `main`** (standing carry-over).
-2. **Optional follow-ups** (only on request): per-variable transform families (non-affine needs
-   spline-calibrated axes — CLAUDE.md S9); a convenience accessor if reading `B_x`/CF in raw
-   units programmatically becomes common.
-3. The untracked `scripts/16_*`/`18_*` are the user's own files — confirm with the user whether
-   they should be tracked; not touched by this work.
-
----
-
-## Session summary (2026-06-16) — `new_title` for all biplot plot functions
-
-### Completed this session
-
-1. **Extended the `new_title` parameter to every biplot `plot()` method.** Previously only
-   `plot_biplotEZ()` accepted `new_title` (default `NA`, overriding
-   `bl_result$biplot_obj$Title`). A user calling `plot(bl_sparse, new_title = "xx")` had the
-   argument silently swallowed by `...`. Now uniform across all four biplot classes:
-   - `plot.bl_local_result()` (`R/local_cf.R`) — **code change**: added `new_title = NA`
-     param + roxygen; after the hardcoded `sprintf("Local biplot -- target N [pair ...]")`
-     title, added `if (!is.na(new_title)) biplot_plot$Title <- new_title` (override the
-     auto-generated default only when supplied).
-   - `plot.bl_surrogate()` (`R/surrogate.R`) — **code change**: added `new_title = NA` param
-     + roxygen; applied `if (!is.na(new_title)) biplot_obj$Title <- new_title` right after
-     `biplot_obj <- bl_result$biplot_obj`, before the rotation call.
-   - `plot.bl_sparse_result()` (`R/shapley.R`) — **no code change**: forwards `...` to
-     `plot.bl_local_result()`, so it works automatically once the above landed. Only the
-     roxygen `@param ...` example list was updated to mention `new_title`.
-   - `plot.bl_result()` (`R/plot_biplot.R`) — **no change**: already
-     `function(x, ...) plot_biplotEZ(x, ...)`; `new_title` flows straight through.
-
-2. **Reference doc** `.claude/reference/review_section9_to_15.md` updated (per the CLAUDE.md
-   Section 2 update-trigger rule — it covers `local_cf.R` + `shapley.R`): Step 12 documents
-   `new_title` for the local biplot, Step 14 documents the sparse pass-through, plus a
-   **base-graphics title-error note** (see dead-end #1). Not mirrored in auto-memory, so no
-   memory sync needed.
-
-3. **Verification (all green):**
-   - `devtools::document()` — clean; regenerated `man/plot.bl_local_result.Rd`,
-     `man/plot.bl_sparse_result.Rd`, `man/plot.bl_surrogate.Rd`.
-   - `devtools::test()` — **77 PASS, 0 FAIL, 4 WARN** (baseline unchanged; additive change).
-   - Visual check via throwaway `Rscript verify_title.R` (deleted after use, per the
-     biplotEZ Windows-segfault rule): all four `plot(..., new_title = ...)` calls render the
-     custom title; omitting it reproduces the existing defaults.
-
-4. **Committed and pushed** — commit `dc0c3c4` on `method_developments`, pushed to
-   `origin` (`d19a331..dc0c3c4`). 7 files (3 `R/`, 3 `man/`, 1 reference doc).
-
-### Dead ends / corrections this session
-
-1. **The plan's predicted title-error was wrong; corrected after empirical check.** The plan
-   asserted that passing a list/data.frame as `new_title` would raise `"invalid 'main'
-   argument"`. Direct testing of `graphics::title(main = ...)` showed it is far more tolerant:
-   numeric, multi-element character vectors, lists, and data.frames are all coerced via
-   `as.character()` and do **not** error. The only failure mode is a value base R cannot
-   coerce to a character vector — a **function/closure** or **environment** — which raises
-   `"cannot coerce type 'closure' to vector of type 'character'"` from inside the biplotEZ
-   `plot()` flush, not from the plot function's own arg handling (no validation is performed,
-   matching `plot_biplotEZ()`). Both the reference doc and the archived plan were corrected to
-   reflect the verified behaviour.
-
-2. **`Rscript -e` quoting failed in Bash on Windows** when testing the `title()` coercion
-   one-liner (the inner double-quotes broke the cmd-level parse: `'num:" , chk(3.14)' is not
-   recognized`). Same class of issue noted in earlier sessions. Fix: wrote the probe to
-   `chk_title.R` and ran `Rscript chk_title.R`. Reinforces the existing "write a `.R` file"
-   rule — it applies to any non-trivial `-e` payload on Windows, not just biplotEZ calls.
-
-### Architecture decisions / new conventions
-
-- **`new_title = NA` is now the uniform convention across all biplot plot methods.** No new
-  pattern was invented — the existing `plot_biplotEZ()` contract (`new_title = NA` default;
-  `if (!is.na(new_title)) <biplot_obj>$Title <- new_title`; biplotEZ renders `$Title`) was
-  simply propagated. Added as a one-line "Always Do" bullet in CLAUDE.md Section 5 so any
-  future biplot plot function includes it.
-
-### Next steps
-
-1. **User to commit `scripts/03_loan_status_Boundary_Logic.R`** when satisfied with the
-   experimental edits (or revert the `new_title = "xx"` placeholder to a real title first).
-2. Carried over: Mac tester confirmation, then merge `method_developments` -> `main`.
-3. Outstanding deferred work unchanged — see CLAUDE.md Section 9 (Phase 3 unit tests, full
-   Mahalanobis Shapley in Phase 2, CRAN prep, etc.).
+1. **Decide what to commit — nothing is committed.** Candidates: today's doc changes
+   (`CLAUDE.md` §9, `2 implementation_summary.txt` §4.2, the new technical note), the
+   *previous* session's still-uncommitted `CLAUDE.md` Shapley d.p. note, and this `progress.md`.
+   **`scripts/17_*` and `scripts/18_*` need an explicit `git add`** or they will not be captured.
+2. `progress.md` was 2 commits behind on entry (`0f47602`, `355e3e3`); both are now covered under
+   History.
+3. Carried over: Mac tester confirmation, then merge `method_developments` -> `main`.
+4. Deferred by decision: the `.bl_rotate()` minimal-rotation option (CLAUDE.md §9 + technical
+   note §7). If ever revisited, prototype **outside** the package and measure reproducibility,
+   SS retained, and counterfactual Mahalanobis distances across a range of targets first.
 
 ---
 
@@ -191,6 +208,17 @@ auto-configured identity `Rowan <adriaan.rowan@yala.co.za>` (no `user.name`/`use
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
 
+- **2026-06-17** — `355e3e3` round the Shapley plot counterfactual label to 2 d.p. (observed
+  stays 3 d.p.); CLAUDE.md §9 note on the resulting d.p. inconsistency left uncommitted.
+- **2026-06-16** — `0f47602` fix a stale import and non-ASCII chars in `biplot_grid.R`; doc updates.
+- **2026-06-16** — raw-unit scaling support (`00b43a5`): `bl_set_scaling()` +
+  `.bl_rescale_biplot_axes()` (raw-unit biplot axes), `.scale_to_raw()` (raw-unit feature values in
+  Shapley/sparse/target prints; `kind="level"` vs `"delta"` is the correctness rule), and
+  `bl_local$bl_counterfactual` mirroring `bl_target`. All display-only. Script 03 fixed to
+  standardise on the training split only (was leaking test data). 77 -> 136 PASS.
+- **2026-06-16** — `new_title = NA` extended to every biplot `plot()` method (`dc0c3c4`);
+  established as a CLAUDE.md §5 convention. Dead end: the plan's predicted "invalid 'main'"
+  error was wrong — `title()` coerces almost anything; only a closure/environment errors.
 - **2026-06-08** — editor-diagnostics fixes in `shapley.R`/`local_cf.R` (non-ASCII chars,
   multi-line `@importFrom`, ggplot2 NSE globals).
 - **2026-06-08** — script cleanup + pkgdown site rebuild. Dead-end: pkgdown 2.2.0

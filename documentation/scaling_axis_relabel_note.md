@@ -102,4 +102,4 @@ biplot feature.
 
 - `2 implementation_summary.txt` Section 4.4.1 -- function-level mechanics.
 - `.claude/reference/scaling_axis_relabel_plan.md` -- the approved implementation plan.
-- `.claude/reference/review_section4_to_6.md` -- `bl_set_scaling()` in the loan workflow.
+- `development/reference/review_section4_to_6.md` -- `bl_set_scaling()` in the loan workflow.

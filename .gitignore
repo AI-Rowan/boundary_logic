@@ -17,3 +17,7 @@ data/
 .claude/settings.json
 .claude/settings.local.json
 .positai
+
+# Personal scratch scripts and their outputs - not published
+scripts/
+outputs_dev_oos/

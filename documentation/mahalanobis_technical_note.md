@@ -380,9 +380,9 @@ All paths below are relative to this file (`documentation/`).
     4.8 (cross-pair selector table)
   - `../CLAUDE.md` Section 6 (architectural facts), Section 9 (Shapley
     attribution as remaining deferred work)
-  - `../.claude/reference/review_section7_to_8.md` Step 8 (Phase 2
+  - `../development/reference/review_section7_to_8.md` Step 8 (Phase 2
     walkthrough)
-  - `../.claude/reference/review_section9_to_15.md` Stage G (Phase 3
+  - `../development/reference/review_section9_to_15.md` Stage G (Phase 3
     walkthrough)
   - `../.claude/reference/mahalanobis_implementation_plan.md` -- the
     approved plan that drove this implementation

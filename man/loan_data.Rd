@@ -50,9 +50,9 @@ read.csv(system.file("extdata", "loan_data.csv", package = "boundarylogic"))
 The raw file contains character columns for \code{person_gender},
 \code{person_education}, \code{person_home_ownership}, \code{loan_intent},
 and \code{previous_loan_defaults_on_file}. These must be integer-encoded
-before passing to \code{bl_prepare_data()}. The example script
-\code{scripts/03_loan_status_Boundary_Logic.R} shows the encoding step
-and an iterative three-phase workflow, including a domain filter that
-retains only applicants with a prior default on file.
+before passing to \code{bl_prepare_data()}. The vignette
+\code{vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")}
+shows the encoding step and an iterative three-phase workflow, including a
+domain filter that retains only applicants with a prior default on file.
 }
 \keyword{datasets}
