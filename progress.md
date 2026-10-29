@@ -18,8 +18,10 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
   `review_section*.md` walkthroughs were moved to a new tracked `development/` folder (excluded
   from the built package via `.Rbuildignore`) — see session below.
 - **`.bl_rotate()` plane under-determination** — found 2026-07-15, **documented and deliberately
-  not actioned**. See `documentation/rotation_plane_underdetermination_note.md`, CLAUDE.md §9.
-  Do not "fix" without an explicit instruction.
+  not actioned**. See `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §4.1,
+  CLAUDE.md §9. A candidate deterministic replacement is written up as a proposal in the same
+  note's §6 (partial verification harness alongside it) — **not implemented**. Do not "fix" or
+  implement §6 without an explicit instruction.
 - **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
 - **Baseline test status: 136 PASS / 0 FAIL / 4 WARN** (the 4 WARN are pre-existing biplotEZ
   CVA 2-class notices).
@@ -33,174 +35,119 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
-## Session summary (2026-08-03, latest) — split scripts/ into playground + tracked development/, merge to main
+## Session summary (2026-09-10, latest) — integrated the `documentation/biplot-rotation/` bundle; fixed what the deletions broke
 
-Goal: publish the latest code to GitHub `main` for easy access (`main` was 19 commits behind
-`method_developments`, 0 ahead), while keeping personal scratch scripts out of the published repo.
+Goal: the user added `documentation/biplot-rotation/` — a much larger, consolidated technical note
+plus the four R scripts that reproduce every measurement in it — snapshotted from a separate
+writing project (`Explain XAI code`), and deleted three files this repo had built up on the same
+topic: the PhD thesis `.docx`, an untracked draft `biplot_rotation_and_pair_selection.md` (never
+committed, so no git loss), and the tracked `rotation_plane_underdetermination_note.md` (staged as
+a `git mv` into `development/` by the 2026-09-01 session but never committed, so also gone from the
+working tree). This is **documentation housekeeping only** — no `R/` change, nothing from the new
+note's §6 proposal implemented.
 
 ### What changed
 
-- **`scripts/`** is now fully gitignored (`.gitignore`) — a personal playground, never published.
-  It still holds all six files on disk (`01_iris_SVM_PCA_biplot.R`, `17_loan-gam-pca-3d-4var-surface.R`,
-  `18_loan-glm-4var-pcabiplot.R`, `LendingClub_PD_Model_R.R`, `loans_full_schema.csv`,
-  `pima diabetes.csv`); `git rm --cached` was used (never a raw `rm`), so nothing was deleted from
-  disk. `outputs_dev_oos/` (an empty artefact dir from `LendingClub_PD_Model_R.R`) was gitignored
-  pre-emptively too.
-- **New tracked `development/` folder** holds what `scripts/` is not scratch for: the main
-  dev/testing harness `development/03_loan_status_Boundary_Logic.R` (`git mv`'d from `scripts/03_...`,
-  history preserved) and its three code walkthroughs, `git mv`'d from `.claude/reference/` to
-  `development/reference/` (`review_section4_to_6.md`, `review_section7_to_8.md`,
-  `review_section9_to_15.md`). Added `^development$` to `.Rbuildignore` so it never ships in the
-  built package (R CMD check NOTE count unaffected).
-- **Path references repaired**: `R/datasets.R` roxygen (now points at the vignette instead of the
-  no-longer-published script path — `man/loan_data.Rd` regenerated via `devtools::document()`),
-  `README.md` repo-structure block, `CLAUDE.md` §2/§5 (script-specific reference table, the
-  reference-folder convention table, the `v2 block` pointer), `documentation/mahalanobis_technical_note.md`,
-  and `documentation/scaling_axis_relabel_note.md`. The three review docs cross-reference each
-  other by bare filename, so those internal links needed no edits. Auto-memory
-  `reference_docs.md` synced to match, per the CLAUDE.md memory-sync rule.
-- **Committed and merged**: this restructure, plus the previously-pending 2026-07-15 documentation
-  work (`CLAUDE.md` §9 rotation-plane entry, `2 implementation_summary.txt` §4.2 caveat, the new
-  `documentation/rotation_plane_underdetermination_note.md`), was committed on `method_developments`
-  and fast-forward-merged into `main` (0 commits diverged, so no merge commit was needed), then both
-  branches pushed to `origin`.
+- **Ownership.** All four scripts (`17_1a_toy-2d-to-1d-rotation.R`,
+  `17_1_loan-gam-pca-3d-3var-rotation.R`, `17_2_loan-gam-pca-4var-slices.R`,
+  `17_3_minimal-rotation-verification.R`) and `README.md` carried a "REFERENCE COPY... the sandbox
+  copy is the source of truth" banner; replaced with a short origin note (`Explain XAI code`
+  sandbox, snapshot 2026-09-10) recording that this repo is now their home.
+- **Nothing unique lost to the deletions.** Compared the deleted `rotation_plane_underdetermination_note.md`
+  against the new note's §4.1 (using this session's own prior knowledge of the deleted file's
+  content — no `git show`/recovery command was used, per explicit instruction). Everything
+  substantive was already reproduced in §4.1, except two scope-limiting bullets ("Phases 1 and 2
+  never call `.bl_rotate()`"; "`bl_set_scaling()` is display-only") — folded those into §4.1's "What
+  is *not* affected" paragraph, then dropped the note's now-redundant citations of the deleted file
+  (its source-material paragraph and §7 References).
+- **Line-citation check.** Verified every `R/local_cf.R` line range the note cites against the file
+  as it exists now: 5 of 6 exact; one (`432-621`, describing the per-pair loop inside
+  `bl_find_local_cf()`) was off by one line — corrected to `432-622` (the loop's true bounds).
+- **Repointed every stale reference** the deletions left in `CLAUDE.md` (§2 reading list, §6 new
+  bullet below, §9 deferred-work entry, and reverted a documentation-folder-convention table edit
+  from 2026-09-01 that no longer applies now that neither file lives in `development/`),
+  `2 implementation_summary.txt` §4.2's caveat, and this file's Standing items — all now point at
+  `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`.
+- **Surfaced two new findings in `CLAUDE.md` §6 Key Architectural Facts and §9 Deferred Work:**
+  the note's §5.9 (`bl_find_local_cf()`'s reported `dist_mahalanobis` depends on prior calls in the
+  same session — quote a counterfactual from a first call on a fresh `bl_result`), and its §6 (a
+  written-up, **not implemented**, closed-form deterministic-rotation + reproducible-plane-search
+  proposal, with a partial acceptance-test harness in `17_3_minimal-rotation-verification.R`).
+- **Made the scripts runnable here**: added a short "Running these in the `boundary_logic` package
+  repo" note to `README.md` (`devtools::load_all()` or install the branch under test first).
 
-**Test status: 136 PASS / 0 FAIL / 4 WARN — baseline unchanged.** Confirmed after `devtools::document()`
-regenerated `man/loan_data.Rd`; no `R/` logic changed, only a roxygen comment.
+**Test status: unchanged, 136 PASS / 0 FAIL / 4 WARN baseline — not re-run this session (no `R/`
+file touched; confirmed `git diff --stat -- R/` is empty).**
 
 ### Decisions
 
-- **Mac-tester merge gate consciously overridden.** `progress.md` and CLAUDE.md §10 gate the
-  `method_developments` -> `main` merge on macOS install confirmation, which has not landed. The
-  user weighed "easy access to the latest code" (including the loan-default vignette, which existed
-  only on `method_developments`) as the higher priority and explicitly asked to proceed.
-- **`03_loan_status_Boundary_Logic.R` is not scratch.** Initially proposed folding all of `scripts/`
-  into `.gitignore`; the user corrected this — script 03 is the main tool-logic development/testing
-  harness and the subject of required-reading walkthroughs (CLAUDE.md §2), so it and its docs need a
-  tracked home, not to be discarded. Resulted in the `development/` split rather than a blanket ignore.
-- **Git history left alone.** The six scratch files remain findable in old commits (three were
-  previously tracked). No `filter-repo`, no force-push — user's explicit choice.
+- **The 2026-09-01 session's "Follow-up" (relocating into `development/`) is left as accurate
+  history, not rewritten** — it correctly describes what was true then. Today's changes supersede
+  it via a new entry rather than editing the old one, per this file's own convention.
+- **Historical session-summary text is not touched even where it names now-dead paths** (the
+  2026-09-01 entry, and the History one-liners below) — only the live "Standing items" pointer was
+  updated. This follows the project's existing convention that session summaries are point-in-time
+  narrative.
 
 ### Next steps
 
-1. None outstanding from this session — restructure, doc repairs, tests, commit, merge, and push
-   are all complete.
-2. Carried over: the `.bl_rotate()` minimal-rotation option (CLAUDE.md §9 + technical note §7) —
-   still deferred pending an explicit instruction.
-3. Optional, not done: rebuild the pkgdown site (`docs/`) — it still shows the old `scripts/` line
-   in its rendered `README.md` mirror. Cosmetic; see CLAUDE.md §5 for the rebuild gotchas.
+1. None outstanding on this specific task.
+2. **Nothing is committed.** If the user wants this committed (including the two deletions'
+   staged/unstaged git state), that needs an explicit commit instruction.
+3. Recommend running `documentation/biplot-rotation/17_3_minimal-rotation-verification.R` against
+   this repo's `method_developments` build (`devtools::load_all()` or `devtools::install()` first)
+   to confirm it still passes here — not yet done as part of this housekeeping pass.
+4. Carried over, untouched: the `.bl_rotate()` deterministic-rotation proposal (CLAUDE.md §9, now
+   pointing at the note's §6) and the optional pkgdown site rebuild (Standing items).
 
 ---
 
-## Session summary (2026-07-15) — script 17 target-alignment rotation + rotation-plane finding
+## Session summary (2026-09-01) — biplot rotation + optimal pair selection: detailed technical write-up (external deliverable, no code changes)
 
-Three linked pieces of work on `scripts/17_loan-gam-pca-3d-4var-surface.R` (the user's 3D GAM
-decision-surface demo), ending in a significant methodological finding about the package's
-local biplot rotation. **No package code was changed** (`git diff -- R/` is empty).
+Goal: the user attached the PhD thesis excerpt `documentation/Optimal rotation of the biplot Phd notes.docx` (§3.5–3.5.2, "Optimal rotation of the biplot") and asked for a detailed technical explanation of (1) the Procrustes-based rotation `.bl_rotate()` performs and (2) how `bl_find_local_cf()` selects which eigenvector pair to rotate to, suitable for reuse in a *different* project. Per the user's explicit request, content was planned before writing.
 
-### Modified files
+**No package code changed.** `git status` was clean at session start and remained so throughout except for the one untracked file the user added (the `.docx`); `git diff -- R/` is empty. This was a pure documentation-synthesis task.
 
-| File | State | What changed |
-|---|---|---|
-| `scripts/17_loan-gam-pca-3d-4var-surface.R` | **untracked** | rotation added; `proj_pair` knob; retargeted to row 49 / pair (2,3); black curve made exact |
-| `documentation/rotation_plane_underdetermination_note.md` | **untracked (new)** | the finding: derivation, measurements, options |
-| `CLAUDE.md` | modified | §9 entry for the rotation finding (+ the still-uncommitted Shapley d.p. note carried from the previous session) |
-| `2 implementation_summary.txt` | modified | §4.2 caveat under the `.bl_rotate()` description |
-| `.claude/plans/rotate_3d_pca_to_target.md`, `rotate_3d_proj_pair_knob.md`, `compare_3d_vs_2d_biplot_target49.md` | gitignored | three approved plans, updated post-implementation |
+### What changed
 
-**Test status: 136 PASS / 0 FAIL / 4 WARN — baseline unchanged, and NOT re-run.** No `R/` file
-was touched, so the suite cannot have regressed. **Nothing committed.**
+- **New deliverable, now tracked at `development/biplot_rotation_and_pair_selection.md`** (moved there from the scratchpad — see Follow-up below): full derivation of the Procrustes rotation (the `Y`/`Z` construction, SVD solution `A = V*U'`, `V^new = VA'`, the thesis's worked examples), the code mapped line-by-line to `.bl_rotate()`/`bl_find_local_cf()`, and a "known issues" section (rotation-plane under-determination, within-pair/cross-pair metric mismatch, the explicit global-fidelity trade-off, the CVA class-mean cost). Verified against every source file before delivery (formulas, code snippets, and all numeric claims).
+- **`.claude/plans/rippling-herding-salamander.md`** (gitignored) — the approved content plan for the write-up, written and approved via the plan-mode workflow before the document itself was written.
+- **`CLAUDE.md`** updated: §2 now cross-references the write-up as required reading before touching `.bl_rotate()` or the pair search; §5 gained a new gotcha entry for the docx/doc-format dead end below.
+- `documentation/Optimal rotation of the biplot Phd notes.docx` — read in full this session, then **removed from the repo by the user** once its content was consolidated into the write-up above (see Follow-up).
 
-### 1. Target-alignment rotation (plan: `rotate_3d_pca_to_target.md`)
+### Follow-up (same session) — relocated into `development/`, source docx removed
 
-Script 17 now rotates the PCA basis onto the target so it lies exactly on the drawn plane,
-simulating what `bl_find_local_cf()` does. A script-local `.bl_rotate_full()` mirrors the
-package's private `.bl_rotate()` (`R/local_cf.R:45`) line-for-line but takes the **full 4x4** `V`
-and returns the **full** rotated basis — the package's version needs a square `V` (it calls
-`solve()`) and returns only 2 columns, while the 3D plot needs 3.
+The user removed `documentation/Optimal rotation of the biplot Phd notes.docx` (its content is now
+fully consolidated in the write-up) and asked for `documentation/rotation_plane_underdetermination_note.md`
+and the scratchpad write-up to both move into `development/`, alongside the main dev/testing
+harness. This **supersedes** the original "scratchpad only" decision below.
 
-Key property (verified, 13 assertions): the target's rotated coords 3 **and** 4 are both ~1e-17,
-so the 4D -> 3D reduction is **lossless for the target** (reconstruction error 8.88e-16) and
-lossy for everyone else (0.0456 on an ordinary row). This is why the **full** basis must be
-rotated — rotating a truncated 4x3 would merely *project* the target onto the plane.
+- `git mv documentation/rotation_plane_underdetermination_note.md development/rotation_plane_underdetermination_note.md` — history preserved, staged (not committed).
+- `development/biplot_rotation_and_pair_selection.md` written as a new tracked file (was previously scratchpad-only; not yet `git add`ed).
+- Path references repaired everywhere they appeared: `CLAUDE.md` §2 (bullet now points at `development/biplot_rotation_and_pair_selection.md`, docx reference removed), `CLAUDE.md` §2 documentation-folder-convention table (the `development/` row now explicitly allows generic technical notes, not just the harness + its walkthroughs), `CLAUDE.md` §9 (rotation-plane deferred-work entry), and `2 implementation_summary.txt` §4.2 caveat — all three `documentation/rotation_plane_underdetermination_note.md` mentions updated to `development/...`. Checked the auto-memory `reference_docs.md` for the memory-sync rule — it doesn't mirror either file, so no memory update needed.
+- **Nothing staged this follow-up is committed** — the `git mv` stages itself (git's normal behaviour), but no `git add`/`git commit` was run.
 
-### 2. `proj_pair` knob (plan: `rotate_3d_proj_pair_knob.md`)
+### Dead ends / issues hit
 
-Section 0 config block holds `i` and `proj_pair`. Decisions: **one rotation per run, no pair
-search** (unlike `bl_find_local_cf()`); **provenance axis labels** (`c(2,4)` -> "Rotated PC2",
-"Rotated PC4", "Rotated residual") since the pair's content always lands in slots 1-2 regardless
-of which pair is named; **vertical axis fixed** to rotated column 3; internal `Z$PC1/PC2/PC3`
-kept as *slot* names (renaming would ripple through the GAM formula, `acast`, and plotly refs).
+1. **File lock.** The first read attempt on the `.docx` failed with a `PermissionError` (`withBinaryFile: permission denied`) — the file was open in Word (or mid-OneDrive-sync) at that moment. Resolved once the user closed it.
+2. **Wrong file format under a `.docx` extension.** `file <path>` reported `Composite Document File V2 Document` (legacy binary `.doc`), not `Microsoft Word 2007+`. `pandoc -t markdown` failed with `couldn't unpack docx container: Did not find end of central directory signature` — pandoc cannot read legacy binary `.doc` regardless of the file's extension.
+3. **Word COM automation as a scripted workaround — tried, failed, abandoned.** `New-Object -ComObject Word.Application` + `$doc.Documents.Open()` succeeded (72 paragraphs read back), but `$doc.SaveAs2(path, wdFormatText)` failed with an opaque `Command failed` COM exception. Suspected but unconfirmed cause: the destination path under the session scratchpad's long GUID-based directory (~220 characters) tripping a legacy path-length limit inside Word's COM layer — not confirmed, because the user resolved the actual root cause directly (re-saved the file as real `.docx` in Word) before the hypothesis needed testing. Once re-saved, plain `pandoc -t markdown --extract-media=<dir>` converted it immediately. **Recorded as a new gotcha in `CLAUDE.md` §5** so a future session doesn't re-attempt Word COM as a repair path.
+4. Not a dead end but a process note: the harness switched into Plan Mode mid-task for what was fundamentally a writing/synthesis task rather than a code change. Handled by treating "the document's structure and sources" as the thing being planned, then writing the deliverable after explicit approval.
 
-### 3. Comparison against script 18 + the finding (plan: `compare_3d_vs_2d_biplot_target49.md`)
+### Decisions
 
-Retargeted to `i <- 49`, `proj_pair <- c(2L, 3L)` (the pair `bl_find_local_cf()` selects) and
-replaced the black curve with an **exact level set** computed directly on the plane, instead of
-contouring a `PC3 ~ s(PC1,PC2,k=60)` smooth fitted through a `|p-0.5|<0.02` cloud. `surf_mat_full`
-became dead and was deleted; the green surface keeps its smooth (it is a genuine 3D object).
+- ~~**The deliverable stays in the session scratchpad, not committed to `documentation/`.**~~ — **superseded by the Follow-up above.** The user explicitly asked to move it (and the rotation-plane note) into `development/` instead, once the source docx was consolidated and removed.
+- **Format: single Markdown file, full derivation + code + caveats depth** — both confirmed with the user via `AskUserQuestion` against a Word-doc-output alternative and a lighter conceptual-overview alternative.
+- **CLAUDE.md gained several additions** (see above and Follow-up) rather than a new standalone note, since none of them is itself a methodological change to the package — reading-list cross-references, a documentation-folder-convention update, and a tooling gotcha.
+- **`development/` now also holds generic (non-script-specific) technical notes**, not just the harness script and its per-script walkthroughs — a deliberate widening of that folder's role, done at the user's explicit request. `CLAUDE.md` §2's convention table was updated to describe this rather than leaving it undocumented.
 
-**The finding:** script 17's plane and the package's are **65.9 degrees apart** (principal angles
-`0.00, 65.91`) — they share only the target direction. Root cause: `Y <- rbind(-x, 0, x)` is
-**rank 1**, so `M = t(YV) %*% YVr_padded` is rank 1 (singular values `1.63, 6.7e-17, 0, 0`) with a
-3-dim exactly degenerate null space. The Procrustes minimiser is pinned only along the target
-direction; the plane's second direction is LAPACK's arbitrary tie-break. Bases differing by
-**4.6e-15** give planes 66 deg apart. Only **46%** of the package's plane lies in the `span(V2,V3)`
-it is named after. **Inherited from the original PhD method** — `origin/original_PhD_code:scripts/1.3
-Optimal Rotation.R` does the identical padding; the package is a faithful port, not a porting bug.
-
-Decision (user): **document, change nothing.** Written up in
-`documentation/rotation_plane_underdetermination_note.md` with pointers from CLAUDE.md §9 and
-`2 implementation_summary.txt` §4.2.
-
-### Dead ends / corrections this session
-
-1. **The planned degenerate `stop()` was justified by a false premise.** The plan specified
-   `stop()` at tol `1e-8` because "`w ~ 0` makes the rotation undefined and the assertion fail
-   opaquely". Measured: the rotation **never breaks** — probed down to a target with *exactly*
-   zero score on both pair members, the basis stayed orthogonal and coords 3/4 stayed at 0. The
-   SVD only needs `w`'s *direction*, which float noise supplies. Shipped a **`warning()` at
-   `1e-12`** instead: what actually degrades is the target's *angular position within* the plane.
-2. **"Rotation angle predicts view quality" — false.** Pair (2,3) rotates 65 deg yet retains
-   *more* variance (0.9025) than pair (1,2) at 25 deg (0.8993); pair (2,4) rotates 86 deg and
-   still retains 0.8989. Retention tracks how close the rotated 4th direction stays to the
-   original PC4. Judge on the SS figure, never the angle. (Also killed the initial worry that
-   pair (2,4) would be a bad choice — it is fine.)
-3. **The prime suspect for the 17-vs-18 mismatch was wrong.** H2 (the `s(PC1,PC2)` smooth forcing
-   single-valuedness) is real — 5.1% of cells hold 2+ separated PC3 roots, median curve error
-   0.138 — but is **secondary** to H3, the plane mismatch (median 0.514). The exact-curve fix is
-   a genuine improvement but does **not** make the two plots agree.
-4. **Suspected a porting bug; there isn't one.** The under-determination is in the original PhD
-   method. Checking `origin/original_PhD_code` before recommending a "fix" changed the entire
-   nature of the recommendation.
-5. **Ruled out early, cheaply:** the GAMs are byte-identical (`max|p17-p18| = 0.000e+00`; only
-   `.pred_function()`'s 3-dp floor-round differs, 9.98e-04); biplotEZ `Lmat` **is** `svd(X)$v`
-   with no sign normalisation and `e.vects` does **not** permute it; the four local-CF filters
-   only shrink the *search set*, never the drawn curve.
-
-### Architecture decisions / conventions
-
-- **Script 17 mirrors the package's rotation; it does not call it.** `.bl_rotate()` cannot be
-  reused (square `V` required, only 2 columns returned). The mirror cross-references
-  `R/local_cf.R:45` as the authority.
-- **Measure before guarding.** Two guards this session were designed from theory and corrected by
-  measurement (see dead ends 1 and 2). The surviving guards report *both* diagnostics (angle and
-  SS retained) and warn only on the one that is actually predictive.
-- **`.bl_rotate()` behaviour is frozen pending an explicit instruction** — changing it moves every
-  Phase 3 counterfactual, so it is not covered by the CLAUDE.md §4 "outputs proven equivalent"
-  rule.
+**Test status: unchanged, 136 PASS / 0 FAIL / 4 WARN baseline — not re-run this session (no `R/` file touched).**
 
 ### Next steps
 
-1. **Decide what to commit — nothing is committed.** Candidates: today's doc changes
-   (`CLAUDE.md` §9, `2 implementation_summary.txt` §4.2, the new technical note), the
-   *previous* session's still-uncommitted `CLAUDE.md` Shapley d.p. note, and this `progress.md`.
-   **`scripts/17_*` and `scripts/18_*` need an explicit `git add`** or they will not be captured.
-2. `progress.md` was 2 commits behind on entry (`0f47602`, `355e3e3`); both are now covered under
-   History.
-3. Carried over: Mac tester confirmation, then merge `method_developments` -> `main`.
-4. Deferred by decision: the `.bl_rotate()` minimal-rotation option (CLAUDE.md §9 + technical
-   note §7). If ever revisited, prototype **outside** the package and measure reproducibility,
-   SS retained, and counterfactual Mahalanobis distances across a range of targets first.
+1. None outstanding on this specific task — the write-up was written, verified against sources, relocated to `development/` alongside the rotation-plane note, and all path references repaired.
+2. **Nothing is committed.** `git mv` of the rotation-plane note is staged; the new `development/biplot_rotation_and_pair_selection.md` and the `CLAUDE.md`/`2 implementation_summary.txt` edits are unstaged. If the user wants this committed, that needs an explicit commit instruction.
+3. Carried over, untouched this session: the `.bl_rotate()` minimal-rotation option (CLAUDE.md §9) and the optional pkgdown site rebuild (progress.md standing items).
 
 ---
 
@@ -208,6 +155,19 @@ Decision (user): **document, change nothing.** Written up in
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
 
+- **2026-08-03** — split `scripts/` into a gitignored personal playground and a new tracked
+  `development/` folder (main dev/testing harness + its three code walkthroughs); repaired path
+  references; committed and fast-forward-merged `method_developments` into `main` (Mac-tester gate
+  consciously overridden), then pushed both branches. 136 PASS / 0 FAIL / 4 WARN unchanged.
+
+- **2026-07-15** — script 17 (`scripts/17_loan-gam-pca-3d-4var-surface.R`) target-alignment
+  rotation experiments surfaced the `.bl_rotate()` plane under-determination finding: bases
+  differing by 4.6e-15 give rotation planes 65.9 deg apart, and only 46% of the plane lies in the
+  `proj_pair` eigenplane it is named after. Documented in
+  `documentation/rotation_plane_underdetermination_note.md` and CLAUDE.md §9; no package code
+  changed; folded into commit `c6ca185` alongside the 2026-08-03 restructure below. Full
+  derivation, the ruled-out false leads, and the minimal-rotation alternative considered: see
+  `git log -p progress.md` for this entry's original full write-up.
 - **2026-06-17** — `355e3e3` round the Shapley plot counterfactual label to 2 d.p. (observed
   stays 3 d.p.); CLAUDE.md §9 note on the resulting d.p. inconsistency left uncommitted.
 - **2026-06-16** — `0f47602` fix a stale import and non-ASCII chars in `biplot_grid.R`; doc updates.
