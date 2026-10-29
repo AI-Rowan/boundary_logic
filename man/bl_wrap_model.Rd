@@ -50,9 +50,10 @@ object is a \code{"bl_model"} compatible with \code{bl_build_grid()} and
 }
 \note{
 For \code{"XGB"} models, \code{model} must be a list of the form
-\verb{list(model = <xgb.Booster>, features = <character vector>)}.
-XGB is no longer supported by \code{bl_fit_model()}; use this function
-with \code{xgboost::xgboost()} fitted externally.
+\verb{list(model = <xgb.Booster>, features = <character vector>)}, where the
+booster is fitted externally with \code{xgboost::xgb.train()}. Models from
+\code{xgboost::xgboost()} (class \code{"xgboost"}) are not supported. XGB is not
+available through \code{bl_fit_model()}.
 }
 \section{Supported model types}{
 
@@ -61,7 +62,7 @@ For standard types (\code{"GLM"}, \code{"GAM"}, \code{"GBM"}, \code{"LDA"}, \cod
 used. Your model object must be compatible with the prediction call for
 that type (e.g., a \code{glm} object for \code{"GLM"}).
 
-For \code{"custom"} model types, supply a \code{predict_fn} — a function with
+For \code{"custom"} model types, supply a \code{predict_fn} -- a function with
 signature \verb{function(model, new_data)} that returns a numeric vector of
 probabilities (one per row of \code{new_data}).
 }

@@ -6,8 +6,14 @@
 
 # ---- Private helpers -------------------------------------------------------
 
+# Values pair position by position with their variables. An unknown variable
+# name is dropped together with its value, so later values do not shift one
+# variable along. A single value applies to every listed variable; any other
+# length mismatch is recycled with a warning.
 .make_label_line_vec <- function(label_offset_var, label_offset_dist,
                                   num_vars, var_names) {
+  n_var    <- length(label_offset_var)
+  len_dist <- length(label_offset_dist)
   if (is.character(label_offset_var)) {
     idx <- match(label_offset_var, var_names)
     bad <- label_offset_var[is.na(idx)]
@@ -15,17 +21,27 @@
       warning(sprintf(
         "label_offset_var: variable(s) not found: %s",
         paste(bad, collapse = ", ")), call. = FALSE)
+    if (len_dist == n_var)
+      label_offset_dist <- label_offset_dist[!is.na(idx)]
     label_offset_var <- idx[!is.na(idx)]
   }
   vec       <- rep(0.1, num_vars)
   valid_idx <- label_offset_var[label_offset_var >= 1L &
                                 label_offset_var <= num_vars]
-  if (length(valid_idx) > 0L)
+  if (length(valid_idx) > 0L) {
+    if (!len_dist %in% c(1L, n_var))
+      warning(sprintf(paste0(
+        "label_offset_dist has %d values for %d entries in ",
+        "label_offset_var; values are recycled."), len_dist, n_var),
+        call. = FALSE)
     vec[valid_idx] <- rep_len(label_offset_dist, length(valid_idx))
+  }
   vec
 }
 
 .make_ticks_vec <- function(ticks_v, ticks_var, ticks_n, num_vars, var_names) {
+  n_var  <- length(ticks_var)
+  len_tn <- length(ticks_n)
   if (is.character(ticks_var)) {
     idx <- match(ticks_var, var_names)
     bad <- ticks_var[is.na(idx)]
@@ -33,12 +49,19 @@
       warning(sprintf(
         "ticks_var: variable(s) not found: %s",
         paste(bad, collapse = ", ")), call. = FALSE)
+    if (len_tn == n_var)
+      ticks_n <- ticks_n[!is.na(idx)]
     ticks_var <- idx[!is.na(idx)]
   }
   vec       <- rep(ticks_v, num_vars)
   valid_idx <- ticks_var[ticks_var >= 1L & ticks_var <= num_vars]
-  if (length(valid_idx) > 0L)
+  if (length(valid_idx) > 0L) {
+    if (!len_tn %in% c(1L, n_var))
+      warning(sprintf(paste0(
+        "ticks_n has %d values for %d entries in ticks_var; ",
+        "values are recycled."), len_tn, n_var), call. = FALSE)
     vec[valid_idx] <- rep_len(ticks_n, length(valid_idx))
+  }
   vec
 }
 
@@ -165,8 +188,9 @@
 #'   `ticks_v`.
 #' @param ticks_n          Integer or integer vector; tick-mark count(s) for
 #'   the variable(s) named in `ticks_var`. A single value applies to all
-#'   listed variables; a vector must match the length of `ticks_var`.
-#'   Default `5L`.
+#'   listed variables; a vector must match the length of `ticks_var` and pairs
+#'   with it position by position. A name not in the model is dropped, with a
+#'   warning, together with its value. Default `5L`.
 #' @param which            Integer vector; indices of variables to draw axes
 #'   for. Defaults to all variables.
 #' @param X_names          Character vector; custom variable names for axis
@@ -177,8 +201,10 @@
 #'   (e.g., `c(1L, 3L)`). `0` (default) means no offset.
 #' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
 #'   in margin lines for `label_offset_var`. A single value applies to all
-#'   listed variables; a vector must match the length of `label_offset_var`.
-#'   Useful range 1--3. Default `1.5`.
+#'   listed variables; a vector must match the length of `label_offset_var`
+#'   and pairs with it position by position. A name not in the model is
+#'   dropped, with a warning, together with its value. Useful range 1--3.
+#'   Default `1.5`.
 #' @param rotate_deg       Numeric; angle in degrees to rotate the entire plot
 #'   clockwise. Rotates all plotted elements -- grid, training points, contour
 #'   lines, variable axes, and the target point -- without rerunning the
@@ -244,8 +270,8 @@ plot_biplotEZ <- function(bl_result,
                            contour_lty       = 1L) {
 
   if (!inherits(bl_result, "bl_result")) {
-    message("plot_biplotEZ(): 'bl_result' must be a 'bl_result' object from bl_assemble(). ",
-            "Did bl_build_result() return NULL due to a missing 'bl_data' argument?")
+    message("plot_biplotEZ(): 'bl_result' must be a 'bl_result' object from ",
+            "bl_build_result() or bl_assemble().")
     return(invisible(NULL))
   }
 

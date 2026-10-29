@@ -149,7 +149,10 @@ utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p"))
 #'   method. Default \code{2048L}.
 #' @param seed            Random seed for the approximate method. \code{NULL}
 #'   (default) uses the current RNG state, giving independent estimates across
-#'   repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results.
+#'   repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results;
+#'   this calls \code{set.seed()}, which resets the session's global RNG. Used
+#'   only when the number of variables exceeds \code{exact_max_vars}; the exact
+#'   method is deterministic and ignores \code{seed}.
 #'
 #' @return A list of class \code{"bl_shapley"} with the following fields:
 #'   \describe{
@@ -251,8 +254,9 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 #' @param x   A \code{"bl_shapley"} object from \code{\link{bl_shapley}}.
 #' @param ... Currently ignored.
 #'
-#' @return A \code{ggplot} object (invisible printing -- assign or call
-#'   explicitly to display).
+#' @return A \code{ggplot} object, returned visibly: it draws when called at
+#'   the console. Inside a function, a loop or a \code{source()}d script, wrap
+#'   the call in \code{print()} to draw it.
 #'
 #' @importFrom ggplot2 ggplot aes geom_col geom_label scale_fill_manual
 #' @importFrom ggplot2 scale_color_manual theme_bw theme labs
@@ -450,8 +454,9 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 #'
 #' Renders the rotated local biplot via \code{\link{plot.bl_local_result}}
 #' (which uses the biplotEZ pipeline) and then overlays the sparse
-#' counterfactual as a second cross marker. A blue cross indicates the sparse
-#' CF successfully flips the predicted class; red indicates it does not.
+#' counterfactual as a second cross marker. A green (\code{"green3"}) cross
+#' indicates the sparse CF successfully flips the predicted class; a yellow
+#' (\code{"yellow2"}) cross indicates it does not.
 #' All \code{\link{plot.bl_local_result}} parameters are forwarded through
 #' \code{...}; the local summary is suppressed and replaced by a combined
 #' sparse CF summary.

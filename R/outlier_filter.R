@@ -19,11 +19,13 @@
 #' The polygon is constructed in the standardised feature space (all variables
 #' centred and scaled), not in a biplot Z-space, so that it can be applied
 #' before the projection matrix is computed. The convex hull is computed using
-#' `aplpack::plothulls()` on the first two principal components of the raw
-#' feature matrix, which is a lightweight proxy for the full biplot projection.
+#' `aplpack::plothulls()` on the first two principal components of the
+#' standardised feature matrix, which is a lightweight proxy for the full
+#' biplot projection.
 #'
-#' @param bl_data       A `"bl_data"` object returned by `bl_prepare_data()`
-#'   or `bl_wrap_data()`.
+#' @param bl_data       A `"bl_data"` object, as returned by `bl_wrap_data()`.
+#'   (`bl_prepare_data()` already applies this filter and returns a
+#'   `"bl_filter_result"`, which this function does not accept.)
 #' @param hull_fraction Numeric in (0, 1]; the `fraction` argument for
 #'   `aplpack::plothulls()`. Values below `1` trim the most extreme points.
 #'   `1.0` retains all points (no trimming). Default `0.9`.
@@ -38,6 +40,8 @@
 #'   \item{`var_names`}{Feature column names.}
 #'   \item{`num_vars`}{Number of features.}
 #'   \item{`target_class`}{The positive class value (passed through).}
+#'   \item{`scaling`}{Display-only raw-unit scaling (passed through), or
+#'     `NULL`.}
 #'   \item{`polygon`}{`SpatialPolygons` convex hull in standardised PCA space.}
 #'   \item{`hull_fraction`}{The fraction value used.}
 #'   \item{`n_retained`}{Number of training rows retained.}
@@ -59,7 +63,8 @@ bl_filter_outliers <- function(bl_data,
 
   # ---- Validation -------------------------------------------------------
   if (!inherits(bl_data, "bl_data"))
-    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data().",
+    stop("'bl_data' must be a 'bl_data' object from bl_wrap_data(). ",
+         "bl_prepare_data() already applies the hull filter (hull_fraction).",
          call. = FALSE)
   stop_if_not_in_range(hull_fraction, 0, 1.001, "hull_fraction")  # allow == 1
   if (hull_fraction > 1) hull_fraction <- 1.0

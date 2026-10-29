@@ -16,7 +16,8 @@
 #' Read axis limits from a rendered biplotEZ plot
 #'
 #' Opens a temporary off-screen device, renders the biplot axes only
-#' (no points, no grid), reads `par("usr")`, then closes the device.
+#' (no points, no grid), reads `par("usr")`, then closes that device and
+#' restores the caller's active graphics device.
 #' Returns `c(min_val, max_val)` for a square plot.
 #'
 #' @param biplot_obj A `biplotEZ` S3 object.
@@ -24,15 +25,21 @@
 #'   if biplotEZ rendering fails).
 #'
 #' @importFrom biplotEZ samples axes
-#' @importFrom grDevices png dev.off
+#' @importFrom grDevices png dev.off dev.cur dev.set
 #' @importFrom graphics par
 #' @return Numeric vector of length 2: `c(min_val, max_val)`.
 #' @keywords internal
 .bl_get_plot_bounds <- function(biplot_obj, Z_train) {
+  # Close only the temporary device and re-activate the caller's one: a bare
+  # dev.off() would leave R's *next* open device active, not the caller's.
+  prev_dev <- grDevices::dev.cur()
   tmp_file <- tempfile(fileext = ".png")
   grDevices::png(tmp_file, width = 500L, height = 500L)
+  bounds_dev <- grDevices::dev.cur()
   on.exit({
-    grDevices::dev.off()
+    grDevices::dev.off(bounds_dev)
+    # dev.cur() is 1 when no device was open; dev.set(1) would open a new one
+    if (prev_dev > 1L) grDevices::dev.set(prev_dev)
     unlink(tmp_file)
   }, add = TRUE)
 
@@ -104,7 +111,8 @@
 #'   boundary. If `NULL` (default), a new polygon is computed from
 #'   `train_data` using `aplpack::plothulls()` with `fraction = outlie`.
 #' @param outlie        Numeric in (0, 1]; hull fraction used only when
-#'   `polygon` is `NULL`. Default `0.9`.
+#'   `polygon` is `NULL`. Default `1` (the hull encloses every training
+#'   point; outlier trimming happens earlier, in `bl_prepare_data()`).
 #' @param calc_hull     Logical; if `TRUE`, grid points outside the polygon
 #'   are removed from the returned grid object. This affects only the visual
 #'   prediction surface in the biplot -- the coloured background is trimmed to
@@ -112,23 +120,31 @@
 #'   `bl_find_boundary()` always clips contour segments to the hull polygon
 #'   independently. Default `TRUE`.
 #'
-#' @return A list of class `"bl_grid"` with components:
+#' @return A list of class `"bl_grid"` with components. With
+#'   `calc_hull = TRUE` (the default) `Zgrid`, `Xgrid`, `grid_prob` and
+#'   `col_value` hold only the grid points inside the hull, so they have fewer
+#'   than m^2 rows; with `calc_hull = FALSE` they hold all m^2 points.
 #' \describe{
-#'   \item{`Zgrid`}{Numeric matrix (m^2 x 2); grid coordinates in Z-space.}
-#'   \item{`Xgrid`}{Data frame (m^2 x p); grid back-projected to X-space.}
-#'   \item{`grid_prob`}{Numeric vector (length m^2); model scores per grid
-#'     point, in `[0, 1]`.}
-#'   \item{`col_value`}{Character vector (length m^2); colour per grid point
-#'     on a blue-white-red scale.}
+#'   \item{`Zgrid`}{Numeric matrix (grid points x 2); grid coordinates in
+#'     Z-space.}
+#'   \item{`Xgrid`}{Data frame (grid points x p); grid back-projected to
+#'     X-space.}
+#'   \item{`grid_prob`}{Numeric vector; model scores per grid point, in
+#'     `[0, 1]`.}
+#'   \item{`col_value`}{Character vector; colour per grid point on a
+#'     blue-white-red scale.}
 #'   \item{`min_val`}{Numeric; lower bound of the square plot region.}
 #'   \item{`max_val`}{Numeric; upper bound of the square plot region.}
 #'   \item{`polygon`}{`sp::SpatialPolygons` convex hull.}
+#'   \item{`hull_fraction`}{Numeric; the `outlie` value the hull was built
+#'     with.}
 #'   \item{`ct`}{List of contour line objects (boundary search contours).}
 #'   \item{`ct_surrogate`}{List of contour line objects with hull-clipped
 #'     boundaries for `bl_surrogate()`. Outside-hull cells are set to
 #'     `cutoff` before extraction. Not used in biplot rendering.}
 #'   \item{`xseq`}{Numeric vector (length m); x-axis grid sequence.}
 #'   \item{`yseq`}{Numeric vector (length m); y-axis grid sequence.}
+#'   \item{`b_margin`}{Numeric; the contour band half-width used.}
 #' }
 #'
 #' @importFrom grDevices contourLines colorRampPalette

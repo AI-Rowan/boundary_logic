@@ -28,8 +28,9 @@ numeric 0/1.}
 \item{feature_cols}{Character vector of column names to use as features.
 If \code{NULL} (default), all columns except \code{class_col} are used.}
 
-\item{train_fraction}{Numeric in (0, 1); proportion of rows allocated to
-training. Default \code{0.8}.}
+\item{train_fraction}{Numeric in (0, 1]; proportion of rows allocated to
+training. \code{1} uses every row for training; \code{bl_assemble()} then sets
+\code{test_data} to \code{train_data}. Default \code{0.8}.}
 
 \item{seed}{Integer; random seed for the train/test split.
 Default \code{121}.}
@@ -51,6 +52,8 @@ A list of class \code{"bl_filter_result"} with components:
 \item{\code{num_vars}}{Integer; number of features.}
 \item{\code{target_class}}{The value that was mapped to \code{1}, or \code{NULL} if
 no conversion was applied.}
+\item{\code{scaling}}{Display-only raw-unit scaling; \code{NULL} until
+\code{\link[=bl_set_scaling]{bl_set_scaling()}} is used.}
 \item{\code{polygon}}{\code{SpatialPolygons} convex hull in standardised PCA space.}
 \item{\code{hull_fraction}}{The fraction value used for the hull filter.}
 \item{\code{n_retained}}{Number of training rows retained after filtering.}

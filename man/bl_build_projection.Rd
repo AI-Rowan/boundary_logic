@@ -56,6 +56,12 @@ CVA override.}
 \item{\code{proj_dims}}{Integer vector; the eigenvector indices used.}
 \item{\code{biplot_obj}}{The \code{biplotEZ} S3 object; used for plotting in
 Phase 2.}
+\item{\code{cva_classes}}{Factor of CVA class labels used for the projection
+(TP/TN/FP/FN when built with a model), or \code{NULL} for PCA.}
+\item{\code{point_col}}{Character vector of point colours for the training
+data, used by \code{plot.bl_projection()}.}
+\item{\code{train_ranges}}{Per-feature \code{c(min, max)} ranges of the training
+data, used as the feasibility check in the counterfactual searches.}
 \item{\code{metric}}{Numeric matrix (p x p); the within-class covariance
 \code{W} (or total covariance \code{Sigma} when no class info is supplied) used
 as the Mahalanobis metric by \code{bl_find_local_cf()} and

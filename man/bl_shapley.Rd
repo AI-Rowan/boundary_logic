@@ -23,7 +23,10 @@ method. Default \code{2048L}.}
 
 \item{seed}{Random seed for the approximate method. \code{NULL}
 (default) uses the current RNG state, giving independent estimates across
-repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results.}
+repeated calls. Supply an integer (e.g. \code{1L}) for reproducible results;
+this calls \code{set.seed()}, which resets the session's global RNG. Used
+only when the number of variables exceeds \code{exact_max_vars}; the exact
+method is deterministic and ignores \code{seed}.}
 }
 \value{
 A list of class \code{"bl_shapley"} with the following fields:

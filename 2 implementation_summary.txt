@@ -1,8 +1,8 @@
 # Boundary Logic — Implementation Summary
 
 **Package:** `boundarylogic`
-**Branch:** `main`
-**Last updated:** 2026-05-07
+**Branch:** `paper_nr1_changes` (development continues on `method_developments`; `main` is the stable release)
+**Last updated:** 2026-10-29
 
 ---
 
@@ -44,15 +44,36 @@ boundarylogic/
 │   ├── surrogate.R          # Module F: Surrogate model
 │   ├── local_cf.R           # Module B+D (local): Rotation, target, CF search
 │   ├── shapley.R            # Module G: Shapley values and sparse CF
-│   └── pick_point.R         # Interactive biplot point picker
-├── scripts/
-│   ├── 00_pima_GAM_CVA.R           # Full workflow: Steps 1–18
-│   ├── 00_pima_phase3_local.R      # Standalone Phase 3 walkthrough
-│   ├── 00_pima_external_test_comparison.R
-│   ├── 00_pima_phase2_unlabeled.R
-│   └── 00_inspect_biplot_CVA.R
-└── docs/
-    └── implementation_summary.md   # This document
+│   ├── pick_point.R         # Interactive biplot point picker
+│   └── datasets.R           # Documentation for the loan_data dataset
+├── man/                     # Rd files (roxygen-generated)
+├── tests/
+│   ├── testthat.R
+│   └── testthat/            # helper.R + test files: biplot_grid, data_prepare,
+│                            #   feasibility_utils, graphics_device, local_cf,
+│                            #   model_fit, plot_helpers, predict_utils,
+│                            #   projection, result, set_scaling
+├── vignettes/
+│   └── Boundary_Logic_loan_default_workflow.Rmd
+├── inst/
+│   ├── CITATION
+│   └── extdata/             # loan_data.csv, pima_diabetes.csv
+├── development/             # Tracked, build-ignored
+│   ├── 03_loan_status_Boundary_Logic.R   # Main development / testing harness
+│   └── reference/           # Code walkthroughs of the harness:
+│                            #   review_section4_to_6.md, review_section7_to_8.md,
+│                            #   review_section9_to_15.md
+├── documentation/           # Tracked, build-ignored: technical notes and bundles
+│   ├── mahalanobis_technical_note.md
+│   ├── scaling_axis_relabel_note.md
+│   ├── biplot-rotation/     # Rotation note + the scripts behind its measurements
+│   ├── select-target-class/ # bl_select_target() class-lookup note + script
+│   └── (thesis PDF, presentation PDF, Pima workflow HTML)
+├── scripts/                 # Git-ignored personal playground (not part of the repo)
+├── docs/                    # pkgdown site (generated)
+├── NEWS.md, README.md, LICENSE, _pkgdown.yml
+├── 1 Foundation intro documents.txt
+└── 2 implementation_summary.txt   # This document
 ```
 
 ---
@@ -69,19 +90,22 @@ bl_data              (from bl_wrap_data())
               └─► bl_projection
                     └─► bl_grid
                           └─► bl_result          ← Phase 1 anchor
-                                ├─► bl_points     (bl_project_points / bl_predict)
+                                ├─► bl_points     (bl_project_points; bl_predict returns a data.frame)
                                 │
                                 ├── PHASE 2 (global) ─────────────────────────
                                 ├─► bl_boundary   (bl_find_boundary)
                                 ├─► bl_surrogate  (bl_surrogate)
                                 │
                                 └── PHASE 3 (local) ──────────────────────────
-                                    ├─► bl_target        (bl_select_target)
+                                    ├─► bl_target        (bl_select_target; carries class_obs)
                                     ├─► bl_filters       (set_filters)
                                     ├─► bl_local_result  (bl_find_local_cf)
+                                    │     └─► bl_counterfactual (bl_local$bl_counterfactual)
                                     ├─► bl_shapley       (bl_shapley)
                                     └─► bl_sparse_result (bl_find_sparse_cf)
 ```
+
+`bl_build_result(bl_model = NULL)` also returns a `bl_result`, without a `bl_model` or `bl_grid` (the model, grid and contour fields are `NULL`).
 
 All objects have `print()` methods. Objects with visual outputs have `plot()` methods.
 
@@ -100,11 +124,11 @@ All objects have `print()` methods. Objects with visual outputs have `plot()` me
 | `bl_wrap_data()` | `(train_data, test_data=NULL, var_names=NULL, target_class=NULL)` | `bl_data` |
 | `bl_set_scaling()` | `(x, center, scale, method="z-score")` | same class as `x` (`bl_data`/`bl_filter_result`) |
 
-`bl_prepare_data()` is the standard in-package ingestion path: converts multiclass factors to binary 0/1 indicators, stratified train/test split, then calls `bl_filter_outliers()` internally to remove outliers and returns a `"bl_filter_result"`. The `hull_fraction` parameter (default `0.9`) controls how aggressively the convex hull trims the outermost training points; `hull_fraction = 1` retains all points.
+`bl_prepare_data()` is the standard in-package ingestion path: converts multiclass factors to binary 0/1 indicators, makes a seeded simple random train/test split (`sample()`, not stratified), then calls `bl_filter_outliers()` internally to remove outliers and returns a `"bl_filter_result"`. The `hull_fraction` parameter (default `0.9`) controls how aggressively the convex hull trims the outermost training points; `hull_fraction = 1` retains all points.
 
 `bl_wrap_data()` is the external-data path: accepts pre-split, pre-coded data and returns a `"bl_data"` object with no outlier filtering. Use it when the data and model are prepared outside the package.
 
-`bl_set_scaling()` records a **display-only** per-feature affine transform `standardised = (raw - center) / scale` on a `bl_data` / `bl_filter_result` object, stored as `x$scaling = list(center, scale, method)` (both vectors named and ordered to `var_names`; a private `.align_scaling_vec()` helper validates finiteness, rejects zero scales, and reorders named or unnamed input). Use it when features were standardised *before* model fitting (common for SVM/NNET/logistic) so the biplot axes can later be relabelled into the original units. The scaling propagates through `bl_filter_outliers()` (pass-through) and `bl_assemble()` into `bl_result$scaling` (and onto `bl_projection$scaling` for the model-free exploratory biplot). It never alters the projection, grid, or what the model/`predict_fn` sees -- it is consumed only by the biplot plot methods (see §4.4). Distinct from `X_center`/`X_sd` (the internal PCA standardisation of whatever data was supplied) and the `standardise` flag. A single `method` label applies to all features; per-variable transform families are future work (CLAUDE.md §9).
+`bl_set_scaling()` records a **display-only** per-feature affine transform `standardised = (raw - center) / scale` on a `bl_data` / `bl_filter_result` object, stored as `x$scaling = list(center, scale, method)` (both vectors named and ordered to `var_names`; a private `.align_scaling_vec()` helper validates finiteness, rejects zero scales, and reorders named or unnamed input). Use it when features were standardised *before* model fitting (common for SVM/NNET/logistic) so the biplot axes can later be relabelled into the original units. The scaling propagates through `bl_filter_outliers()` (pass-through) and `bl_assemble()` into `bl_result$scaling`; the model-free exploratory biplot reads it from that `bl_result` too. It never alters the projection, grid, or what the model/`predict_fn` sees -- it is consumed only by the biplot plot methods (see §4.4). Distinct from `X_center`/`X_sd` (the internal PCA standardisation of whatever data was supplied) and the `standardise` flag. A single `method` label applies to all features; per-variable transform families are future work (CLAUDE.md §9).
 
 **`R/outlier_filter.R`**
 
@@ -121,7 +145,7 @@ In the standard workflow, `bl_filter_outliers()` is called internally by `bl_pre
 | `bl_fit_model()` | `(train_data, var_names, model_type="GLM", cutoff=0.5, model_params=list())` | `bl_model` |
 | `bl_wrap_model()` | `(model, model_type, var_names, predict_fn=NULL, train_data=NULL, cutoff=0.5)` | `bl_model` |
 
-`bl_fit_model()` supports four parsnip/tidymodels types: GLM, SVM, NNET, RForrest. All are returned as `workflows::workflow` objects. `bl_wrap_model()` accepts any externally fitted model: GAM (mgcv), GBM (gbm), LDA (MASS), XGB (xgboost), or any user-defined classifier via `predict_fn`. Use `bl_wrap_model()` for types requiring custom training code, non-default hyperparameters, or not natively supported by `bl_fit_model()`. Both functions store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
+`bl_fit_model()` supports four parsnip/tidymodels types: GLM, SVM, NNET, RForest (the old spelling `"RForrest"` is still accepted with a deprecation warning). All are returned as `workflows::workflow` objects. `bl_wrap_model()` accepts any externally fitted model: GAM (mgcv), GBM (gbm), LDA (MASS), XGB (an `xgb.Booster` from `xgboost::xgb.train()`, wrapped as `list(model, features)`), or any user-defined classifier via `predict_fn`. Use `bl_wrap_model()` for types requiring custom training code, non-default hyperparameters, or not natively supported by `bl_fit_model()`. Both functions store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
 
 **LDA and multi-class prediction (not yet implemented):** Linear Discriminant Analysis naturally extends to k > 2 classes -- its discriminant functions produce one axis per class boundary. The current package is restricted to binary 0/1 outcomes. A future enhancement could expose LDA via `bl_wrap_model()` or a dedicated `bl_fit_lda()` to support multi-class biplots where each class pair yields a separate boundary. See CLAUDE.md Section 9.
 
@@ -136,7 +160,7 @@ In the standard workflow, `bl_filter_outliers()` is called internally by `bl_pre
 |---|---|---|
 | `bl_build_projection()` | `(train_data, var_names, method="PCA", standardise=TRUE, proj_dims=c(1L,2L), bl_model=NULL, cva_classes=NULL, title="")` | `bl_projection` |
 
-Constructs the loading matrix `V` (p × p) and its inverse `tV` (p × p) for either PCA or CVA. For PCA, standardisation is applied by default. **For CVA, `standardise` is forced to `FALSE` internally regardless of the user-supplied value** — biplotEZ handles within-class normalisation internally, making external standardisation incorrect. The projected training coordinates `Z_train` are stored alongside `X_center`, `X_sd`, `standardise`, `proj_dims`, and the biplotEZ S3 object (`biplot_obj`) used for subsequent plotting. The `biplot_obj` field is the key link between the mathematical projection and the biplotEZ rendering pipeline.
+Constructs the loading matrix `V` (p × p) and its inverse `tV` (p × p) for either PCA or CVA. For PCA, standardisation is applied by default. **For CVA, `standardise` is forced to `FALSE` internally regardless of the user-supplied value** — biplotEZ handles within-class normalisation internally, making external standardisation incorrect. `V` is the loading matrix `bp$Lmat` from `biplotEZ::PCA()` / `biplotEZ::CVA()`. The `bl_projection` object stores `V`, `tV`, `X_center`, `X_sd`, `method`, `standardise`, `proj_dims`, the biplotEZ S3 object (`biplot_obj`) used for subsequent plotting, `cva_classes`, `point_col`, `train_ranges`, `metric`, `metric_inv`, `metric_type` and `condition_number`. Projected training coordinates are not stored separately; they live in `biplot_obj$Z`, and `bl_build_grid()` recomputes `Z_train` locally. The `biplot_obj` field is the key link between the mathematical projection and the biplotEZ rendering pipeline.
 
 **Design note (Q9):** CVA with only 2 classes is technically a degenerate case but is supported via biplotEZ. This is documented in the function help.
 
@@ -190,7 +214,7 @@ Builds an `m × m` regular grid over the Z-space, back-projects each grid point 
 - `polygon` — the Z-space convex hull as a `SpatialPolygons` object
 - `hull_fraction` — the `outlie` value used
 
-The hull polygon (`calc_hull = TRUE` by default) is visual-only and does not affect CF search. The `bl_surrogate()` function reads `ct_surrogate` directly; user code never needs to distinguish the two.
+Only the `calc_hull` trimming of the prediction surface is visual: with `calc_hull = TRUE` (the default) the stored `Zgrid`, `Xgrid`, `grid_prob` and `col_value` keep just the grid points inside the hull. The polygon itself is not visual-only: `bl_find_boundary()` clips contours to it, and `bl_surrogate()` uses it. The `bl_surrogate()` function reads `ct_surrogate` directly; user code never needs to distinguish the two.
 
 ---
 
@@ -200,20 +224,22 @@ The hull polygon (`calc_hull = TRUE` by default) is visual-only and does not aff
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_assemble()` | `(bl_data, bl_filter_result=NULL, bl_model, bl_projection, bl_grid)` | `bl_result` |
-| `bl_build_result()` | `(bl_data=NULL, bl_model=NULL, method="PCA", proj_dims=c(1L,2L), standardise=TRUE, cva_classes=NULL, title="", m=200L, outlie=1, calc_hull=TRUE, b_margin=0.001)` | `bl_result` or `bl_projection` |
+| `bl_assemble()` | `(bl_data, bl_model=NULL, bl_projection, bl_grid=NULL)` | `bl_result` |
+| `bl_build_result()` | `(bl_data=NULL, bl_model=NULL, method="PCA", proj_dims=c(1L,2L), standardise=TRUE, cva_classes=NULL, title="", m=200L, outlie=1, calc_hull=TRUE, b_margin=0.001)` | `bl_result` |
 
 The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, `b_margin`, and (when set via `bl_set_scaling()`) the display-only `scaling` list. The `biplot_obj` from `bl_projection` is carried forward for plotting.
 
-**`bl_build_result()` early-return behaviour:** When `bl_model = NULL`, the grid and assembly steps are skipped and a `bl_projection` object is returned instead of a `bl_result`. This allows projection-only exploration before a model is fitted.
+`bl_assemble()` accepts either a `bl_filter_result` (from `bl_prepare_data()` / `bl_filter_outliers()`) or a `bl_data` (from `bl_wrap_data()`) as `bl_data`; there is no separate filter argument.
+
+**`bl_build_result()` without a model:** When `bl_model = NULL`, the grid step is skipped and `bl_assemble()` returns a model-free `bl_result` (no grid or contours; `model`, `cutoff` and `biplot_grid` are `NULL`). `plot_biplotEZ()` then colours the points by true class. This allows projection-only exploration before a model is fitted.
 
 **`R/plot_biplot.R`**
 
 | Function | Signature | Returns |
 |---|---|---|
-| `plot_biplotEZ()` | `(bl_result, points=NULL, target_point=NULL, target_label=NULL, no_grid, no_points, confusion_cols=TRUE, no_contour, new_title, cex_z, label_dir, tick_label_cex, ticks_v, which, X_names, label_offset_var, label_offset_dist, rotate_deg, grid_col, contour_col, contour_lwd, contour_lty)` | `bl_result` (invisible) |
+| `plot_biplotEZ()` | `(bl_result, points=NULL, target_point=NULL, target_label=NULL, no_grid=FALSE, plot_points=TRUE, confusion_cols=TRUE, no_contour=FALSE, new_title=NA, cex_z=0.5, label_dir="Paral", label_cex=1, tick_label_cex=0.6, ticks_v=1L, ticks_var=0L, ticks_n=5L, which=NULL, X_names=NULL, label_offset_var=0L, label_offset_dist=1.5, rotate_deg=0, grid_col=NULL, contour_col="black", contour_lwd=1.5, contour_lty=1L)` | `bl_result` (invisible) |
 
-Eight-step rendering pipeline using biplotEZ:
+Seven-step rendering pipeline using biplotEZ:
 
 1. **Base axes** — biplotEZ renders the axis skeleton (invisible samples, `opacity=0`)
 2. **Prediction grid** — coloured squares per grid point
@@ -221,8 +247,9 @@ Eight-step rendering pipeline using biplotEZ:
 4. **Axes redrawn on top** — so variable axes are visible over the grid
 5. **Contour lines** — decision boundary approximation
 6. **Target** — optional highlighted observation (yellow circle)
-7. **Boundary overlay** — optional `bl_boundary` crosses and arrows
-8. **Prediction summary** — printed to console (accuracy if labels known, class split if not)
+7. **Prediction summary** — printed to console (accuracy if labels known, class split if not)
+
+`plot_biplotEZ()` draws no boundary arrows. Observation-to-counterfactual arrows are drawn per click by `bl_pick_point(bl_result, data = ..., bl_boundary = bl_bnd)` (§4.10).
 
 The `rotate_deg` parameter patches the biplotEZ object's `Z`, `Lmat`, and `ax.one.unit` fields to rotate all rendered elements without rerunning the projection pipeline. The optional `grid_col` parameter overrides the blue-white-red gradient with a hard binary two-colour scheme.
 
@@ -236,7 +263,7 @@ Mechanism: biplotEZ computes axis tick *labels* in `.calibrate.axis()` as an aff
     sd_new    = sd * scale
     $scaled <- TRUE ; $center <- TRUE   (geometry fields untouched)
 
-makes every label read `label_new = label_old * scale + center = raw` and reconstructs `Xhat` on the raw range, while plotted positions stay byte-identical. This holds uniformly for PCA (`scaled` TRUE -> `sd` = column SDs; `scaled` FALSE -> `sd` = 1) and CVA (`scaled` FALSE, so `sd_new = scale` supplies the `d(raw)/d(std)` factor that `ax.one.unit` -- built for unit `std` -- otherwise lacks). The helper is a no-op when `scaling` is `NULL` (back-compatible with older `bl_result` objects) and warns, leaving axes in standardised units, if the scaling does not cover every biplot feature. Wired into `plot_biplotEZ()`, `plot.bl_projection()`, `plot.bl_local_result()` (applied to the SVD-rotated object -- `$means`/`$sd` are rotation-invariant), `plot.bl_surrogate()`, and `plot.bl_sparse_result()` (via pass-through to the local plot). Verified by a round-trip test asserting raw-unit labels and geometry invariance across PCA(T/F) and CVA. Distance/value reporting (Shapley contributions, printed counterfactual values) is unchanged and still in model units -- see CLAUDE.md §9.
+makes every label read `label_new = label_old * scale + center = raw` and reconstructs `Xhat` on the raw range, while plotted positions stay byte-identical. This holds uniformly for PCA (`scaled` TRUE -> `sd` = column SDs; `scaled` FALSE -> `sd` = 1) and CVA (`scaled` FALSE, so `sd_new = scale` supplies the `d(raw)/d(std)` factor that `ax.one.unit` -- built for unit `std` -- otherwise lacks). The helper is a no-op when `scaling` is `NULL` (back-compatible with older `bl_result` objects) and warns, leaving axes in standardised units, if the scaling does not cover every biplot feature. Wired into `plot_biplotEZ()`, `plot.bl_projection()`, `plot.bl_local_result()` (applied to the SVD-rotated object -- `$means`/`$sd` are rotation-invariant), `plot.bl_surrogate()`, and `plot.bl_sparse_result()` (via pass-through to the local plot). Verified by a round-trip test asserting raw-unit labels and geometry invariance for PCA (`standardise = TRUE`) and CVA. Printed feature values (observed, counterfactual, sparse, target) are converted to raw units at display time by `.scale_to_raw()` in `print.bl_target()`, `print.bl_counterfactual()`, `print.bl_shapley()` and `print.bl_sparse_result()` (see §4.9). Distances (`dist_z`, `dist_mahalanobis`, `plot.bl_boundary()`, `bl_robustness()`) and Shapley contributions stay in model units.
 
 **`R/project_points.R`**
 
@@ -260,7 +287,7 @@ makes every label read `label_new = label_old * scale + center = raw` and recons
 
 Searches for the nearest decision boundary point for each observation in `data`. For each observation, iterates over all contour segments in `bl_grid$ct`, clips segments to the training hull polygon, then finds the nearest contour point using a block-wise nearest-neighbour search (`.nearest_idx_block()`). Stores `Z_obs`, `B_z`, `B_x`, `B_pred`, and `dist_z` per observation.
 
-**Feasibility filtering — post-selection:** `train_ranges` are applied **after** selecting the geometrically nearest boundary point, not as a pre-filter on contour segments. This preserves geometric correctness: the nearest point on the decision boundary is found first, then checked for feasibility. Out-of-range counterfactuals are reported and flagged rather than silently excluded from the search. The Z-space hull polygon is applied as a pre-filter (contours are clipped before search).
+**Feasibility filtering — post-selection:** `train_ranges` are applied **after** selecting the geometrically nearest boundary point, not as a pre-filter on contour segments. This preserves geometric correctness: the nearest point on the decision boundary is found first, then checked for feasibility. Out-of-range counterfactuals are kept; the function prints a console message with their count (there is no per-row flag in the returned object). The Z-space hull polygon is applied as a pre-filter (contours are clipped before search).
 
 ---
 
@@ -281,7 +308,7 @@ Searches for the nearest decision boundary point for each observation in `data`.
 | Value | Denominator | Interpretation |
 |---|---|---|
 | `"mahalanobis"` (default) | `sqrt(diag(W))` from `bl_result$metric` | Within-class SD per feature. Features that are good class separators (large between-class variance, small within-class variance) are correctly amplified in the importance measure. |
-| `"euclidean"` | `X_sd` (legacy) | Total SD per feature. Conflates within- and between-class variance. |
+| `"euclidean"` | `X_sd` (total-SD alternative) | Total SD per feature. Conflates within- and between-class variance. |
 
 When `distance = "mahalanobis"`, `plot.bl_boundary()` prints a cross-correlation diagnostic showing what fraction of the full squared Mahalanobis distance is captured by the diagonal-only approximation. Small fractions indicate the diagonal approximation is essentially lossless; large fractions (|cross| >= 25%) trigger a note pointing to Section 4.6.1 for theoretical alternatives.
 
@@ -291,7 +318,7 @@ The per-variable importance measure produced by `bl_robustness()` and `plot.bl_b
 
 The **theoretically correct** decomposition of the full squared Mahalanobis distance `d_M^2(v) = v^T W^{-1} v` into per-feature contributions is the **Shapley value attribution** from cooperative game theory: treat the p features as players and `d_M^2` as the value function, then compute each feature's Shapley value as its average marginal contribution across all `2^p` subsets. The resulting per-feature attributions `phi_j` satisfy the efficiency axiom `sum_j phi_j = d_M^2(v)`, distribute the cross-correlation structure of `W^{-1}` across features in a uniquely fair way, and respect linearity, symmetry, and null-player axioms.
 
-This was identified in the PhD research as the methodologically correct per-feature attribution. It is **not implemented in the package** because the computational cost is prohibitive for the global Phase 2 use case: exact Shapley requires `2^p` subset evaluations per observation, and Phase 2 distance-to-boundary measures aggregate across all training/test observations -- so the total cost is `O(n * 2^p)` model evaluations. For the loan dataset (`n` ~ 30,000, `p = 6` after pruning), this is `n * 64` ~ 2,000,000 model scorings just to build the importance plot. For larger feature sets (`p > 14`) the cost becomes infeasible even with the permutation approximation used elsewhere in the package (`R/shapley.R`).
+This was identified in the PhD research as the methodologically correct per-feature attribution. It is **not implemented in the package** because the computational cost is prohibitive for the global Phase 2 use case: exact Shapley requires `2^p` subset evaluations per observation, and Phase 2 distance-to-boundary measures aggregate across all training/test observations -- so the total cost is `O(n * 2^p)` model evaluations. For the loan example in the development harness (`n` = 15,970 training observations after the hull filter, `p = 9` before pruning), this is `n * 2^9` ~ 8.2 million model scorings just to build the importance plot. For larger feature sets (`p > 14`) the cost becomes infeasible even with the permutation approximation used elsewhere in the package (`R/shapley.R`).
 
 The diagonal approximation was chosen instead as a deliberate trade-off: linear cost (`O(n)` model evaluations), preserved per-variable interpretation, and the main methodological correction (within-class noise instead of total variance) achieved without the combinatorial expense. A cross-correlation diagnostic (printed by `plot.bl_boundary()` when `distance = "mahalanobis"`) reports what fraction of `d_M^2` is captured by the diagonal -- giving users a direct measure of how much information is foregone for their specific data. Where this fraction is small, the diagonal approximation is essentially lossless and the cost saving is "free".
 
@@ -324,6 +351,8 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 | `bl_find_local_cf()` | `(bl_result, bl_target, set_filters=NULL, max_pairs=10L, m=200L, distance=c("mahalanobis","euclidean"), verbose=TRUE)` | `bl_local_result` |
 
 **`bl_select_target()`** wraps a single observation (integer row index or single-row data frame) into a `bl_target` object, projecting it into Z-space and scoring it through the model. External data frames (no class column, not in train/test) are fully supported.
+
+`bl_target` fields: `x_obs` (one-row data frame of features), `z_obs` (1 x 2 Z-space coordinates), `pred_prob`, `pred_class` (at `cutoff`), `row_id` (row index into `data`, or `NA` for a data-frame target), `class_obs` (true class, or `NA`), and `scaling` (display-only raw-unit scaling, or `NULL`). `class_obs` is resolved at selection time from the same one-row source that supplies `x_obs`: `data[row_id, ]` for an index (any data frame, not only `test_data`), or the `target` frame itself. It reads the `class` column when present, otherwise the first non-feature column; with no such column, or a non-numeric label, it is `NA`. `plot.bl_local_result()` colours the target by confusion group (TP/TN/FP/FN) from `class_obs` against `pred_class`, and by `pred_class` alone when `class_obs` is `NA` or absent (objects built before the field existed).
 
 **`set_filters()`** defines per-variable actionability constraints for the local search:
 
@@ -363,7 +392,7 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 | Value | Selector | Notes |
 |---|---|---|
 | `"mahalanobis"` (default) | Squared Mahalanobis distance in X-space: `d_M^2 = (B_x - x_obs)^T W^{-1} (B_x - x_obs)` using `bl_result$metric_inv` | Pair-invariant, mathematically sound across rotations. Matches the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` formula. |
-| `"euclidean"` | Z-space Euclidean: `sqrt(sum((Z_target - B_z)^2))` | Legacy behaviour. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice. |
+| `"euclidean"` | Z-space Euclidean: `sqrt(sum((Z_target - B_z)^2))` | Z-space alternative. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice. |
 
 Within-pair selection (the nearest valid contour vertex) always uses 2D Euclidean distance; only the cross-pair comparison is governed by `distance`. The `bl_local_result` object reports both `dist_z` and `dist_mahalanobis` for the winning pair, plus `all_distances` and `all_distances_mahalanobis` per pair tried.
 
@@ -381,7 +410,7 @@ The pair producing the globally minimum value of the chosen selector is selected
 
 **Why Filter (d) is not batched across segments.** The model re-scoring inside the per-pair loop is the dominant computational cost, and a meaningful wall-clock saving is available by collecting all surviving vertices across all opposing-class segments and scoring them in a single `.pred_function()` call (especially for XGBoost, where each call has DMatrix-construction overhead). The current per-segment call is retained deliberately: the bookkeeping required to split a batched prediction back to its source segments adds complexity that obscures the search logic, and the per-pair cost is already small enough (typically sub-second on a 100x100 grid) that the saving doesn't justify the trade. If a future use case pushes `m` high enough that this dominates, the batch is the right next optimisation; the segment loop is structured to make that refactor local.
 
-**`train_ranges` enforcement asymmetry between global and local search.** On the **default global path** (`bl_find_boundary()` followed by `bl_project_points(..., filter_to_train_ranges = FALSE)`), `train_ranges` is never used to exclude points. `bl_find_boundary()` only reports out-of-range counterfactuals as a console message (`R/boundary.R:401-419`) -- it does not discard them, because doing so would select a geometrically incorrect (farther) boundary point. `bl_project_points()` enforces `train_ranges` only when the caller opts in via `filter_to_train_ranges = TRUE`. The local search, by contrast, applies it as a hard in-loop filter (per the cascade above) -- not because feasibility matters more in Phase 3, but because the SVD rotation invalidates the Z-space hull polygon and `train_ranges` is the only feasibility constraint that survives the rotation. If a future requirement asks the global search to enforce actionability and feasibility (e.g. to surface only realistic counterfactuals in `bl_find_boundary()` rather than reporting them post-hoc), the local cascade above is the template -- introduce a `set_filters` argument and the four-stage cascade into the segment loop of `bl_find_boundary()`.
+**`train_ranges` enforcement asymmetry between global and local search.** On the **default global path** (`bl_find_boundary()` followed by `bl_project_points(..., filter_to_train_ranges = FALSE)`), `train_ranges` is never used to exclude points. `bl_find_boundary()` only reports out-of-range counterfactuals as a console message (its post-selection feasibility check) -- it does not discard them, because doing so would select a geometrically incorrect (farther) boundary point. `bl_project_points()` enforces `train_ranges` only when the caller opts in via `filter_to_train_ranges = TRUE`. The local search, by contrast, applies it as a hard in-loop filter (per the cascade above) -- not because feasibility matters more in Phase 3, but because the SVD rotation invalidates the Z-space hull polygon and `train_ranges` is the only feasibility constraint that survives the rotation. If a future requirement asks the global search to enforce actionability and feasibility (e.g. to surface only realistic counterfactuals in `bl_find_boundary()` rather than reporting them post-hoc), the local cascade above is the template -- introduce a `set_filters` argument and the four-stage cascade into the segment loop of `bl_find_boundary()`.
 
 **`plot.bl_local_result()`** renders using the same biplotEZ pipeline as `plot_biplotEZ()`. The biplotEZ object from `bl_result` is patched in-place with the rotated local coordinates before rendering:
 
@@ -391,7 +420,7 @@ biplot_plot$Lmat[, proj_dims] <- Vr_rot         # rotated loading matrix
 biplot_plot$ax.one.unit       <- (1 / diag(t(tVr_rot) %*% tVr_rot)) * t(tVr_rot)
 ```
 
-This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_biplotEZ()`. The target point is coloured by the confusion scheme (TP/TN/FP/FN) when its true class can be determined from `bl_result$test_data`; otherwise red (predicted 1) or blue (predicted 0). Parameters match `plot_biplotEZ()` exactly: `no_grid`, `no_points`, `no_contour`, `label_dir`, `which`, `X_names`, `label_offset_var/dist`, `contour_col/lwd/lty`, `show_arrows`, `arrow_col`.
+This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_biplotEZ()`. The target point is coloured by the confusion scheme (TP/TN/FP/FN) from `bl_target$class_obs` against `bl_target$pred_class`; when `class_obs` is `NA` (no class column) it is red (predicted 1) or blue (predicted 0). Parameters shared with `plot_biplotEZ()`: `no_grid`, `plot_points` (default `FALSE` here, `TRUE` there), `no_contour`, `cex_z`, `label_dir`, `label_cex`, `tick_label_cex`, `ticks_v`/`ticks_var`/`ticks_n`, `which`, `X_names`, `label_offset_var`/`label_offset_dist`, `rotate_deg` (applied on top of the SVD rotation), `contour_col`/`contour_lwd`/`contour_lty`, `new_title`. Local-only: `show_arrows`, `arrow_col`, `print_summary`. `plot_biplotEZ()`-only: `points`, `target_point`, `target_label`, `confusion_cols`, `grid_col`.
 
 ---
 
@@ -402,13 +431,13 @@ This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_bi
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_shapley()` | `(bl_local_result, exact_max_vars=14L, approx_perm=2048L, seed=1L)` | `bl_shapley` |
+| `bl_shapley()` | `(bl_local_result, exact_max_vars=14L, approx_perm=2048L, seed=NULL)` | `bl_shapley` |
 | `bl_find_sparse_cf()` | `(bl_shapley_result, round_to=NULL)` | `bl_sparse_result` |
 
 **`bl_shapley()`** computes Shapley values for the path from the observed point to the boundary counterfactual. Two computation paths:
 
 - **Exact** (`p ≤ exact_max_vars`, default 14): evaluates all 2^p subsets using the weighted marginal contribution formula, adapted from research script `1.2 Run_Shapley_optimized.R`.
-- **Permutation** (`p > exact_max_vars`): samples `approx_perm` random permutations and averages marginal contributions.
+- **Permutation** (`p > exact_max_vars`): samples `approx_perm` random permutations and averages marginal contributions. Only this path uses `seed` (`NULL` by default, so repeated calls give independent estimates; an integer calls `set.seed()`). The exact path is deterministic.
 
 Variables are classified as `"Supports"` or `"Contradicts"` using the following logic from research script `4.4 Local Interpretation Shapley.R`:
 
@@ -417,7 +446,7 @@ class 0 observation:  positive Shapley → Supports,  negative → Contradicts
 class 1 observation:  negative Shapley → Supports,  positive → Contradicts
 ```
 
-`print.bl_shapley()` shows the per-variable Shapley table. `plot.bl_shapley()` renders a ggplot2 horizontal bar chart (darkblue = Supports, grey70 = Contradicts) with y-axis labels `"variable: observed → change_to_boundary"`.
+`print.bl_shapley()` shows the per-variable Shapley table. `plot.bl_shapley()` renders a ggplot2 horizontal bar chart (darkblue = Supports, grey70 = Contradicts) with y-axis labels `"variable: observed → change_to_boundary"` in model units; rows are sorted by signed Shapley value (ascending for a class-0 target, descending for class 1).
 
 **Raw-unit feature-value display (when `bl_result$scaling` is set via `bl_set_scaling()`).** The observed and counterfactual feature values shown by `plot.bl_shapley()`, `print.bl_shapley()`, `print.bl_sparse_result()`, and `print.bl_target()` are converted back to original units at display time by the private helper `.scale_to_raw(values, scaling, var_names, kind)` (`R/data_prepare.R`). The two conversion kinds matter: a **level** (observed value, full CF `B_x`, sparse CF, counterfactual end) maps as `value * scale + center`, whereas a **delta** (`data_to_boundary = end - start`) maps as `value * scale` with no centre term (a difference is translation-free). When scaling is present the `plot.bl_shapley()` y-axis label switches from `observed → change` to `observed → counterfactual` in raw units (counterfactual = `pred_data + data_to_boundary`, converted as a level). `bl_select_target()` stores `scaling` on the `bl_target` so `print.bl_target()` (and `print.bl_local_result()`, which delegates to it) can convert. Conversion is display-only -- the stored `shapley_df` / `x_sparse` / `x_obs` remain in model units. The Shapley *contributions* (`shapley_cause`) are in prediction-impact units, not feature units, and are deliberately left unconverted. No-op (and warns on incomplete scaling) when `scaling` is absent. See Section 4.4.1 for the axis-relabel counterpart.
 
@@ -457,10 +486,10 @@ This function requires an active graphics device with a rendered biplot (i.e., `
 ## 5. Internal Utility Modules
 
 ### `R/utils.R`
-Input validation functions used by all exported functions: `stop_if_not_data_frame()`, `stop_if_col_missing()`, `stop_if_not_in_range()`, `stop_if_not_positive_integer()`, `stop_if_not_scalar_numeric()`. Also `calc_gini()` (2 × AUC − 1) used for per-iteration accuracy reporting in the outlier filter.
+Input validation functions used by all exported functions: `stop_if_not_data_frame()`, `stop_if_not_character()`, `stop_if_col_missing()`, `stop_if_not_in_range()`, `stop_if_not_positive_integer()`, `stop_if_not_scalar_numeric()`. Also `calc_gini()` (2 × AUC − 1) used for per-iteration accuracy reporting in the outlier filter.
 
 ### `R/hull_utils.R`
-`.build_hull_polygon()` — constructs a convex hull `SpatialPolygons` object from the Z-space training coordinates, scaled by `outlie` to control tightness. Uses `aplpack::plothulls()` for the hull computation and `sp::SpatialPolygons` for the polygon object. `.poly_clip()` clips a matrix of Z-space points to the interior of the polygon. `.points_in_polygon()` returns a logical membership vector.
+`.build_hull_polygon()` — constructs a convex hull `SpatialPolygons` object from the Z-space training coordinates. `outlie` is passed to `aplpack::plothulls(fraction = )`: the fraction of points the hull encloses (`1` = all). Uses `aplpack::plothulls()` for the hull computation and `sp::SpatialPolygons` for the polygon object. `plothulls()` computes by drawing, so the helper draws on a temporary off-screen `png()`, closes only that device, and re-activates the caller's device; `.bl_get_plot_bounds()` (`R/biplot_grid.R`) handles its off-screen render the same way. `.poly_clip()` clips a matrix of Z-space points to the interior of the polygon. `.points_in_polygon()` returns a logical membership vector.
 
 **Note:** `.poly_clip()` is also defined locally inside `boundary.R` (code duplication). The authoritative definition is in `hull_utils.R`; the copy in `boundary.R` is a known technical debt item to remove in a future refactor.
 
@@ -468,10 +497,10 @@ Input validation functions used by all exported functions: `stop_if_not_data_fra
 `get_variable_ranges()` extracts per-variable min/max bounds from training data as a named list of `c(min, max)` values. `get_filter_logical_vector()` evaluates these row-wise against any data frame — used in both global and local CF search to enforce `train_ranges`.
 
 ### `R/model_utils.R`
-`.fit_model()` dispatches to the appropriate parsnip/tidymodels fitting backend by `model_type`: GLM, SVM, NNET, RForrest (rpart). All return a fitted `workflows::workflow`. Types not supported here (GBM, GAM, LDA, XGB) must be fitted externally and registered via `bl_wrap_model()`.
+`.fit_model()` dispatches to the appropriate parsnip/tidymodels fitting backend by `model_type`: GLM, SVM (kernlab), NNET, RForest (rpart). All return a fitted `workflows::workflow`. Types not supported here (GBM, GAM, LDA, XGB) must be fitted externally and registered via `bl_wrap_model()`.
 
 ### `R/predict_utils.R`
-`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict()`, `gbm::predict.gbm()`, `e1071` SVM probability extraction, or a user-supplied `predict_fn`. Always returns a numeric vector in [0, 1], floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.
+`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict(type = "prob")` for `bl_fit_model()` workflows; the raw-model paths for `bl_wrap_model()` objects (GLM/GAM `predict(type = "response")`, GBM `predict.gbm()`, LDA posterior, `e1071` SVM probability extraction, NNET, RForest, XGB via `xgb.DMatrix`); or a user-supplied `predict_fn`. Returns a numeric probability vector, floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. It does not clamp; only `bl_build_grid()` clamps grid probabilities to [0, 1]. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.
 
 ---
 
@@ -487,11 +516,11 @@ The manual specifies a two-phase workflow. This is implemented as:
 
 ### 6.2 biplotEZ dependency (Architecture Q4)
 
-biplotEZ is kept for plotting only. All mathematical operations — projection, grid scoring, contour extraction, inverse projection, Shapley computation — are performed without biplotEZ. The plotting pipeline uses biplotEZ solely to draw the axis skeleton (`samples(opacity=0)` + `axes()`), then overlays grid, points, contours, and markers manually using `graphics::points()` and `graphics::lines()`. This decoupling means the computation pipeline is not affected by biplotEZ API changes.
+biplotEZ computes the PCA/CVA loading matrix (`V = bp$Lmat` from `biplotEZ::PCA()` / `biplotEZ::CVA()`), supplies the plot bounds (via an off-screen render, `.bl_get_plot_bounds()`), and draws the axis skeleton. Grid scoring, contour extraction, inverse projection, counterfactual search and Shapley computation are performed without it. The plotting pipeline uses biplotEZ only to draw the axis skeleton (`samples(opacity=0)` + `axes()`), then overlays grid, points, contours, and markers manually using `graphics::points()` and `graphics::lines()`. This decoupling limits the computation pipeline's exposure to biplotEZ API changes to the projection step and the bounds render.
 
 ### 6.3 CVA with two classes (Architecture Q9)
 
-CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. The Pima diabetes example (two classes) uses CVA throughout. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
+CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. With a `bl_model`, CVA uses the four prediction-outcome groups (TP/TN/FP/FN) by default, as in the loan example in the vignette and the development harness. Two-group CVA arises only with `cva_classes = as.factor(class)` or a model-free `bl_build_result()`, and it warns. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
 
 ### 6.4 Cutoff parameter (Architecture Q10)
 
@@ -499,7 +528,7 @@ The `cutoff` parameter (default 0.5) is stored in `bl_result` and propagated thr
 
 ### 6.5 Hull polygon sourcing
 
-The hull polygon in `bl_result` always comes from `bl_grid`, not from `bl_filter_result`. Reason: the filter polygon is constructed in the PCA space of the raw training data, while the grid polygon is constructed in the final Z-space (which may be CVA, or PCA with different `proj_dims`). Only the grid polygon is consistent with the rendered biplot. `bl_assemble()` enforces this by reading the polygon from `bl_grid`.
+The hull polygon in `bl_result` always comes from `bl_grid`, not from `bl_filter_result`. Reason: the filter polygon is constructed in a lightweight 2-PC space of the standardised training features, while the grid polygon is constructed in the final Z-space (which may be CVA, or PCA with different `proj_dims`). Only the grid polygon is consistent with the rendered biplot. `bl_assemble()` enforces this by reading the polygon from `bl_grid`.
 
 ### 6.6 Local rotation invalidates the hull polygon
 
@@ -520,41 +549,43 @@ The Shapley implementation adapts `1.2 Run_Shapley_optimized.R` (exact) and `4.4
 
 ### 6.9 Custom model support (`bl_wrap_model`)
 
-The instruction manual requires model-agnostic operation. The package achieves this via `bl_wrap_model()` + a user-supplied `predict_fn`. This was the mechanism used for the GAM example (which cannot be wrapped by parsnip without special handling): the user fits `mgcv::gam()` directly and passes `predict.gam()` as the predict function. The `predict_fn` is stored in `bl_model` and called uniformly via `.pred_function()` throughout the package.
+The instruction manual requires model-agnostic operation. The package achieves this via `bl_wrap_model()`: built-in raw-model types (e.g. a `mgcv::gam()` fit wrapped with `model_type = "GAM"`, predicted via `predict(type = "response")`), or `model_type = "custom"` with a user-supplied `predict_fn(model, new_data)`. The development harness uses the custom path for its first XGBoost model. The `predict_fn` is stored in `bl_model` and called uniformly via `.pred_function()` throughout the package.
 
 ### 6.10 Naming conventions
 
-All exported functions use the `bl_` prefix. S3 method naming follows R conventions (`print.bl_result`, `plot.bl_boundary`). Private helpers use a `.` prefix (`.build_hull_polygon`, `.bl_rotate`). Internal utility functions (`stop_if_*`, `calc_gini`) have no prefix as they are not user-facing. This aligns with instruction manual §7.4 and §9.4.
+All exported functions except `plot_biplotEZ()` and `set_filters()` use the `bl_` prefix. S3 method naming follows R conventions (`print.bl_result`, `plot.bl_boundary`). Private helpers use a `.` prefix (`.build_hull_polygon`, `.bl_rotate`). Internal utility functions (`stop_if_*`, `calc_gini`) have no prefix as they are not user-facing. This aligns with instruction manual §7.4 and §9.4.
 
 ### 6.11 Post-selection feasibility in global search
 
-`bl_find_boundary()` identifies the geometrically nearest contour point first, then checks whether it lies within `train_ranges`. The check is post-selection, not a pre-filter on contour segments. This means the boundary search always finds the mathematically nearest point and reports whether it is feasible — rather than excluding infeasible regions from the search geometry entirely. Out-of-range counterfactuals are reported and flagged; the user sees them and can act on them rather than having them hidden.
+`bl_find_boundary()` identifies the geometrically nearest contour point first, then checks whether it lies within `train_ranges`. The check is post-selection, not a pre-filter on contour segments. This means the boundary search always finds the mathematically nearest point and reports whether it is feasible — rather than excluding infeasible regions from the search geometry entirely. Out-of-range counterfactuals are kept and counted in a console message; the user sees them and can act on them rather than having them hidden.
 
 ---
 
 ## 7. Implementation Status
 
-| Component | Status | Commit |
+| Component | Status | Tests |
 |---|---|---|
-| Data preparation (`bl_prepare_data`, `bl_wrap_data`) | Complete | `feature/phase1-final` |
-| Outlier filter (`bl_filter_outliers`) | Complete | `feature/phase1-final` |
-| Model fitting (`bl_fit_model`, `bl_wrap_model`) | Complete | `feature/phase1-final` |
-| Projection (`bl_build_projection`) | Complete | `feature/phase1-final` |
-| Grid and contours (`bl_build_grid`) | Complete | `feature/phase1-final` |
-| Assembly (`bl_assemble`, `bl_build_result`) | Complete | `feature/phase1-final` |
-| Biplot plotting (`plot_biplotEZ`) | Complete | `feature/phase1-final` |
-| Point projection (`bl_project_points`, `bl_predict`) | Complete | `feature/phase3-local` |
-| Global CF search (`bl_find_boundary`) | Complete | `feature/phase2-global` |
-| Robustness (`bl_robustness`, `plot.bl_boundary`) | Complete | `feature/phase2-global` |
-| Surrogate model (`bl_surrogate`) | Complete | `feature/phase2-global` |
-| Local target selection (`bl_select_target`) | Complete | `feature/phase3-local` |
-| Actionability filters (`set_filters`) | Complete | `feature/phase3-local` |
-| Local CF search (`bl_find_local_cf`) | Complete | `feature/phase3-local` |
-| Shapley values (`bl_shapley`) | Complete | `feature/phase3-local` |
-| Sparse CF (`bl_find_sparse_cf`) | Complete | `feature/phase3-local` |
-| Interactive point picker (`bl_pick_point`) | Complete | undocumented |
-| **Unit tests** | **Pending** | — |
-| **Vignettes** | **Pending** | — |
+| Data preparation (`bl_prepare_data`, `bl_wrap_data`) | Complete | `test-data_prepare.R` |
+| Raw-unit display scaling (`bl_set_scaling`, `.scale_to_raw`) | Complete | `test-set_scaling.R` |
+| Outlier filter (`bl_filter_outliers`) | Complete | `test-set_scaling.R`; via `bl_prepare_data` |
+| Model fitting (`bl_fit_model`, `bl_wrap_model`) | Complete | `test-model_fit.R`, `test-predict_utils.R` |
+| Projection (`bl_build_projection`, `plot.bl_projection`) | Complete | `test-projection.R` (`bl_build_projection` only) |
+| Grid and contours (`bl_build_grid`) | Complete | `test-biplot_grid.R` |
+| Assembly (`bl_assemble`, `bl_build_result`) | Complete | `test-result.R` |
+| Biplot plotting (`plot_biplotEZ`) and its helpers | Complete | `test-plot_helpers.R`, `test-graphics_device.R` |
+| Point projection (`bl_project_points`, `bl_predict`) | Complete | -- |
+| Global CF search (`bl_find_boundary`) | Complete | -- |
+| Robustness (`bl_robustness`, `plot.bl_boundary`) | Complete | -- |
+| Surrogate model (`bl_surrogate`) | Complete | -- |
+| Local target selection (`bl_select_target`) | Complete | `test-local_cf.R` |
+| Actionability filters (`set_filters`) | Complete | -- |
+| Local CF search (`bl_find_local_cf`, `bl_counterfactual`) | Complete | `test-local_cf.R` (plot), `test-set_scaling.R` |
+| Shapley values (`bl_shapley`) | Complete | `test-set_scaling.R` (display) |
+| Sparse CF (`bl_find_sparse_cf`) | Complete | `test-set_scaling.R` (display) |
+| Interactive point picker (`bl_pick_point`) | Complete | -- (interactive) |
+| Dataset (`loan_data`) | Complete | -- |
+| **Unit tests** | 11 test files, 176 expectations passing (2026-10-29) | Phase 2 and most Phase 3 computation remain untested (CLAUDE.md §9) |
+| **Vignette** | `Boundary_Logic_loan_default_workflow.Rmd` | rendered on the pkgdown site |
 
 ---
 
@@ -562,20 +593,23 @@ All exported functions use the `bl_` prefix. S3 method naming follows R conventi
 
 | Package | Role | Used in |
 |---|---|---|
-| `biplotEZ` | Biplot rendering pipeline | `projection.R`, `plot_biplot.R`, `local_cf.R` |
-| `dplyr` | `case_when()` for colour/classification logic | `project_points.R`, `boundary_plot.R`, `local_cf.R`, `shapley.R` |
+| `biplotEZ` | PCA/CVA loading matrix, plot bounds, axis rendering | `projection.R`, `biplot_grid.R`, `plot_biplot.R`, `local_cf.R`, `surrogate.R` |
+| `dplyr` | `case_when()` for colour/classification logic | `projection.R`, `project_points.R`, `boundary_plot.R`, `local_cf.R`, `shapley.R` |
 | `ggplot2` | Shapley bar chart, boundary plots | `shapley.R`, `boundary_plot.R` |
-| `sp` | SpatialPolygons hull, point-in-polygon | `hull_utils.R`, `project_points.R` |
+| `sp` | SpatialPolygons hull, point-in-polygon | `hull_utils.R`, `biplot_grid.R`, `boundary.R`, `surrogate.R`, `project_points.R` |
 | `aplpack` | Convex hull computation (`plothulls`) | `hull_utils.R` |
-| `mgcv` | GAM support (direct fit path) | `model_utils.R` |
-| `e1071` | SVM support | `model_utils.R`, `predict_utils.R` |
-| `gbm` | GBM support | `model_utils.R` |
+| `mgcv` | Prediction for externally fitted GAMs (`bl_wrap_model(model_type = "GAM")`) | `predict_utils.R` |
+| `e1071` | Prediction for externally fitted SVMs | `predict_utils.R` |
+| `gbm` | Prediction for externally fitted GBMs | `predict_utils.R` |
 | `nnet` | Neural net support | `model_utils.R` |
-| `rpart` | Decision tree support | `model_utils.R` |
-| `xgboost` | XGBoost support | `model_utils.R` |
-| `parsnip`/`workflows`/`discrim` | tidymodels workflow wrapping | `model_utils.R`, `predict_utils.R` |
+| `rpart` | Decision tree (RForest) support | `model_utils.R` |
+| `xgboost` | Prediction for externally fitted XGBoost boosters | `predict_utils.R` |
+| `parsnip`/`workflows` | tidymodels workflow wrapping | `model_utils.R`, `model_fit.R`, `predict_utils.R` |
 | `kernlab` | SVM via parsnip | `model_utils.R` |
-| `MASS` | LDA (`lda()`) | `model_utils.R` |
-| `grDevices` | `contourLines()`, colour ramps | `biplot_grid.R`, `local_cf.R` |
+| `MASS` | Prediction for externally fitted LDA models | `predict_utils.R` |
+| `grDevices` | `contourLines()`, colour ramps, off-screen devices | `biplot_grid.R`, `hull_utils.R`, `local_cf.R`, plotting files |
+| `graphics` | Base plotting primitives (`points`, `lines`, `arrows`, `text`, `legend`, `par`, `locator`) | plotting files, `pick_point.R` |
+| `stats` | `as.formula`, `predict`, `sd`, `setNames` | several |
+| `utils` | `combn` (exact Shapley subsets), `modifyList` | several |
 
-All dependencies are listed in `DESCRIPTION` under `Imports`. `testthat`, `knitr`, and `rmarkdown` are in `Suggests`.
+All dependencies, including the base packages `grDevices`, `graphics`, `stats` and `utils`, are listed in `DESCRIPTION` under `Imports`. `testthat`, `knitr`, `rmarkdown`, `fastshap` and `shapviz` are in `Suggests`.

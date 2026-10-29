@@ -19,13 +19,13 @@ bl_build_result(
 )
 }
 \arguments{
-\item{bl_data}{A \code{"bl_data"} object from \code{\link[=bl_prepare_data]{bl_prepare_data()}} or a
-\code{"bl_filter_result"} from \code{\link[=bl_filter_outliers]{bl_filter_outliers()}}. The function extracts
-\code{train_data} and \code{var_names} from whichever is supplied.}
+\item{bl_data}{A \code{"bl_filter_result"} from \code{\link[=bl_prepare_data]{bl_prepare_data()}} or
+\code{\link[=bl_filter_outliers]{bl_filter_outliers()}}, or a \code{"bl_data"} from \code{\link[=bl_wrap_data]{bl_wrap_data()}}. The
+function extracts \code{train_data} and \code{var_names} from whichever is supplied.}
 
 \item{bl_model}{A \code{"bl_model"} object from \code{\link[=bl_fit_model]{bl_fit_model()}} or
-\code{\link[=bl_wrap_model]{bl_wrap_model()}}. When \code{NULL} (default), only the projection is built
-and a \code{bl_projection} object is returned.}
+\code{\link[=bl_wrap_model]{bl_wrap_model()}}. When \code{NULL} (default), the projection is built and a
+model-free \code{bl_result} (no grid) is returned.}
 
 \item{method}{\code{"PCA"} or \code{"CVA"}. Default \code{"PCA"}.}
 
@@ -49,7 +49,7 @@ Ignored when \code{bl_model = NULL}.}
 prediction grid. Default \code{1}. Ignored when \code{bl_model = NULL}.}
 
 \item{calc_hull}{Logical; trim the prediction surface to the training
-hull. Visual only — does not affect counterfactual search. Default
+hull. Visual only -- does not affect counterfactual search. Default
 \code{TRUE}. Ignored when \code{bl_model = NULL}.}
 
 \item{b_margin}{Numeric scalar; half-width of the band around
@@ -61,24 +61,25 @@ prediction scores are always floor-rounded to 3 decimal places inside
 Ignored when \code{bl_model = NULL}.}
 }
 \value{
-A \code{"bl_result"} object (when \code{bl_model} is supplied) or a
-\code{"bl_projection"} object (when \code{bl_model = NULL}).
+A \code{"bl_result"} object. When \code{bl_model = NULL} it is model-free:
+\code{model}, \code{model_type}, \code{cutoff}, \code{b_margin}, \code{biplot_grid}, \code{polygon},
+\code{accuracy} and \code{gini} are \code{NULL}.
 }
 \description{
 Convenience wrapper that combines \code{\link[=bl_build_projection]{bl_build_projection()}},
 \code{\link[=bl_build_grid]{bl_build_grid()}}, and \code{\link[=bl_assemble]{bl_assemble()}} into a single call. Accepts the
-output of either \code{\link[=bl_prepare_data]{bl_prepare_data()}} or \code{\link[=bl_filter_outliers]{bl_filter_outliers()}} and
-extracts \code{train_data} and \code{var_names} automatically.
+output of \code{\link[=bl_prepare_data]{bl_prepare_data()}}, \code{\link[=bl_wrap_data]{bl_wrap_data()}} or \code{\link[=bl_filter_outliers]{bl_filter_outliers()}}
+and extracts \code{train_data} and \code{var_names} automatically.
 }
 \details{
-When \code{bl_model} is \code{NULL} the grid and assembly steps are skipped. A
-\code{\link[=bl_build_projection]{bl_projection}} object is returned instead of a
-\code{bl_result}, and \code{\link[=plot]{plot()}} on that object renders the biplot without any
-prediction surface.
+When \code{bl_model} is \code{NULL} the grid step is skipped and a model-free
+\code{bl_result} is returned: its \code{model}, \code{cutoff} and \code{biplot_grid} fields are
+\code{NULL}, and \code{\link[=plot]{plot()}} on it renders the biplot coloured by true class,
+without a prediction surface or decision boundary.
 
 \strong{Assumption:} the projection matrix V is always built from the
 \code{train_data} slot of the supplied object. Building V from test data or any
-other source is not supported here — use \code{\link[=bl_build_projection]{bl_build_projection()}} directly
+other source is not supported here -- use \code{\link[=bl_build_projection]{bl_build_projection()}} directly
 if a non-standard data source is needed.
 
 For advanced control over any individual step use \code{\link[=bl_build_projection]{bl_build_projection()}},
@@ -87,19 +88,16 @@ For advanced control over any individual step use \code{\link[=bl_build_projecti
 \section{Typical usage (with model)}{
 
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{# With outlier filtering:
-bl_results <- bl_build_result(bl_filt, bl_mod, method = "CVA")
-
-# Without filtering:
-bl_results <- bl_build_result(bl_dat, bl_mod, method = "PCA")
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{# bl_dat from bl_prepare_data() (outlier filter built in) or bl_wrap_data()
+bl_results <- bl_build_result(bl_dat, bl_mod, method = "CVA")
 }\if{html}{\out{</div>}}
 }
 
 \section{Exploratory biplot (no model yet)}{
 
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{bl_proj <- bl_build_result(bl_filt, method = "PCA")
-plot(bl_proj)   # renders biplot coloured by true class (red/blue)
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{bl_results <- bl_build_result(bl_dat, method = "PCA")
+plot(bl_results)   # biplot coloured by true class (red/blue), no surface
 }\if{html}{\out{</div>}}
 }
 

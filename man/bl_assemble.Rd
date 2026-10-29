@@ -7,11 +7,11 @@
 bl_assemble(bl_data, bl_model = NULL, bl_projection, bl_grid = NULL)
 }
 \arguments{
-\item{bl_data}{Either a \code{"bl_data"} object from \code{bl_prepare_data()} (when
-no polygon filtering was applied), or a \code{"bl_filter_result"} object from
-\code{bl_filter_outliers()} (when filtering was applied). Pass whichever is the
-last step in your data-preparation chain — the function detects the type
-automatically and extracts the correct training and test data.}
+\item{bl_data}{A \code{"bl_filter_result"} from \code{bl_prepare_data()} (which
+applies the outlier filter), or a \code{"bl_data"} from \code{bl_wrap_data()}
+(optionally passed through \code{bl_filter_outliers()}, which also returns a
+\code{"bl_filter_result"}). The function accepts either class and extracts the
+training and test data.}
 
 \item{bl_model}{A \code{"bl_model"} from \code{bl_fit_model()}, or \code{NULL}.
 When \code{NULL}, model-derived fields (\code{model}, \code{model_type}, \code{cutoff},
@@ -26,43 +26,44 @@ A list of class \code{"bl_result"} containing all Phase 1 artifacts.
 See \strong{Value} section for the full field list.
 }
 \description{
-Combines the outputs of \code{bl_prepare_data()}, optionally
-\code{bl_filter_outliers()}, \code{bl_fit_model()}, \code{bl_build_projection()}, and
+Combines the outputs of \code{bl_prepare_data()} (or \code{bl_wrap_data()}),
+\code{bl_fit_model()} (or \code{bl_wrap_model()}), \code{bl_build_projection()}, and
 \code{bl_build_grid()} into a single \code{bl_result} S3 object. This object is the
-reproducible anchor for all Phase 2 operations (counterfactual search,
-local interpretation, global interpretation).
+reproducible anchor for the Phase 2 (global: counterfactual search,
+surrogate, robustness) and Phase 3 (local interpretation) operations.
 }
 \section{Phase 1 workflow}{
 
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{# Step 1: prepare data
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{# Step 1: prepare data (split + outlier filter via hull_fraction)
 bl_dat  <- bl_prepare_data(datasets::iris, class_col = "Species",
-                            target_class = "versicolor")
+                            target_class = "versicolor",
+                            hull_fraction = 0.9)
 
-# Step 2 (optional): iterative polygon filter
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-
-# Step 3: fit final model (on filtered data)
-bl_mod  <- bl_fit_model(bl_filt$train_data, bl_filt$var_names,
+# Step 2: fit the model on the filtered training data
+bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
                          model_type = "GLM")
 
-# Step 4: build projection
-bl_proj <- bl_build_projection(bl_filt$train_data, bl_filt$var_names,
+# Step 3: build projection
+bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names,
                                 method = "PCA")
 
-# Step 5: build prediction grid
-bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod)
+# Step 4: build prediction grid
+bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod)
 
-# Step 6: assemble — pass bl_filt if filtering was used, bl_dat otherwise
-bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
+# Step 5: assemble
+bl_results <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
 }\if{html}{\out{</div>}}
+
+\code{\link[=bl_build_result]{bl_build_result()}} runs Steps 3-5 in one call.
 }
 
 \section{Value (fields of \code{bl_result})}{
 
 \describe{
 \item{\code{train_data}}{Post-filter training data frame.}
-\item{\code{test_data}}{Test data frame (filtered to training variable ranges).}
+\item{\code{test_data}}{Test data frame, passed through unfiltered. Set to
+\code{train_data} when there is no test data (\code{train_fraction = 1}).}
 \item{\code{var_names}}{Feature column names.}
 \item{\code{num_vars}}{Number of features.}
 \item{\code{model}}{Fitted model object.}
@@ -83,8 +84,15 @@ covariance \code{Sigma} when no class info was available. Used as the
 Mahalanobis metric in \code{bl_find_local_cf()} and \code{plot.bl_boundary()}.}
 \item{\code{metric_inv}}{Inverse of \code{metric} via Cholesky (p x p).}
 \item{\code{metric_type}}{\code{"W_cva"}, \code{"W_binary"}, or \code{"Sigma"}.}
-\item{\code{polygon}}{Convex hull polygon (\code{SpatialPolygons} or \code{NULL}).}
-\item{\code{hull_fraction}}{Hull fraction used, or \code{NULL}.}
+\item{\code{polygon}}{Convex hull of the training data in the final biplot
+plane, from \code{bl_grid} (\code{SpatialPolygons}), or \code{NULL} without a grid.
+This is the grid hull, built with \code{outlie} (default \code{1}, every
+training point inside); it is not the outlier-filter hull of
+\code{bl_prepare_data()}.}
+\item{\code{hull_fraction}}{The grid hull's \code{outlie} value, or \code{NULL}.}
+\item{\code{train_ranges}}{Per-feature \code{c(min, max)} ranges of the training
+data, from \code{bl_projection}; the feasibility check in the
+counterfactual searches.}
 \item{\code{scaling}}{Display-only raw-unit scaling from \code{\link[=bl_set_scaling]{bl_set_scaling()}}
 (\code{list(center, scale, method)}), or \code{NULL}. Used by the biplot plot
 methods to relabel axis ticks into original units; does not affect any

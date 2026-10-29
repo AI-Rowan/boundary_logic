@@ -5,41 +5,40 @@
 
 #' Assemble Phase 1 artifacts into a single result object
 #'
-#' Combines the outputs of `bl_prepare_data()`, optionally
-#' `bl_filter_outliers()`, `bl_fit_model()`, `bl_build_projection()`, and
+#' Combines the outputs of `bl_prepare_data()` (or `bl_wrap_data()`),
+#' `bl_fit_model()` (or `bl_wrap_model()`), `bl_build_projection()`, and
 #' `bl_build_grid()` into a single `bl_result` S3 object. This object is the
-#' reproducible anchor for all Phase 2 operations (counterfactual search,
-#' local interpretation, global interpretation).
+#' reproducible anchor for the Phase 2 (global: counterfactual search,
+#' surrogate, robustness) and Phase 3 (local interpretation) operations.
 #'
 #' @section Phase 1 workflow:
 #' ```r
-#' # Step 1: prepare data
+#' # Step 1: prepare data (split + outlier filter via hull_fraction)
 #' bl_dat  <- bl_prepare_data(datasets::iris, class_col = "Species",
-#'                             target_class = "versicolor")
+#'                             target_class = "versicolor",
+#'                             hull_fraction = 0.9)
 #'
-#' # Step 2 (optional): iterative polygon filter
-#' bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.9)
-#'
-#' # Step 3: fit final model (on filtered data)
-#' bl_mod  <- bl_fit_model(bl_filt$train_data, bl_filt$var_names,
+#' # Step 2: fit the model on the filtered training data
+#' bl_mod  <- bl_fit_model(bl_dat$train_data, bl_dat$var_names,
 #'                          model_type = "GLM")
 #'
-#' # Step 4: build projection
-#' bl_proj <- bl_build_projection(bl_filt$train_data, bl_filt$var_names,
+#' # Step 3: build projection
+#' bl_proj <- bl_build_projection(bl_dat$train_data, bl_dat$var_names,
 #'                                 method = "PCA")
 #'
-#' # Step 5: build prediction grid
-#' bl_grid <- bl_build_grid(bl_filt$train_data, bl_proj, bl_mod)
+#' # Step 4: build prediction grid
+#' bl_grid <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod)
 #'
-#' # Step 6: assemble — pass bl_filt if filtering was used, bl_dat otherwise
-#' bl_results <- bl_assemble(bl_filt, bl_mod, bl_proj, bl_grid)
+#' # Step 5: assemble
+#' bl_results <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
 #' ```
+#' [bl_build_result()] runs Steps 3-5 in one call.
 #'
-#' @param bl_data   Either a `"bl_data"` object from `bl_prepare_data()` (when
-#'   no polygon filtering was applied), or a `"bl_filter_result"` object from
-#'   `bl_filter_outliers()` (when filtering was applied). Pass whichever is the
-#'   last step in your data-preparation chain — the function detects the type
-#'   automatically and extracts the correct training and test data.
+#' @param bl_data   A `"bl_filter_result"` from `bl_prepare_data()` (which
+#'   applies the outlier filter), or a `"bl_data"` from `bl_wrap_data()`
+#'   (optionally passed through `bl_filter_outliers()`, which also returns a
+#'   `"bl_filter_result"`). The function accepts either class and extracts the
+#'   training and test data.
 #' @param bl_model          A `"bl_model"` from `bl_fit_model()`, or `NULL`.
 #'   When `NULL`, model-derived fields (`model`, `model_type`, `cutoff`,
 #'   `accuracy`, `gini`) will be `NULL` in the returned object.
@@ -52,7 +51,8 @@
 #' @section Value (fields of `bl_result`):
 #' \describe{
 #'   \item{`train_data`}{Post-filter training data frame.}
-#'   \item{`test_data`}{Test data frame (filtered to training variable ranges).}
+#'   \item{`test_data`}{Test data frame, passed through unfiltered. Set to
+#'     `train_data` when there is no test data (`train_fraction = 1`).}
 #'   \item{`var_names`}{Feature column names.}
 #'   \item{`num_vars`}{Number of features.}
 #'   \item{`model`}{Fitted model object.}
@@ -73,8 +73,15 @@
 #'     Mahalanobis metric in `bl_find_local_cf()` and `plot.bl_boundary()`.}
 #'   \item{`metric_inv`}{Inverse of `metric` via Cholesky (p x p).}
 #'   \item{`metric_type`}{`"W_cva"`, `"W_binary"`, or `"Sigma"`.}
-#'   \item{`polygon`}{Convex hull polygon (`SpatialPolygons` or `NULL`).}
-#'   \item{`hull_fraction`}{Hull fraction used, or `NULL`.}
+#'   \item{`polygon`}{Convex hull of the training data in the final biplot
+#'     plane, from `bl_grid` (`SpatialPolygons`), or `NULL` without a grid.
+#'     This is the grid hull, built with `outlie` (default `1`, every
+#'     training point inside); it is not the outlier-filter hull of
+#'     `bl_prepare_data()`.}
+#'   \item{`hull_fraction`}{The grid hull's `outlie` value, or `NULL`.}
+#'   \item{`train_ranges`}{Per-feature `c(min, max)` ranges of the training
+#'     data, from `bl_projection`; the feasibility check in the
+#'     counterfactual searches.}
 #'   \item{`scaling`}{Display-only raw-unit scaling from [bl_set_scaling()]
 #'     (`list(center, scale, method)`), or `NULL`. Used by the biplot plot
 #'     methods to relabel axis ticks into original units; does not affect any
@@ -95,8 +102,9 @@ bl_assemble <- function(bl_data,
 
   # ---- Validate inputs --------------------------------------------------
   if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
-    stop("'bl_data' must be a 'bl_data' object from bl_prepare_data() or ",
-         "a 'bl_filter_result' object from bl_filter_outliers().",
+    stop("'bl_data' must be a 'bl_filter_result' object from ",
+         "bl_prepare_data() or bl_filter_outliers(), or a 'bl_data' object ",
+         "from bl_wrap_data().",
          call. = FALSE)
   if (!is.null(bl_model) && !inherits(bl_model, "bl_model"))
     stop("'bl_model' must be a 'bl_model' object from bl_fit_model().",
@@ -200,17 +208,17 @@ bl_assemble <- function(bl_data,
 #'
 #' Convenience wrapper that combines [bl_build_projection()],
 #' [bl_build_grid()], and [bl_assemble()] into a single call. Accepts the
-#' output of either [bl_prepare_data()] or [bl_filter_outliers()] and
-#' extracts `train_data` and `var_names` automatically.
+#' output of [bl_prepare_data()], [bl_wrap_data()] or [bl_filter_outliers()]
+#' and extracts `train_data` and `var_names` automatically.
 #'
-#' When `bl_model` is `NULL` the grid and assembly steps are skipped. A
-#' [`bl_projection`][bl_build_projection()] object is returned instead of a
-#' `bl_result`, and [plot()] on that object renders the biplot without any
-#' prediction surface.
+#' When `bl_model` is `NULL` the grid step is skipped and a model-free
+#' `bl_result` is returned: its `model`, `cutoff` and `biplot_grid` fields are
+#' `NULL`, and [plot()] on it renders the biplot coloured by true class,
+#' without a prediction surface or decision boundary.
 #'
 #' **Assumption:** the projection matrix V is always built from the
 #' `train_data` slot of the supplied object. Building V from test data or any
-#' other source is not supported here — use [bl_build_projection()] directly
+#' other source is not supported here -- use [bl_build_projection()] directly
 #' if a non-standard data source is needed.
 #'
 #' For advanced control over any individual step use [bl_build_projection()],
@@ -218,25 +226,22 @@ bl_assemble <- function(bl_data,
 #'
 #' @section Typical usage (with model):
 #' ```r
-#' # With outlier filtering:
-#' bl_results <- bl_build_result(bl_filt, bl_mod, method = "CVA")
-#'
-#' # Without filtering:
-#' bl_results <- bl_build_result(bl_dat, bl_mod, method = "PCA")
+#' # bl_dat from bl_prepare_data() (outlier filter built in) or bl_wrap_data()
+#' bl_results <- bl_build_result(bl_dat, bl_mod, method = "CVA")
 #' ```
 #'
 #' @section Exploratory biplot (no model yet):
 #' ```r
-#' bl_proj <- bl_build_result(bl_filt, method = "PCA")
-#' plot(bl_proj)   # renders biplot coloured by true class (red/blue)
+#' bl_results <- bl_build_result(bl_dat, method = "PCA")
+#' plot(bl_results)   # biplot coloured by true class (red/blue), no surface
 #' ```
 #'
-#' @param bl_data       A `"bl_data"` object from [bl_prepare_data()] or a
-#'   `"bl_filter_result"` from [bl_filter_outliers()]. The function extracts
-#'   `train_data` and `var_names` from whichever is supplied.
+#' @param bl_data       A `"bl_filter_result"` from [bl_prepare_data()] or
+#'   [bl_filter_outliers()], or a `"bl_data"` from [bl_wrap_data()]. The
+#'   function extracts `train_data` and `var_names` from whichever is supplied.
 #' @param bl_model      A `"bl_model"` object from [bl_fit_model()] or
-#'   [bl_wrap_model()]. When `NULL` (default), only the projection is built
-#'   and a `bl_projection` object is returned.
+#'   [bl_wrap_model()]. When `NULL` (default), the projection is built and a
+#'   model-free `bl_result` (no grid) is returned.
 #' @param method        `"PCA"` or `"CVA"`. Default `"PCA"`.
 #' @param proj_dims     Integer vector of length 2; eigenvector indices for
 #'   the biplot plane. Default `c(1L, 2L)`.
@@ -252,7 +257,7 @@ bl_assemble <- function(bl_data,
 #' @param outlie        Numeric in (0, 1]; convex hull fraction for the
 #'   prediction grid. Default `1`. Ignored when `bl_model = NULL`.
 #' @param calc_hull     Logical; trim the prediction surface to the training
-#'   hull. Visual only — does not affect counterfactual search. Default
+#'   hull. Visual only -- does not affect counterfactual search. Default
 #'   `TRUE`. Ignored when `bl_model = NULL`.
 #' @param b_margin      Numeric scalar; half-width of the band around
 #'   `cutoff` used to extract the decision boundary contour. Default
@@ -262,8 +267,9 @@ bl_assemble <- function(bl_data,
 #'   `.pred_function()` regardless of `b_margin`.
 #'   Ignored when `bl_model = NULL`.
 #'
-#' @return A `"bl_result"` object (when `bl_model` is supplied) or a
-#'   `"bl_projection"` object (when `bl_model = NULL`).
+#' @return A `"bl_result"` object. When `bl_model = NULL` it is model-free:
+#'   `model`, `model_type`, `cutoff`, `b_margin`, `biplot_grid`, `polygon`,
+#'   `accuracy` and `gini` are `NULL`.
 #'
 #' @seealso [bl_build_projection()], [bl_build_grid()], [bl_assemble()]
 #'
@@ -290,14 +296,14 @@ bl_build_result <- function(bl_data     = NULL,
   # ---- Validate data source ---------------------------------------------
   if (is.null(bl_data))
     stop("bl_build_result() requires 'bl_data'. ",
-         "Supply a 'bl_data' object from bl_prepare_data() or ",
-         "a 'bl_filter_result' object from bl_filter_outliers().",
+         "Supply a 'bl_filter_result' object from bl_prepare_data() or ",
+         "bl_filter_outliers(), or a 'bl_data' object from bl_wrap_data().",
          call. = FALSE)
 
   if (!inherits(bl_data, c("bl_data", "bl_filter_result")))
-    stop("bl_build_result(): 'bl_data' must be a 'bl_data' object from ",
-         "bl_prepare_data() or a 'bl_filter_result' object from ",
-         "bl_filter_outliers().",
+    stop("bl_build_result(): 'bl_data' must be a 'bl_filter_result' object ",
+         "from bl_prepare_data() or bl_filter_outliers(), or a 'bl_data' ",
+         "object from bl_wrap_data().",
          call. = FALSE)
 
   # The projection matrix V is always built from the training data.
@@ -382,10 +388,11 @@ print.bl_result <- function(x, ...) {
                 x$accuracy, x$gini))
     m <- length(x$biplot_grid$xseq)
     cat(sprintf("  Grid size    : %d x %d\n", m, m))
+    # hull_fraction here is the grid hull's outlie, not the outlier filter's
     if (!is.null(x$hull_fraction)) {
-      cat(sprintf("  Hull fraction: %.2f\n", x$hull_fraction))
+      cat(sprintf("  Grid hull    : outlie = %.2f\n", x$hull_fraction))
     } else {
-      cat("  Hull fraction: none applied\n")
+      cat("  Grid hull    : none\n")
     }
   } else {
     cat("  Model        : none (exploratory biplot only)\n")
@@ -421,11 +428,12 @@ summary.bl_result <- function(object, ...) {
               max(x$biplot_grid$grid_prob, na.rm = TRUE)))
   cat(sprintf("Contour lines found  : %d\n", length(x$biplot_grid$ct)))
 
+  # hull_fraction here is the grid hull's outlie, not the outlier filter's
   if (!is.null(x$hull_fraction)) {
-    cat(sprintf("Polygon filter       : applied (fraction = %.2f)\n",
+    cat(sprintf("Grid hull            : outlie = %.2f (contours clipped to it)\n",
                 x$hull_fraction))
   } else {
-    cat("Polygon filter       : not applied\n")
+    cat("Grid hull            : none\n")
   }
 
   if (x$method == "CVA" && !isTRUE(x$standardise)) {

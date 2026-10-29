@@ -45,7 +45,8 @@ boundary. If \code{NULL} (default), a new polygon is computed from
 \code{train_data} using \code{aplpack::plothulls()} with \code{fraction = outlie}.}
 
 \item{outlie}{Numeric in (0, 1]; hull fraction used only when
-\code{polygon} is \code{NULL}. Default \code{0.9}.}
+\code{polygon} is \code{NULL}. Default \code{1} (the hull encloses every training
+point; outlier trimming happens earlier, in \code{bl_prepare_data()}).}
 
 \item{calc_hull}{Logical; if \code{TRUE}, grid points outside the polygon
 are removed from the returned grid object. This affects only the visual
@@ -55,23 +56,31 @@ the hull shape. It does \strong{not} affect counterfactual search:
 independently. Default \code{TRUE}.}
 }
 \value{
-A list of class \code{"bl_grid"} with components:
+A list of class \code{"bl_grid"} with components. With
+\code{calc_hull = TRUE} (the default) \code{Zgrid}, \code{Xgrid}, \code{grid_prob} and
+\code{col_value} hold only the grid points inside the hull, so they have fewer
+than m^2 rows; with \code{calc_hull = FALSE} they hold all m^2 points.
 \describe{
-\item{\code{Zgrid}}{Numeric matrix (m^2 x 2); grid coordinates in Z-space.}
-\item{\code{Xgrid}}{Data frame (m^2 x p); grid back-projected to X-space.}
-\item{\code{grid_prob}}{Numeric vector (length m^2); model scores per grid
-point, in \verb{[0, 1]}.}
-\item{\code{col_value}}{Character vector (length m^2); colour per grid point
-on a blue-white-red scale.}
+\item{\code{Zgrid}}{Numeric matrix (grid points x 2); grid coordinates in
+Z-space.}
+\item{\code{Xgrid}}{Data frame (grid points x p); grid back-projected to
+X-space.}
+\item{\code{grid_prob}}{Numeric vector; model scores per grid point, in
+\verb{[0, 1]}.}
+\item{\code{col_value}}{Character vector; colour per grid point on a
+blue-white-red scale.}
 \item{\code{min_val}}{Numeric; lower bound of the square plot region.}
 \item{\code{max_val}}{Numeric; upper bound of the square plot region.}
 \item{\code{polygon}}{\code{sp::SpatialPolygons} convex hull.}
+\item{\code{hull_fraction}}{Numeric; the \code{outlie} value the hull was built
+with.}
 \item{\code{ct}}{List of contour line objects (boundary search contours).}
 \item{\code{ct_surrogate}}{List of contour line objects with hull-clipped
 boundaries for \code{bl_surrogate()}. Outside-hull cells are set to
 \code{cutoff} before extraction. Not used in biplot rendering.}
 \item{\code{xseq}}{Numeric vector (length m); x-axis grid sequence.}
 \item{\code{yseq}}{Numeric vector (length m); y-axis grid sequence.}
+\item{\code{b_margin}}{Numeric; the contour band half-width used.}
 }
 }
 \description{

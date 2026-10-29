@@ -21,10 +21,13 @@
 #'               points = bl_project_points(bl_results$test_data, bl_results))
 #' picked <- bl_pick_point(bl_results, data = bl_results$test_data)
 #'
-#' # Show counterfactual arrow for each picked point
-#' bl_bnd <- bl_find_boundary(bl_results)
-#' plot_biplotEZ(bl_results)
-#' picked <- bl_pick_point(bl_results, bl_boundary = bl_bnd)
+#' # Show counterfactual arrow for each picked point. bl_find_boundary()
+#' # defaults to test_data, so pick from the same rows.
+#' bl_bnd <- bl_find_boundary(bl_results, data = bl_results$test_data)
+#' plot_biplotEZ(bl_results,
+#'               points = bl_project_points(bl_results$test_data, bl_results))
+#' picked <- bl_pick_point(bl_results, data = bl_results$test_data,
+#'                         bl_boundary = bl_bnd)
 #' ```
 #'
 #' @param bl_result  A `"bl_result"` object from [bl_assemble()].

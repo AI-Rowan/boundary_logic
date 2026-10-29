@@ -121,6 +121,12 @@
 #'   \item{`proj_dims`}{Integer vector; the eigenvector indices used.}
 #'   \item{`biplot_obj`}{The `biplotEZ` S3 object; used for plotting in
 #'     Phase 2.}
+#'   \item{`cva_classes`}{Factor of CVA class labels used for the projection
+#'     (TP/TN/FP/FN when built with a model), or `NULL` for PCA.}
+#'   \item{`point_col`}{Character vector of point colours for the training
+#'     data, used by `plot.bl_projection()`.}
+#'   \item{`train_ranges`}{Per-feature `c(min, max)` ranges of the training
+#'     data, used as the feasibility check in the counterfactual searches.}
 #'   \item{`metric`}{Numeric matrix (p x p); the within-class covariance
 #'     `W` (or total covariance `Sigma` when no class info is supplied) used
 #'     as the Mahalanobis metric by `bl_find_local_cf()` and

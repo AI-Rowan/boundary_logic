@@ -153,14 +153,15 @@ print.bl_model <- function(x, ...) {
 #' used. Your model object must be compatible with the prediction call for
 #' that type (e.g., a `glm` object for `"GLM"`).
 #'
-#' For `"custom"` model types, supply a `predict_fn` — a function with
+#' For `"custom"` model types, supply a `predict_fn` -- a function with
 #' signature `function(model, new_data)` that returns a numeric vector of
 #' probabilities (one per row of `new_data`).
 #'
 #' @note For `"XGB"` models, `model` must be a list of the form
-#'   `list(model = <xgb.Booster>, features = <character vector>)`.
-#'   XGB is no longer supported by `bl_fit_model()`; use this function
-#'   with `xgboost::xgboost()` fitted externally.
+#'   `list(model = <xgb.Booster>, features = <character vector>)`, where the
+#'   booster is fitted externally with `xgboost::xgb.train()`. Models from
+#'   `xgboost::xgboost()` (class `"xgboost"`) are not supported. XGB is not
+#'   available through `bl_fit_model()`.
 #'
 #' @param model        The fitted model object (or for `"XGB"`, the wrapper
 #'   list described above).

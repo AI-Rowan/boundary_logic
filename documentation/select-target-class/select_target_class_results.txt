@@ -1,0 +1,13 @@
+boundarylogic version : 0.1.0
+rows after zero filter: 392
+training rows         : 313
+test rows             : 79
+rows compared (i <= n_test)          : 79
+class differs, train[i] vs test[i]   : 36 of 79
+rows with i > n_test (lookup out of range, colour by prediction): 234
+target row (train_data)              : 2
+target pred_prob / pred_class        : 0.227 / 0
+class of train_data[i] / test_data[i]: 0 / 1
+colour from test_data[i]             : FN (orange)
+colour from the target's own class   : TN (blue)
+bl_target has class_obs field        : TRUE

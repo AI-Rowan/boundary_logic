@@ -24,11 +24,11 @@ Dispatches to one of three paths:
 }
 \details{
 \enumerate{
-\item \strong{tidymodels workflow} (\code{inherits(model_use, "workflow")}): all model
-types fitted by \code{bl_fit_model()} except \code{"GBM"}. Uses
+\item \strong{tidymodels workflow} (\code{inherits(model_use, "workflow")}): the model
+types fitted by \code{bl_fit_model()} (GLM, SVM, NNET, RForest). Uses
 \verb{predict(<workflow>, new_data, type = "prob")} and extracts \code{.pred_1}.
-\item \strong{Legacy / raw model}: \code{"GBM"} (raw \code{gbm} object) and any model passed
-via \code{bl_wrap_model()} using a raw fitted object. Model-type-specific
+\item \strong{Raw model}: any model passed via \code{bl_wrap_model()} as a raw fitted
+object (GLM, GAM, GBM, LDA, SVM, NNET, RForest, XGB). Model-type-specific
 predict calls are used.
 \item \strong{Custom}: \code{model_type = "custom"} from \code{bl_wrap_model()}. Calls the
 user-supplied \code{predict_fn}.

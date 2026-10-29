@@ -30,8 +30,8 @@ the predicted class.
 ## Installation
 
 ```r
-# Install from GitHub
-devtools::install_github("AI-Rowan/boundary_logic")
+# Install from GitHub (build_vignettes = TRUE makes vignette() available)
+devtools::install_github("AI-Rowan/boundary_logic", build_vignettes = TRUE)
 ```
 
 For development use (recommended while the package is actively evolving):
@@ -51,8 +51,8 @@ and 3.
 
 ```
 Phase 1 ─ Build the pipeline
-  bl_prepare_data()  →  bl_filter_outliers()  →  bl_fit_model() / bl_wrap_model()
-  →  bl_build_result()  →  plot_biplotEZ()
+  bl_prepare_data()  (split + outlier filter via hull_fraction)
+  →  bl_fit_model() / bl_wrap_model()  →  bl_build_result()  →  plot_biplotEZ()
 
 Phase 2 ─ Global interpretation (population level)
   bl_find_boundary()  →  plot(bl_bnd)  →  bl_surrogate()
@@ -75,22 +75,21 @@ bl_dat <- bl_prepare_data(
   class_col      = "Species",
   target_class   = "versicolor",   # 1 = versicolor, 0 = all others
   train_fraction = 0.8,
-  seed           = 42L
+  seed           = 42L,
+  hull_fraction  = 0.9             # drop the outermost 10% of training points
 )
 
-bl_filt <- bl_filter_outliers(bl_dat, hull_fraction = 0.91)
-
 bl_mod <- bl_fit_model(
-  train_data = bl_filt$train_data,
-  var_names  = bl_filt$var_names,
+  train_data = bl_dat$train_data,
+  var_names  = bl_dat$var_names,
   model_type = "GLM"
 )
 
 bl_results <- bl_build_result(
-  bl_data  = bl_filt,
+  bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "PCA",
-  rounding = 3L
+  b_margin = 0.001                 # contour band: cutoff +/- 0.001 (the default)
 )
 
 plot_biplotEZ(bl_results)
@@ -103,8 +102,8 @@ plot_biplotEZ(bl_results, points = test_pts)
 ```r
 # Phase 2: global counterfactual search
 bl_bnd <- bl_find_boundary(bl_results)
-plot(bl_bnd)               # jitter plot — per-variable distances + robustness
-plot(bl_bnd, type = "box") # boxplot by confusion category
+plot(bl_bnd)                   # jitter plot — per-variable distances + robustness
+plot(bl_bnd, type = "boxplot") # boxplot by confusion category
 
 bl_sur <- bl_surrogate(bl_results)
 plot(bl_sur)
@@ -135,27 +134,42 @@ Use `bl_wrap_model()` when you have fitted your own model externally — for
 example, using custom hyperparameters or a model type not natively supported.
 
 ```r
-# Example: custom GAM with spline terms (Pima diabetes dataset)
+# Example: custom GAM with spline terms (Pima diabetes dataset, bundled)
 library(mgcv)
 
+pima_raw <- read.csv(system.file("extdata", "pima_diabetes.csv",
+                                 package = "boundarylogic"))
+# Zeros in these columns are missing values; keep complete rows only
+pima <- pima_raw[with(pima_raw, Glucose != 0 & BloodPressure != 0 &
+                        SkinThickness != 0 & Insulin != 0 & BMI != 0), ]
+
+bl_dat_pima <- bl_prepare_data(
+  data          = pima,
+  class_col     = "Outcome",       # already 0/1
+  feature_cols  = c("Pregnancies", "Glucose", "BloodPressure",
+                    "Insulin", "BMI", "Age"),
+  hull_fraction = 1                # no outlier trimming
+)
+
 custom_gam <- mgcv::gam(
-  class ~ s(Glucose) + s(BMI) + s(BloodPressure) + Insulin + Age,
-  data   = bl_filt$train_data,
+  class ~ s(Glucose) + s(BMI) + s(BloodPressure) + Insulin + Age + Pregnancies,
+  data   = bl_dat_pima$train_data,
   family = binomial(link = "logit")
 )
 
-bl_mod <- bl_wrap_model(
+bl_mod_pima <- bl_wrap_model(
   model      = custom_gam,
-  model_type = "custom",
-  var_names  = bl_filt$var_names,
+  model_type = "custom",           # or model_type = "GAM", with no predict_fn
+  var_names  = bl_dat_pima$var_names,
   predict_fn = function(m, new_data) {
     as.numeric(mgcv::predict.gam(m, newdata = new_data, type = "response"))
   },
-  train_data = bl_filt$train_data
+  train_data = bl_dat_pima$train_data
 )
 
-bl_results <- bl_build_result(bl_filt, bl_mod, method = "CVA", rounding = 2L)
-plot_biplotEZ(bl_results)
+bl_results_pima <- bl_build_result(bl_dat_pima, bl_mod_pima,
+                                   method = "CVA", b_margin = 0.01)
+plot_biplotEZ(bl_results_pima)
 ```
 
 ---
@@ -163,18 +177,27 @@ plot_biplotEZ(bl_results)
 ## Actionability constraints
 
 `set_filters()` restricts the counterfactual search to clinically or practically
-plausible directions:
+plausible directions. Continuing the Pima example with a patient the model
+predicts as diabetic:
 
 ```r
+pred_pima <- bl_predict(bl_results_pima)
+tgt_pima  <- bl_select_target(bl_results_pima,
+                              target = which(pred_pima$pred_class == 1)[1])
+
 flt <- set_filters(
-  tgt,
+  tgt_pima,
   Glucose     = "decrease",    # can only be reduced
   Age         = "fixed",       # not actionable
   Pregnancies = "fixed"        # not actionable
 )
 
-bl_local <- bl_find_local_cf(bl_results, tgt, set_filters = flt)
+bl_local_pima <- bl_find_local_cf(bl_results_pima, tgt_pima, set_filters = flt)
 ```
+
+Constraints are checked on the values the model sees (here raw clinical units).
+If the features were standardised before fitting, give `c(min, max)` ranges on
+that standardised scale, and read the `"fixed"` tolerance as ±0.5 of it.
 
 | Constraint | Meaning |
 |---|---|
@@ -187,17 +210,29 @@ bl_local <- bl_find_local_cf(bl_results, tgt, set_filters = flt)
 
 ## Supported model types
 
+**Fitted by the package** with `bl_fit_model()` (parsnip / tidymodels workflows),
+and also accepted by `bl_wrap_model()` as externally fitted models:
+
 | `model_type` | Algorithm | Backend |
 |---|---|---|
 | `"GLM"` | Logistic regression | parsnip → `glm` |
-| `"GAM"` | Generalised additive model | parsnip → `mgcv` |
-| `"GBM"` | Gradient boosting | `gbm` (direct) |
-| `"LDA"` | Linear discriminant analysis | parsnip → `MASS` |
 | `"SVM"` | Support vector machine | parsnip → `kernlab` |
 | `"NNET"` | Neural network | parsnip → `nnet` |
-| `"RForrest"` | Decision tree | parsnip → `rpart` |
-| `"XGB"` | XGBoost | parsnip → `xgboost` |
-| `"custom"` | Any model with a `predict_fn` | `bl_wrap_model()` |
+| `"RForest"` | Decision tree | parsnip → `rpart` |
+
+**Externally fitted only**, registered with `bl_wrap_model()`:
+
+| `model_type` | Algorithm | Model object to pass |
+|---|---|---|
+| `"GAM"` | Generalised additive model | an `mgcv::gam()` fit |
+| `"GBM"` | Gradient boosting | a `gbm::gbm()` fit |
+| `"LDA"` | Linear discriminant analysis | a `MASS::lda()` fit |
+| `"XGB"` | XGBoost | `list(model = <xgb.Booster from xgboost::xgb.train()>, features = <feature names>)` |
+| `"custom"` | Any model | the model plus a `predict_fn(model, new_data)` returning probabilities |
+
+The older spelling `"RForrest"` is still accepted, with a deprecation warning.
+Models from `xgboost::xgboost()` are not supported by the `"XGB"` type; fit with
+`xgboost::xgb.train()`, or use `"custom"` with your own `predict_fn`.
 
 ---
 
@@ -216,16 +251,17 @@ bl_local <- bl_find_local_cf(bl_results, tgt, set_filters = flt)
 
 | Function | Purpose | Returns |
 |---|---|---|
-| `bl_prepare_data()` | Convert raw data to binary 0/1, train/test split | `bl_data` |
-| `bl_wrap_data()` | Register pre-split, pre-coded data | `bl_data` |
-| `bl_filter_outliers()` | Remove outliers via convex hull filter | `bl_filter_result` |
+| `bl_prepare_data()` | Convert raw data to binary 0/1, train/test split, convex hull outlier filter | `bl_filter_result` |
+| `bl_wrap_data()` | Register pre-split, pre-coded data (no filtering) | `bl_data` |
+| `bl_filter_outliers()` | Convex hull outlier filter for `bl_wrap_data()` data | `bl_filter_result` |
+| `bl_set_scaling()` | Record a pre-model standardisation so plots and prints show raw units (display only) | same class as input |
 | `bl_fit_model()` | Fit a supported classifier | `bl_model` |
 | `bl_wrap_model()` | Register an externally fitted model | `bl_model` |
-| `bl_build_result()` | Steps 4–6 combined (preferred) | `bl_result` |
+| `bl_build_result()` | Projection + grid + assembly in one call (preferred) | `bl_result` |
 | `bl_build_projection()` | Compute PCA or CVA loading matrix | `bl_projection` |
 | `bl_build_grid()` | Build prediction grid, extract boundary contours | `bl_grid` |
 | `bl_assemble()` | Collect all Phase 1 artifacts | `bl_result` |
-| `plot_biplotEZ()` | Plot biplot with grid, points, and boundary | (plot) |
+| `plot_biplotEZ()` | Plot biplot with grid, points, and boundary contours | (plot) |
 
 ### Phase 2 — Global interpretation
 
@@ -234,8 +270,9 @@ bl_local <- bl_find_local_cf(bl_results, tgt, set_filters = flt)
 | `bl_project_points()` | Project any data frame into Z-space | `bl_points` |
 | `bl_predict()` | Score all observations; tidy prediction data frame | `data.frame` |
 | `bl_find_boundary()` | Nearest boundary point per observation | `bl_boundary` |
-| `bl_robustness()` | Per-variable distance totals and robustness scalar | named vector |
+| `bl_robustness()` | Per-variable distance totals and robustness scalar | list (`sum_of_distance`, `robustness`, `distance`) |
 | `bl_surrogate()` | Region-based spatial surrogate model | `bl_surrogate` |
+| `bl_pick_point()` | Interactively pick points on a drawn biplot; with `bl_boundary`, draws each pick's counterfactual arrow (pass the same `data` as the boundary search) | `data.frame` |
 
 ### Phase 3 — Local interpretation
 
@@ -263,6 +300,9 @@ The package vignette covers the complete workflow:
 vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")
 ```
 
+The vignette is available after installing with `build_vignettes = TRUE` (see
+Installation), and on the package's pkgdown site.
+
 ---
 
 ## Important notes
@@ -273,10 +313,11 @@ vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")
   exploratory interpretability, not exact boundary reconstruction. The 2D
   projection captures the dominant structure of the decision surface but cannot
   represent every dimension of a high-dimensional model.
-- **`rounding` controls contour band width only:** the `rounding` parameter in
-  `bl_build_result()` / `bl_build_grid()` determines how tightly the boundary
-  contour is extracted (`rounding = 2L` → band of ±0.01; `rounding = 3L` →
-  band of ±0.001). All model predictions are always stored to 3 decimal places
+- **`b_margin` controls contour band width only:** the `b_margin` parameter in
+  `bl_build_result()` / `bl_build_grid()` is the half-width of the band around
+  the cutoff in which the boundary contour is extracted (`b_margin = 0.001`,
+  the default → contours at 0.499 and 0.501; `b_margin = 0.01` → 0.49 and
+  0.51). All model predictions are always stored to 3 decimal places
   regardless of this setting.
 - **Local search does not apply the convex hull:** `bl_find_local_cf()` rotates
   the biplot plane, which invalidates the original hull polygon. The local
@@ -301,8 +342,11 @@ boundary_logic/
 ├── vignettes/           ← Loan-default workflow
 ├── inst/extdata/        ← Bundled datasets (loan_data.csv, pima_diabetes.csv)
 ├── development/         ← Dev harness + code walkthroughs
-└── docs/                ← Flow diagram, implementation summary
+├── documentation/       ← Technical notes (and the scripts behind them)
+└── docs/                ← pkgdown site (generated)
 ```
+
+The implementation summary is `2 implementation_summary.txt` in the repository root.
 
 Branches:
 
@@ -310,4 +354,5 @@ Branches:
 |---|---|
 | `main` | Current stable code — use this for general access |
 | `method_developments` | Active development branch |
+| `paper_nr1_changes` | Package fixes for the first journal paper (in progress) |
 | `original_PhD_code` | Preserved original PhD research scripts (read-only) |

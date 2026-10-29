@@ -2,13 +2,13 @@
 
 ## Context
 
-This document continues from `review_section7_to_8.md`. At this point `bl_results_v2` is the Phase 1 anchor built on the reduced feature set (after variable pruning), and `test_pts_v2` is the projected test-set `bl_points` object. Steps 9–15 form Phase 3: single-observation local interpretation — selecting one target, finding its local counterfactual, attributing feature contributions, and building the sparsest possible flip.
+This document continues from `review_section7_to_8.md`. At this point `bl_results_v2` is the Phase 1 anchor built on the reduced feature set (after variable pruning), and `test_pts_v2` is the projected test-set `bl_points` object. The script's Phase 3 runs Steps 9–16: single-observation local interpretation — selecting one target, finding its local counterfactual, attributing feature contributions, and building the sparsest possible flip. This walkthrough covers Steps 9–15; Step 16 (an external applicant) repeats Steps 10–14 for a data-frame target.
 
-Note: Phase 3 uses `bl_results_v2` (6-feature reduced model), not `bl_results` (the original 10-feature model).
+Note: Phase 3 uses `bl_results_v2`, the 4-feature reduced model (`loan_amnt`, `loan_int_rate`, `loan_percent_income`, `credit_score`), not `bl_results` (the 9-feature model). Its features are z-scored on the training split, and `bl_set_scaling()` records the transform, so printed feature values and biplot axes appear in raw loan units while every stored value is in z-score (model) units.
 
 ---
 
-## Step 9 — `bl_predict()` + `bl_select_target()` + `plot()` (or `plot_biplotEZ()`) with target
+## Step 9 — `bl_predict()` + `bl_project_points()` + `plot()` (or `plot_biplotEZ()`) with target
 
 ### 9a — `bl_predict()` → `pred_summary`
 
@@ -34,7 +34,7 @@ pred_summary <- bl_predict(bl_results_v2)
 | `pred_class` | Predicted class: 0 or 1 |
 | `true_class` | True loan status (0/1) — included because test data has a `"class"` column |
 | `confusion` | `"TP"`, `"TN"`, `"FP"`, or `"FN"` |
-| `person_age` … `credit_score` | All feature columns (in `var_names` order) |
+| `loan_amnt` … `credit_score` | All feature columns (in `var_names` order; z-score model units for `bl_results_v2`) |
 
 **Purpose:** The analyst reads this table to identify a target row — typically a False Negative (predicted 0, true 1: the model clears an applicant who will actually default).
 
@@ -48,27 +48,64 @@ External callers — the canonical workflow pattern (per README and `1 Foundatio
 ... → bl_assemble() → bl_predict() → bl_select_target() → set_filters() → bl_find_local_cf() → ...
 ```
 
-Used this way in scripts 00, 01, 03, 05, 06 and both vignettes. The analyst reads the returned `pred_summary` data frame, picks an interesting row (often a False Negative), and passes that row index to `bl_select_target()`. One non-target use exists: `scripts/02_contour_inspection.R:60` calls `bl_predict(bl_results, data = X_orig)` to score back-projected contour points for an inspection table.
+This pattern is used in the development harness (`development/03_loan_status_Boundary_Logic.R`, Step 9) and in the loan-default vignette. The analyst reads the returned `pred_summary` data frame, picks an interesting row (often a False Negative), and passes that row index to `bl_select_target()`.
 
-`bl_project_points()` vs `bl_predict()` — same projection + scoring under the hood; the only difference is the return shape. Use `bl_project_points()` when you want a `bl_points` object for plotting; use `bl_predict()` when you want a tidy data frame for table-style inspection. (`bl_predict()` literally calls `bl_project_points()` at `R/project_points.R:229`.)
+`bl_project_points()` vs `bl_predict()` — same projection + scoring under the hood; the only difference is the return shape. Use `bl_project_points()` when you want a `bl_points` object for plotting; use `bl_predict()` when you want a tidy data frame for table-style inspection. (`bl_predict()` calls `bl_project_points()` internally; see `bl_predict()` in `R/project_points.R`.)
 
 ---
 
-### 9b — `bl_select_target()` → `tgt`
+### 9b — `plot()` with `target_point` and biplot label customisation
+
+```r
+tdp <- 13
+
+test_points  <- bl_project_points(bl_results_v2$test_data[tdp:10, ], bl_results_v2)
+target_value <- bl_results_v2$test_data[tdp, ]
+
+plot(
+  bl_results_v2,
+  points       = test_points,          # rows 13, 12, 11, 10 of test_data
+  plot_points  = FALSE,                # skip the data-points layer
+  target_point = target_value,         # bl_results_v2$test_data[tdp, ]
+  target_label = tdp,
+  label_dir         = "Paral",
+  label_offset_var  = c("loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "credit_score"),
+  label_offset_dist = c(0, 0.5, 0, 0),
+  ticks_v = 3
+)
+```
+
+`tdp = 13` means row 13 of `bl_results_v2$test_data`; Step 10 selects it as the target.
+
+`person_age` is not in the reduced model, so it is not named. `label_offset_dist` pairs with `label_offset_var` position by position, so `loan_int_rate` gets the 0.5 offset. For the full pairing rule, see `review_section4_to_6.md` Section 6.4, "Parameter notes". `ticks_v = 3` draws three tick marks on every axis.
+
+`test_points` projects rows 13 down to 10 (`tdp:10`) of the test data. Because `plot_points = FALSE` skips the data-points layer, they are not drawn; `plot_biplotEZ()` still prints their prediction summary (4 points, TP / TN / FP / FN = 2 / 2 / 0 / 0 in the harness run). `plot_points = FALSE` skips the layer whatever `points` resolves to, including the `points = NULL` default (which would otherwise auto-project and draw the full training set). The `label_*` arguments are the same cosmetic biplot-label controls documented in `review_section4_to_6.md` Section 6.4, passed here via `plot()`'s `...` argument to `plot_biplotEZ()`.
+
+The biplot draws the grid, axes and contours (the data-points layer is skipped), plus:
+
+**Layer 6 — Target circle:**
+- `target_point = target_value` (i.e. `bl_results_v2$test_data[tdp, ]`): data frame row; `plot_biplotEZ()` calls `as.numeric(target_point[var_names])` internally, so no `unlist()` is needed
+- Inside `plot_biplotEZ()`, this is centered (`- X_center`) and projected to Z-space: `target_z = target_st %*% V[, proj_dims]`
+- Rendered as a large filled **yellow** circle (`pch = 21`, `cex = 1.8`, `bg = "yellow"`). On the global biplot the target is a highlight only. Its confusion-group colour is shown on the local biplot (Step 12), from `tgt$class_obs`.
+- `target_label = 13` is displayed inside the circle
+
+---
+
+## Step 10 — `bl_select_target()` → `tgt`, then `set_filters()` → `flt`
+
+### 10a — `bl_select_target()` → `tgt`
 
 **File:** `R/local_cf.R`
 
 **Call:**
 ```r
-tdp <- 2
-tgt <- bl_select_target(bl_results_v2, target = tdp)
+tgt <- bl_select_target(bl_results_v2, target = tdp)   # tdp = 13
 ```
-
-`tdp = 2` means row 2 of `bl_results_v2$test_data`.
 
 **What it does:**
 
-1. Extracts `x_obs = test_data[2, var_names]` — a single-row data frame of feature values.
+1. Extracts `x_obs = test_data[13, var_names]` — a single-row data frame of feature values (z-score model units).
 2. **Projects to Z-space** using the same formula as everywhere else:
    ```
    X_centered = x_obs - X_center          # subtract training means
@@ -76,66 +113,55 @@ tgt <- bl_select_target(bl_results_v2, target = tdp)
    ```
    (No `X_sd` scaling — CVA, `standardise = FALSE`)
 3. **Scores through XGBoost** via `.pred_function()`: `pred_prob` scalar, `pred_class` integer (0 or 1).
+4. **Resolves the true class** `class_obs` from the same row that supplies `x_obs`, here `test_data[13, ]`.
+   - **Which column:** it reads the `class` column when present, otherwise the first non-feature column.
+   - **Why at selection time:** the true class is a property of the observation, not of a row number. Resolving it here ties it to the row that was actually chosen.
+   - **Any data frame:** `data =` can be `test_data` (the default), `train_data` or any other frame. Whichever frame `row_id` indexes, `class_obs` comes from that same frame.
+   - **Unknown class:** when the source has no class column, or the label is not numeric, `class_obs` is `NA`.
 
-**Alternative call — external data frame:**
+**Selecting from another data frame:**
+```r
+tgt_train <- bl_select_target(bl_results_v2, target = 5L, data = bl_results_v2$train_data)
+```
+`x_obs` and `class_obs` both come from `train_data[5, ]`. `row_id = 5` indexes `train_data`.
+
+**Alternative call — external data frame (Step 16):**
 ```r
 tgt_ext <- bl_select_target(bl_results_v2, target = new_applicant)
 ```
-When `target` is a data frame instead of an integer, `x_obs` is taken directly from it and `row_id` is set to `NA_integer_` (external point, no true label available).
+When `target` is a data frame instead of an integer, the fields are filled as follows:
+- **`x_obs`:** taken directly from the frame.
+- **`row_id`:** `NA_integer_`.
+- **`class_obs`:** read from the frame's own class column if it has one. The script's `new_applicant` has none, so `class_obs = NA` (no true label available).
 
 **Returned object — `tgt` (S3 class `"bl_target"`):**
 
 | Field | Type | Content |
 |---|---|---|
-| `x_obs` | data.frame (1 row × p cols) | Feature values of the selected observation |
+| `x_obs` | data.frame (1 row × p cols) | Feature values of the selected observation (model units) |
 | `z_obs` | matrix (1 × 2) | Z-space coordinates, columns `"x"` and `"y"` |
 | `pred_prob` | numeric scalar | Predicted default probability |
 | `pred_class` | integer (0 or 1) | Predicted class at cutoff 0.5 |
-| `row_id` | integer | Row index in test data (2 here); `NA_integer_` for external |
+| `row_id` | integer | Row index into `data` (`test_data` by default; 13 here); `NA_integer_` for a data-frame target |
+| `class_obs` | integer (0, 1 or `NA`) | True class of the same row (`test_data[13, "class"]` here); `NA_integer_` when the source has no class column |
+| `scaling` | list or `NULL` | Display-only raw-unit scaling copied from `bl_results_v2$scaling` (see `review_section4_to_6.md`) |
 
-**`print(tgt)` console output:**
+**`print(tgt)` console output** (the script does not call it directly; `print(bl_local)` in Step 11 prints this block; from the harness run):
 ```
 -- bl_target --
-  Row ID         : 2
-  Predicted prob : 0.3120  (for example)
+  Row ID         : 13
+  Predicted prob : 0.1110
   Predicted class: 0
-  Feature values :
-  person_age  loan_amnt  loan_int_rate  ...
-      28.0000  15000.0000      11.5000  ...
+  Feature values (raw units) :
+          loan_amnt       loan_int_rate loan_percent_income        credit_score 
+           12000.00               12.69                0.05              634.00 
 ```
+
+The values print in raw loan units because `bl_results_v2` carries a scaling; `tgt$x_obs` itself stays in z-score units.
 
 ---
 
-### 9c — `plot()` with `target_point` and biplot label customisation
-
-```r
-plot(
-  bl_results_v2,
-  points       = test_points,          # bl_project_points(test_data[tdp, ], ...)
-  target_point = target_value,         # bl_results_v2$test_data[tdp, ]
-  target_label = tdp,
-  label_dir         = "Paral",
-  label_offset_var  = c("person_age", "loan_amnt", "loan_int_rate",
-                        "loan_percent_income", "credit_score"),
-  label_offset_dist = c(0, 0, 0.5, 0, 0)
-)
-```
-
-Note: `test_points` is the projection of just the target row (`bl_results_v2$test_data[tdp, ]`), used so the highlight plot shows only the target observation rather than a wider subset -- per the script's Step 9 comment, "Can be empty, or only the target data point to avoid unnecessary information on the biplot." The `label_*` arguments are the same cosmetic biplot-label controls documented in `review_section4_to_6.md` Step 7, passed here via `plot()`'s `...` argument to `plot_biplotEZ()`.
-
-If the points layer should be suppressed entirely -- the "can be empty" case in the script's Step 9 comment -- pass `plot_points = FALSE` to `plot()`/`plot_biplotEZ()`. This skips the data-points layer regardless of what `points` resolves to, including the `points = NULL` default (which would otherwise auto-project and draw the full training set).
-
-Same 5-layer biplot as before (grid, test points, axes, contour), plus:
-
-**Layer 6 — Target circle:**
-- `target_point = target_value` (i.e. `bl_results_v2$test_data[tdp, ]`): data frame row; `plot_biplotEZ()` calls `as.numeric(target_point[var_names])` internally, so no `unlist()` is needed
-- Inside `plot_biplotEZ()`, this is centered (`- X_center`) and projected to Z-space: `target_z = target_st %*% V[, proj_dims]`
-- Rendered as a large filled circle (`pch = 21`, `cex = 1.8`) with the confusion category colour as background (or red/blue if true class unknown)
-- `target_label = 2` is displayed inside the circle
-
----
-
-## Step 10 — `set_filters()` → `flt`
+### 10b — `set_filters()` → `flt`
 
 **File:** `R/local_cf.R`
 
@@ -143,11 +169,12 @@ Same 5-layer biplot as before (grid, test points, axes, contour), plus:
 ```r
 flt <- set_filters(
   tgt,
-  person_age    = "fixed",
-  loan_int_rate = "increase",
+  loan_int_rate = "increase",   # set by the lender, not the applicant
   credit_score  = "increase"
 )
 ```
+
+The script keeps two further constraints commented out (`person_age = "fixed"`, `loan_amnt = "fixed"`). `person_age` is not in the reduced model, and `set_filters()` stops on a variable name the target does not have.
 
 **What it does:**
 
@@ -160,12 +187,14 @@ flt <- set_filters(
 
 | Value | Applied as | Effect on search |
 |---|---|---|
-| `"decrease"` | `B_x[nm] <= x_obs[nm]` | Counterfactual must borrow less than observed |
-| `"increase"` | `B_x[nm] >= x_obs[nm]` | Counterfactual must be greater than observed |
+| `"decrease"` | `B_x[nm] <= x_obs[nm]` | Counterfactual value must be at most the observed value |
+| `"increase"` | `B_x[nm] >= x_obs[nm]` | Counterfactual value must be at least the observed value |
 | `"fixed"` | `abs(B_x[nm] - x_obs[nm]) <= 0.5` | Counterfactual value within ±0.5 of observed; in sparse CF, always reverts to observed |
 | `c(min, max)` | `B_x[nm] >= min & B_x[nm] <= max` | Counterfactual must lie within absolute range |
 
 No constraint = unconstrained (all contour points accepted for that feature).
+
+The comparisons run on the stored values, which are in model units. For `bl_results_v2` those are z-scores, so the `"fixed"` tolerance of ±0.5 means ±0.5 training SD of that feature, and a `c(min, max)` range must be given in z-score units.
 
 **Returned object — `flt` (S3 class `"bl_filters"`):**
 
@@ -174,10 +203,9 @@ No constraint = unconstrained (all contour points accepted for that feature).
 | `constraints` | named list | Each element is a constraint value (`"decrease"`, `"increase"`, `"fixed"`, or `c(min, max)`) |
 | `bl_target` | `bl_target` object | The `tgt` passed in — carried through so `bl_find_sparse_cf()` can access it |
 
-**`print(flt)` console output:**
+**`print(flt)` console output** (from the harness run):
 ```
 -- bl_filters --
-  person_age           : fixed
   loan_int_rate        : increase
   credit_score         : increase
 ```
@@ -204,11 +232,12 @@ Parameters:
 | `bl_result` | — | Phase 1 anchor |
 | `bl_target` | — | Single-observation target |
 | `set_filters` | `NULL` | Actionability constraints; `NULL` = unconstrained |
-| `max_pairs` | `10L` | How many eigenvector pairs to try |
+| `max_pairs` | `10L` | How many eigenvector pairs to try (at most p(p−1)/2; 6 for p = 4) |
 | `m` | `200L` | Grid resolution per pair |
+| `distance` | `"mahalanobis"` | Cross-pair selector: squared Mahalanobis distance in X-space (default) or `"euclidean"` Z-space distance |
 | `verbose` | `TRUE` | Print progress messages |
 
-**Why this function exists:** The global `bl_find_boundary()` uses the original biplot projection (fixed `proj_dims = c(1, 2)`). For a single target, we can do better: rotate the entire biplot so the target observation lies along the first axis of the projected plane, then search across multiple eigenvector pairs to find whichever rotation brings the boundary closest. This local rotation maximises the chance of finding a valid counterfactual.
+**Why this function exists:** The global `bl_find_boundary()` uses the original biplot projection (fixed `proj_dims = c(1, 2)`). For a single target, we can do better: for each eigenvector pair, rotate the biplot so the target observation is aligned with that pair's plane, then search across the pairs to find whichever rotation brings the boundary closest. This local rotation maximises the chance of finding a valid counterfactual.
 
 **`bl_local$bl_counterfactual` (companion to `bl_local$bl_target`):** the result carries a
 `"bl_counterfactual"` object packaging the boundary point (`x_cf = B_x` model units, `z_cf`,
@@ -228,7 +257,7 @@ x_target_st  = (x_obs - X_center) / sv    # sv = 1s for CVA (standardise = FALSE
 X_train_st   = scale(train_data[, var_names], center = X_center, scale = FALSE)
 ```
 
-**Generate pairs:** `.generate_pairs(p, max_pairs)` produces up to 10 eigenvector index pairs in canonical order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), … Each pair defines a 2D projection plane from the full p-dimensional loading matrix.
+**Generate pairs:** `.generate_pairs(p, max_pairs)` produces up to `max_pairs` eigenvector index pairs in canonical order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), (1,5), … With p = 4 there are only 6 pairs, (1,2) to (3,4), so all 6 are tried. Each pair defines a 2D projection plane from the full p-dimensional loading matrix.
 
 **For each pair `(i, j)`, the loop does:**
 
@@ -236,7 +265,7 @@ X_train_st   = scale(train_data[, var_names], center = X_center, scale = FALSE)
 
 **File:** `R/local_cf.R` (private helper)
 
-The rotation aligns the biplot so the target observation lies along the first axis of the chosen eigenvector pair. This is done via SVD:
+The rotation aligns the biplot so the target observation is aligned with the plane of the chosen eigenvector pair. This is done via SVD:
 
 ```
 Y = rbind(-x_target_st, rep(0, p), x_target_st)   # 3 × p: [-target, 0, target]
@@ -257,9 +286,9 @@ Vr_rot  = Vrho[, c(1, 2)]    # p x 2 -- always cols 1-2; SVD concentrates target
 tVr_rot = tVrho[c(1, 2), ]   # 2 x p inverse (for back-projection)
 ```
 
-**Why:** By constructing Y from `[-target, 0, target]` and finding the rotation that maps the pair-space projection of Y onto its full-space projection, we ensure the target observation aligns with the first axis of the rotated biplot. This places the target at a known position and makes boundary search more reliable.
+**Why:** By constructing Y from `[-target, 0, target]` and finding the rotation that maps the pair-space projection of Y onto its full-space projection, the target observation is carried into the plotted plane of the rotated biplot. This places the target at a known position and makes boundary search more reliable. The rotation fixes the target's direction only; the plane's second direction is not pinned down by the construction (see `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §4.1).
 
-**Key invariant:** `YVr_padded` is non-zero only in its first two columns, so the SVD rotation `A` always concentrates the target's information in columns 1 and 2 of `Vrho = V %*% t(A)` -- regardless of which `proj_pair` was used to build `Vr`. The return therefore always selects `Vrho[, c(1, 2)]`, not `Vrho[, proj_pair]`. Selecting `proj_pair` columns (the former bug) would return near-zero columns for any pair other than `c(1, 2)`, placing the target at approximately the biplot origin in `plot(bl_local)`.
+**Key invariant:** `YVr_padded` is non-zero only in its first two columns, so the SVD rotation `A` always concentrates the target's information in columns 1 and 2 of `Vrho = V %*% t(A)` -- regardless of which `proj_pair` was used to build `Vr`. The return therefore always selects `Vrho[, c(1, 2)]`, not `Vrho[, proj_pair]`; the `proj_pair` columns of `Vrho` are near zero for any pair other than `c(1, 2)`.
 
 #### Stage B — Build m×m grid in rotated Z-space
 
@@ -273,13 +302,13 @@ xseq    = seq(z_range[1]-pad, z_range[2]+pad, length.out = m)
 Zgrid   = expand.grid(xseq, xseq)          # m² × 2
 ```
 
-The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The same rationale applies to the global grid built in `bl_build_grid()`.
+The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The global grid built in `bl_build_grid()` takes its range differently, from the biplot's own plotting window (`.bl_get_plot_bounds()`; see `review_section4_to_6.md` Section 6.2).
 
 #### Stage C — Back-project grid and score
 
 ```
 Xgrid = Zgrid %*% tVr_rot + X_center      # m² × p in original feature space
-grid_prob = .pred_function(model, "XGB", Xgrid)   # chunked, 50 000 rows at a time
+grid_prob = .pred_function(model, model_type, Xgrid)   # "XGB" for bl_results_v2; chunked, 50 000 rows at a time
 ```
 
 #### Stage D — Extract contour lines
@@ -288,21 +317,23 @@ grid_prob = .pred_function(model, "XGB", Xgrid)   # chunked, 50 000 rows at a ti
 ct_local = contourLines(xseq, yseq, matrix(grid_prob, ncol=m),
                          levels = c(cutoff - b_margin, cutoff + b_margin))
 ```
-`b_margin = 0.01` (set directly via the `b_margin` parameter), so contours at 0.49 and 0.51.
+`b_margin = 0.01`, read from `bl_results_v2$b_margin` (set in its `bl_build_result()` call; `bl_find_local_cf()` has no `b_margin` argument), so contours at 0.49 and 0.51.
 
-#### Stage E — Filter contour segments (three successive filters)
+#### Stage E — Filter contour segments (four successive filters)
 
 For each contour segment in `ct_local`:
 
-1. **Opposing-class filter:** Keep only segments where `seg_class != target_pred_class`. A class-1 target needs class-0 contours (where it would flip to "safe").
+1. **Opposing-class filter:** Keep only segments where `seg_class != target_pred_class`. A class-0 target (predicted safe) needs class-1 contours, where it would flip to "default"; a class-1 target needs class-0 contours.
 
-2. **Back-project + feasibility:** Back-project segment to X-space, apply `train_ranges` filter, then apply `set_filters` actionability constraints via `.apply_actionability()`:
+2. **Back-project + actionability:** Back-project the segment to X-space, then apply the `set_filters` constraints via `.apply_actionability()` (when supplied). These are usually the most selective filter, so they run first, and a segment with no surviving vertex is skipped at once:
    - `"decrease"`: `B_x[nm] <= x_obs[nm]`
    - `"increase"`: `B_x[nm] >= x_obs[nm]`
    - `"fixed"`: `abs(B_x[nm] - x_obs[nm]) <= 0.5`
    - `c(min, max)`: range check
 
-3. **Model consistency:** Re-score filtered back-projected points; keep only rows where prediction agrees with contour's probability level.
+3. **Feasibility:** apply the `train_ranges` filter to the vertices that survived step 2.
+
+4. **Model consistency:** Re-score the surviving back-projected points; keep only rows where prediction agrees with contour's probability level.
 
 If all segments are eliminated, the pair is skipped.
 
@@ -319,12 +350,12 @@ v        = B_x - x_obs                              # 1 x p in X-space
 dist_mah = as.numeric(t(v) %*% metric_inv %*% v)    # scalar squared Mahalanobis
 ```
 
-where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance matrix stored on `bl_result$metric_inv` (added in 2026-05-20). The Cholesky decomposition is used for the inversion -- see `2 implementation_summary.txt` Section 4.2.1 for the maths and singularity safeguards.
+where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance matrix stored on `bl_result$metric_inv`. The Cholesky decomposition is used for the inversion -- see `2 implementation_summary.txt` Section 4.2.1 for the maths and singularity safeguards.
 
 The pair selector then depends on the `distance` argument of `bl_find_local_cf()`:
 
 - `distance = "mahalanobis"` (default): pair selected by minimum `dist_mah`. Pair-invariant; matches the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` formula.
-- `distance = "euclidean"` (legacy): pair selected by minimum `dist_z`. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice.
+- `distance = "euclidean"` (Z-space alternative): pair selected by minimum `dist_z`. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice.
 
 If the chosen selector for this pair beats the running `best_selector`, save everything for this pair as the new best result. The loop continues through all configured pairs, keeping the global minimum. Both `dist_z` and `dist_mah` are reported for the winning pair, plus per-pair tables `all_distances` and `all_distances_mahalanobis`.
 
@@ -337,7 +368,9 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 | `B_z` | matrix (1 × 2) | Nearest boundary point in rotated Z-space |
 | `B_x` | data.frame (1 row × p) | Back-projected counterfactual in X-space |
 | `B_pred` | numeric scalar | Model probability at counterfactual (should be ≈ 0.5) |
-| `dist_z` | numeric scalar | Z-space distance from target to boundary |
+| `dist_z` | numeric scalar | Z-space distance from target to boundary, for the winning pair |
+| `dist_mahalanobis` | numeric scalar | Squared Mahalanobis distance in X-space, for the winning pair |
+| `distance` | character | The selector used (`"mahalanobis"` here) |
 | `Z_target` | matrix (1 × 2) | Target position in rotated Z-space |
 | `best_pair` | integer (length 2) | Winning eigenvector pair, e.g. `c(1L, 2L)` |
 | `Vr_rot` | matrix (p × 2) | Rotated loading matrix for best pair |
@@ -350,31 +383,52 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 | `xseq`, `yseq` | numeric (m) | Grid axis sequences |
 | `min_val`, `max_val` | numeric | Grid axis limits |
 | `all_distances` | named numeric | Best Z-distance per pair tried (NA if no solution) |
+| `all_distances_mahalanobis` | named numeric | Squared Mahalanobis distance per pair tried (NA if no solution) |
 | `solution_found` | logical | `TRUE` if at least one valid boundary was found |
 | `blocking_constraint` | character or NULL | Reason message if no solution found |
 | `bl_target` | `bl_target` | The `tgt` object |
+| `bl_counterfactual` | `bl_counterfactual` or NULL | The boundary point, packaged like `bl_target` (see above) |
 | `bl_result` | `bl_result` | Reference to `bl_results_v2` |
 | `set_filters` | `bl_filters` or NULL | The `flt` object (needed by `bl_find_sparse_cf()`) |
 
-**`print(bl_local)` console output:**
+**`print(bl_local)` console output** (from the harness run):
 ```
 -- bl_local_result --
   Solution found : TRUE
-  Best pair      : (1, 2)
-  Distance (Z)   : 0.1342
-  Boundary pred  : 0.4900
+  Best pair      : (3, 4)
+  Selector       : mahalanobis
+  Distance (Z)   : 0.0046
+  Mahalanobis    : 0.5838 (sqrt of squared d_M^2 = 0.3408)
+  Boundary pred  : 0.5470
 
   Target:
 -- bl_target --
-  Row ID         : 2
-  ...
+  Row ID         : 13
+  Predicted prob : 0.1110
+  Predicted class: 0
+  Feature values (raw units) :
+          loan_amnt       loan_int_rate loan_percent_income        credit_score 
+           12000.00               12.69                0.05              634.00 
 
-  All Z-distances by pair:
-  pair   distance
-  (1,2)   0.1342
-  (1,3)       NA
-  ...
+  Counterfactual:
+-- bl_counterfactual --
+  Boundary prob  : 0.5470
+  Predicted class: 1
+  Feature values (raw units) :
+          loan_amnt       loan_int_rate loan_percent_income        credit_score 
+         12398.5032             14.1460              0.0484            634.2206 
+
+  Per-pair distances:
+  pair      dist_z dist_mahalanobis
+ (1,2) 0.028309256       12.8162127
+ (1,3) 0.027807716       12.3661193
+ (2,3) 0.028326778       12.8320826
+ (1,4) 0.015557768        3.8707700
+ (2,4) 0.027625664       12.2047315
+ (3,4) 0.004616263        0.3407877
 ```
+
+Pair (3, 4) has the smallest squared Mahalanobis distance (0.3408), so it wins. The counterfactual raises the interest rate from 12.69 to 14.15 and credit score from 634 to 634.22, which satisfies both `"increase"` constraints, and the model's probability rises from 0.111 to 0.547. Because `bl_find_local_cf()`'s reported distance can differ between repeated calls in one session, quote these values from a first call on a fresh `bl_results_v2` (see CLAUDE.md §6).
 
 ---
 
@@ -382,8 +436,7 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 
 **File:** `R/local_cf.R`
 
-Default: `plot_points = FALSE` (training points hidden), `no_grid = FALSE`, `no_contour = FALSE`.
-`rotate_deg = 0` and `label_cex = 1` are now available. `label_offset_var` accepts variable names or integer indices. `label_dir = "Paral"` (border-adaptive) is the new default.
+Defaults: `plot_points = FALSE` (training points hidden), `no_grid = FALSE`, `no_contour = FALSE`, `rotate_deg = 0`, `label_cex = 1`, `label_dir = "Paral"` (border-adaptive). `label_offset_var` and `ticks_var` accept variable names or integer indices, paired position by position with `label_offset_dist` / `ticks_n` (see `review_section4_to_6.md` Section 6.4). The script's Step 12 call offsets `loan_percent_income`'s label (`label_offset_dist = c(0, 0, 1, 0)`) and sets per-axis tick counts (`ticks_n = c(4, 5, 5, 5)`).
 
 `new_title` (default `NA`) overrides the auto-generated `"Local biplot -- target N [pair (i,j) | p=..., class ...]"` title; `NA` keeps the auto-generated title.
 
@@ -394,7 +447,8 @@ units. After the SVD rotation has patched `Z`/`Lmat`/`ax.one.unit` (and any extr
 The relabel transforms only the biplotEZ `$means`/`$sd`, which are **rotation-invariant**, so it
 composes cleanly with the local rotation and leaves the plotted geometry untouched. The same
 applies to `plot.bl_surrogate()` and, by pass-through, `plot.bl_sparse_result()` (Step 14).
-Counterfactual/Shapley *values* in the console output remain in model (standardised) units.
+In the console output, distances (`dist_z`, `dist_mahalanobis`) and Shapley contributions stay in
+model units, while feature values (target, counterfactual, sparse CF) print in raw units.
 
 **Base-graphics title-error note:** `new_title` is written straight to `biplot_plot$Title` (no validation, matching `plot_biplotEZ()`), and biplotEZ forwards that field to `graphics::title(main = ...)` at plot-flush time. A length-1 character string (or `NA` to keep the default) is the intended contract. `title()` is tolerant: it coerces most atomic and even recursive inputs (numeric, multi-element character vectors, lists, data.frames) to a label via `as.character()`, so those do *not* error — they just produce an odd/recycled title. The error case is a value base R cannot coerce to a character vector at all — a **function/closure** or an **environment** — which raises `"cannot coerce type 'closure' to vector of type 'character'"` from *inside* the biplotEZ `plot()` call, not from the plot function's own argument handling. A length-1 character is the safe, intended input.
 
@@ -407,9 +461,24 @@ Counterfactual/Shapley *values* in the console output remain in model (standardi
 | 3 | Training points (optional, hidden by default) | `Z_train_rot` + confusion colours |
 | 4 | Axes redrawn darker (via `par(new=TRUE)`) | Same biplotEZ object |
 | 5 | Decision boundary contour lines | `bl_local$ct_local` |
-| 6 | Target circle (filled, confusion colour) | `Z_target`; coloured TP/TN/FP/FN if true class known |
+| 6 | Target circle (filled, confusion colour) | `Z_target`; colour from `bl_target$class_obs` against `bl_target$pred_class` (see below) |
 | 7 | CF cross (×) + arrow | `B_z` (cross); arrow from `Z_target` → `B_z` |
 | 8 | Console summary | Printed to console (not plotted) |
+
+**Target colour (layer 6):** the colour shows whether the model is right about the target. It compares the target's true class `bl_target$class_obs`, resolved by `bl_select_target()` from the target's own row, with its predicted class at the cutoff:
+
+| `class_obs` | `pred_class` | Group | Colour |
+|---|---|---|---|
+| 1 | 1 | TP | red |
+| 0 | 0 | TN | blue |
+| 0 | 1 | FP | purple |
+| 1 | 0 | FN | orange |
+| `NA` | 1 / 0 | unknown | red / blue (prediction only) |
+
+These are the same colours the training points use in layer 3.
+- **Unknown class:** an external target with no class column is coloured by its prediction alone.
+- **No `class_obs` field:** a `bl_target` without the field is treated the same way.
+- **The label:** the target's text label is `row_id`, or nothing for a data-frame target.
 
 **Key rendering detail — patching the biplotEZ object:**
 
@@ -421,14 +490,16 @@ biplot_plot$ax.one.unit       <- (1 / diag(t(tVr_rot) %*% tVr_rot)) * t(tVr_rot)
 ```
 This means the axes, variable label positions, and tick marks are all recalculated in the rotated coordinate frame — the biplot shows the locally rotated view, not the original CVA projection.
 
-**Console output (Step 8 of plot):**
+**Console output (Step 8 of plot; from the harness run):**
 ```
 --- Local CF summary ---
-  Target         : 2
-  Pred prob      : 0.3120  (class 0)
-  Best pair      : (1, 2)
-  Distance (Z)   : 0.1342
-  Boundary pred  : 0.4900
+  Target         : 13
+  Pred prob      : 0.1110  (class 0)
+  Best pair      : (3, 4)
+  Selector       : mahalanobis
+  Distance (Z)   : 0.0046
+  Mahalanobis    : 0.5838 (sqrt)
+  Boundary pred  : 0.5470
 ------------------------
 ```
 
@@ -461,15 +532,15 @@ Explains **which features drove the prediction from the observed point to the co
 
 **The game:**
 - Players: the p features
-- "Start": the observed feature values `x_obs` (e.g. row 2 of test data)
+- "Start": the observed feature values `x_obs` (row 13 of the test data here)
 - "End": the counterfactual `B_x` (the boundary point back-projected to X-space)
 - The model's probability change from `pred_obs` to `B_pred` must be attributed across features
 
-**Method selection (line 178):**
+**Method selection** (the `if (p <= exact_max_vars)` branch of `bl_shapley()`):
 - If `p <= exact_max_vars` (default 14): use **exact** computation via `.shapley_exact_one()`
 - If `p > 14`: use **approximate** via `.shapley_perm_one()` with `M = 2048` permutations
 
-The loan dataset (after pruning) has 6 features, so exact computation is used here.
+The reduced loan model has 4 features, so exact computation over all 2^4 = 16 subsets is used here, and the `seed` argument has no effect (it applies only to the permutation path).
 
 ---
 
@@ -502,7 +573,7 @@ For M = 2048 random permutations:
 
 ---
 
-**Contribute classification (line 206):**
+**Contribute classification** (the `df$Contribute <- dplyr::case_when(...)` step of `bl_shapley()`):
 
 Each feature is classified as `"Supports"` or `"Contradicts"` the move to the boundary:
 
@@ -513,13 +584,13 @@ Each feature is classified as `"Supports"` or `"Contradicts"` the move to the bo
 | 1 (predicted default) | < 0 (pushes prob down, toward boundary) | `"Supports"` |
 | 1 (predicted default) | ≥ 0 (pushes prob up, away from boundary) | `"Contradicts"` |
 
-**Row ordering:** For class-0 target: sorted ascending by `shapley_cause` (most negative = biggest supporter at top). For class-1: sorted descending.
+**Row ordering:** rows are sorted by signed `shapley_cause`: ascending for a class-0 target, descending for a class-1 target. The plot draws the first row at the bottom, so for either class the strongest supporter of the move to the boundary sits at the top.
 
-**`varnames_p` label** (used as Y-axis in plot):
+**`varnames_p` label** (used as Y-axis in plot), stored in model units:
 ```
-"loan_amnt: 15000 -> -3250.5"
+"feature: observed_value -> change_to_reach_boundary"
 ```
-Format: `"feature: observed_value -> change_to_reach_boundary"`
+The observed value is rounded to 3 d.p. and the change to 2 d.p. For `bl_results_v2` these are z-score values. When `bl_result$scaling` is set (as here), `plot.bl_shapley()` replaces the label at plot time with raw units, `"feature: observed -> counterfactual"`, for example `"loan_amnt: 12000 -> 12398.5"`. The stored `varnames_p` is not changed.
 
 ---
 
@@ -527,7 +598,7 @@ Format: `"feature: observed_value -> change_to_reach_boundary"`
 
 | Field | Type | Content |
 |---|---|---|
-| `shapley_df` | data.frame | One row per feature, sorted by contribution. Columns: `varnames`, `pred_data` (observed value), `data_to_boundary` (change needed), `shapley_cause` (Shapley value), `pred_use` (target's predicted class), `Contribute`, `varnames_p` (formatted label) |
+| `shapley_df` | data.frame | One row per feature, sorted by signed Shapley value. Columns: `varnames`, `pred_data` (observed value), `data_to_boundary` (change needed), `shapley_cause` (Shapley value), `pred_use` (target's predicted class), `Contribute`, `varnames_p` (formatted label) |
 | `pred_prob` | numeric | Target's predicted probability |
 | `pred_class` | integer | Target's predicted class |
 | `pred_boundary` | numeric | Model probability at counterfactual |
@@ -536,32 +607,35 @@ Format: `"feature: observed_value -> change_to_reach_boundary"`
 
 ---
 
-**`print(bl_shapley_values)` console output:**
+**`print(bl_shapley_values)` console output** (from the harness run):
 ```
 -- bl_shapley --
-  Row ID         : 2
-  Pred prob      : 0.3120
+  Row ID         : 13
+  Pred prob      : 0.1110
   Pred class     : 0
-  Boundary pred  : 0.4900
+  Boundary pred  : 0.5470
 
-  Shapley table:
-  varnames  pred_data  data_to_boundary  shapley_cause  Contribute
-  loan_amnt  15000.000         -3250.500         0.1234    Supports
-  loan_int_rate  11.500            0.020         0.0891    Supports
-  ...
+  Shapley table (raw units):
+            varnames pred_data data_to_boundary shapley_cause Contribute
+           loan_amnt  12000.00         398.5032        0.0000   Supports
+        credit_score    634.00           0.2206        0.0000   Supports
+ loan_percent_income      0.05          -0.0016        0.1445   Supports
+       loan_int_rate     12.69           1.4560        0.2915   Supports
 ```
+
+`pred_data` (a level) and `data_to_boundary` (a difference) print in raw units, converted by `.scale_to_raw()` with `kind = "level"` and `kind = "delta"` respectively; `shapley_cause` is in probability units and is not converted. The four values sum to 0.436, the move from 0.111 to 0.547. All four count as `"Supports"` because each is at least 0 for a class-0 target; the two zero values mean the loan amount and credit score changes have no effect on the prediction here.
 
 ---
 
 **`plot(bl_shapley_values)` — Shapley bar chart:**
 
 Horizontal bar chart (ggplot2):
-- **Y-axis:** `varnames_p` — one bar per feature, labelled with `"feature: observed -> change"`; sorted by Shapley magnitude
+- **Y-axis:** one bar per feature, sorted by signed Shapley value. With a scaling set (as here) the labels read `"feature: observed -> counterfactual"` in raw units and the axis title is `"Variable (observed -> counterfactual, raw units)"`; without one they are `varnames_p`, `"feature: observed -> change"` in model units
 - **X-axis:** `shapley_cause` — the Shapley value (how much this feature contributed to the prediction move)
 - **Fill colour:** `"Supports"` = dark blue; `"Contradicts"` = grey
-- **Value label:** rounded Shapley value displayed inside each bar in white
+- **Value label:** Shapley value rounded to 3 d.p., displayed inside each bar in white
 - **Title:** `"Shapley Contribution Plot"`
-- **Subtitle:** `"ID: 2 | Class: 0 | Pred: 0.312 | Boundary pred: 0.490"`
+- **Subtitle:** `"ID: 13 | Class: 0 | Pred: 0.111 | Boundary pred: 0.547"`
 - **X-axis label:** `"[-> change to reach boundary]: Impact on prediction"`
 
 **Reading the chart:** Each bar shows how much that feature's change (from observed to counterfactual) accounts for the total probability shift from `pred_prob` to `pred_boundary`. The Shapley values sum to approximately `pred_boundary - pred_prob`.
@@ -581,14 +655,14 @@ bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
 
 Builds the **minimal counterfactual**: keep only the features whose Shapley value `"Supports"` the prediction flip; revert all other features to their observed values. This answers "what is the fewest changes needed to flip the prediction?"
 
-**Algorithm (lines 364–385):**
+**Algorithm** (inside `bl_find_sparse_cf()`):
 
 1. Start with `x_sparse = x_obs` (all features at observed values).
 2. For each feature:
    - If `Contribute == "Supports"`: set `x_sparse[nm] = B_x[nm]` (use counterfactual value)
    - If `Contribute == "Contradicts"` or `"Unknown"`: leave at `x_obs[nm]`
-3. **Fixed-constraint override (lines 377–385):** If any feature was marked `"fixed"` in `set_filters`, it always reverts to its observed value in the sparse CF — regardless of its Shapley classification. (The `"fixed"` constraint means the feature is not actionable at all; it was included in the boundary search only to inform the direction, not to prescribe a change.)
-4. **Optional rounding** (`round_to`): if not `NULL`, round each supporting feature's new value to the nearest multiple of `round_to`. E.g. `round_to = 500` would round `loan_amnt` to the nearest 500.
+3. **Fixed-constraint override** (the `"fixed"` loop over `bl_local$set_filters` in `bl_find_sparse_cf()`): If any feature was marked `"fixed"` in `set_filters`, it always reverts to its observed value in the sparse CF — regardless of its Shapley classification. (The `"fixed"` constraint means the feature is not actionable at all; it was included in the boundary search only to inform the direction, not to prescribe a change.)
+4. **Optional rounding** (`round_to`): if not `NULL`, round each supporting feature's new value to the nearest multiple of `round_to`. The rounding acts on the stored model-unit value: on raw data, `round_to = 500` rounds `loan_amnt` to the nearest 500; for `bl_results_v2`, whose values are z-scores, it would round the z-score instead, so the script uses `round_to = NULL`.
 5. **Score** `x_sparse` through XGBoost → `pred_sparse`.
 6. **Validate:** `solution_valid = (pred_class_sparse != pred_class_target)` — does the sparse CF actually flip the prediction?
 
@@ -604,24 +678,25 @@ Builds the **minimal counterfactual**: keep only the features whose Shapley valu
 
 ---
 
-**`print(bl_sparse)` console output:**
+**`print(bl_sparse)` console output** (from the harness run):
 ```
 -- bl_sparse_result --
   Solution valid : TRUE
 
   Predictions:
-    Observed     : 0.3120  (class 0)
-    Full CF      : 0.4900
-    Sparse CF    : 0.5230
+    Observed     : 0.1110  (class 0)
+    Full CF      : 0.5470
+    Sparse CF    : 0.5470
 
-  Variable summary:
-  variable       x_obs    B_x  x_sparse  used_in_sparse
-  loan_amnt   15000.0  11749.5  11749.5            TRUE
-  loan_int_rate  11.5     11.5     11.5           FALSE
-  ...
+  Variable summary (raw units):
+            variable    x_obs        B_x   x_sparse used_in_sparse
+           loan_amnt 12000.00 12398.5032 12398.5032           TRUE
+        credit_score   634.00   634.2206   634.2206           TRUE
+ loan_percent_income     0.05     0.0484     0.0484           TRUE
+       loan_int_rate    12.69    14.1460    14.1460           TRUE
 ```
 
-The `used_in_sparse` column shows which features actually changed. Features with `"fixed"` constraint will show `x_obs == x_sparse` regardless.
+Here every feature supports the move, so the sparse CF equals the full CF. The `used_in_sparse` column marks the features classified `"Supports"` (`Contribute == "Supports"`). A `"fixed"` feature is reverted to `x_obs` in `x_sparse` even if its `used_in_sparse` is `TRUE`, because the flag does not reflect the fixed override; compare `x_sparse` with `x_obs` to see which features actually changed.
 
 ---
 
@@ -638,6 +713,7 @@ The `used_in_sparse` column shows which features actually changed. Features with
 3. **Plots a second cross** at `z_sparse`:
    - Colour: `"green3"` if `solution_valid == TRUE` (flip succeeded), `"yellow2"` if not
    - `pch = 4L`, `cex = 1.4`, `lwd = 2` (slightly larger than the full CF cross)
+   - `z_sparse` is projected with `Vr_rot` only. An extra `rotate_deg` passed to the plot rotates the local biplot but not this cross, so with `rotate_deg != 0` the sparse cross is drawn in the unrotated local frame.
 
 4. **Adds a legend** (top-right corner):
    - `"Full CF"` (grey cross, from `plot.bl_local_result`)
@@ -646,10 +722,10 @@ The `used_in_sparse` column shows which features actually changed. Features with
 5. **Prints sparse CF summary** to console:
    ```
    --- Sparse CF summary ---
-     Target         : 2
-     Observed pred  : 0.3120  (class 0)
-     Full CF pred   : 0.4900
-     Sparse CF pred : 0.5230
+     Target         : 13
+     Observed pred  : 0.1110  (class 0)
+     Full CF pred   : 0.5470
+     Sparse CF pred : 0.5470
      Solution valid : TRUE
    -------------------------
    ```
@@ -664,14 +740,14 @@ bl_shap_free   <- bl_shapley(bl_local_free)
 bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
 ```
 
-Identical pipeline to Steps 11–14, with `set_filters = NULL`. The unconstrained search finds the geometrically nearest boundary point without any actionability restrictions. Comparing `bl_local` (constrained) vs `bl_local_free` (unconstrained) shows the cost of the constraints: how much farther the boundary is when `loan_amnt` must decrease and `loan_int_rate` must stay fixed.
+Identical pipeline to Steps 11–14, with `set_filters = NULL`. The unconstrained search finds the geometrically nearest boundary point without any actionability restrictions. Comparing `bl_local` (constrained) vs `bl_local_free` (unconstrained) shows the cost of the constraints: how much farther the boundary is when `loan_int_rate` and `credit_score` may only increase. In the harness run the unconstrained search also picks pair (3, 4), at a slightly smaller distance (√d²_M = 0.5554 against 0.5838), with boundary probability 0.542.
 
 ---
 
 ## Complete Object Flow: Steps 10–14
 
 ```
-bl_results_v2  [bl_result]          ← Phase 1 anchor (reduced 6-feature model)
+bl_results_v2  [bl_result]          ← Phase 1 anchor (reduced 4-feature model)
 test_pts_v2    [bl_points]          ← test data in Z-space
      │
      │  bl_predict(bl_results_v2)
@@ -681,43 +757,47 @@ pred_summary   [data.frame]
   ├── true_class, confusion (TP/TN/FP/FN)
   └── all feature columns
      │
-     │  bl_select_target(bl_results_v2, target = 2)
-     │    → extract test_data[2, var_names]
+     │  bl_select_target(bl_results_v2, target = 13)
+     │    → extract test_data[13, var_names]
      │    → project to Z-space
      │    → score through XGBoost
+     │    → read true class from test_data[13, "class"]
      ▼
 tgt  [bl_target]
-  ├── x_obs    (1 × p feature values)
+  ├── x_obs    (1 × p feature values, model units)
   ├── z_obs    (1 × 2, Z-space position)
-  ├── pred_prob, pred_class
-  └── row_id = 2
+  ├── pred_prob, pred_class   (0.111, 0)
+  ├── row_id = 13
+  ├── class_obs (true class of that row; NA if unknown)
+  └── scaling  (display-only z-score scaling)
      │
-     │  set_filters(tgt, person_age="fixed", loan_int_rate="increase", credit_score="increase")
+     │  set_filters(tgt, loan_int_rate="increase", credit_score="increase")
      ▼
 flt  [bl_filters]
-  ├── constraints = list(person_age="fixed", loan_int_rate="increase", credit_score="increase")
+  ├── constraints = list(loan_int_rate="increase", credit_score="increase")
   └── bl_target = tgt
      │
-     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt, max_pairs=10)
+     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 10
      │
-     │  [for each of up to 10 eigenvector pairs]:
+     │  [for each of the 6 eigenvector pairs (p = 4)]:
      │    .bl_rotate() → Vr_rot, tVr_rot (SVD-based local rotation)
      │    build m×m rotated grid → Xgrid (back-projected)
      │    score through XGBoost → grid_prob
      │    extract contour lines → ct_local
-     │    filter: opposing class, train_ranges, set_filters, consistency
+     │    filter: opposing class, set_filters, train_ranges, consistency
      │    .nearest_idx_block() → nearest boundary vertex
-     │    update best if dist_z improves
+     │    update best if dist_mah improves (the default selector)
      ▼
 bl_local  [bl_local_result]
   ├── B_z       (1 × 2, best boundary in rotated Z)
   ├── B_x       (1 × p, counterfactual in X-space)
-  ├── B_pred    (≈ 0.5)
-  ├── dist_z    (Z-space distance)
-  ├── Z_target, best_pair, Vr_rot, tVr_rot
+  ├── B_pred    (0.547)
+  ├── dist_z, dist_mahalanobis, distance
+  ├── Z_target, best_pair = (3, 4), Vr_rot, tVr_rot
   ├── Z_train_rot, Zgrid, grid_prob, col_value, ct_local
-  ├── all_distances, solution_found
+  ├── all_distances, all_distances_mahalanobis, solution_found
   ├── bl_target = tgt
+  ├── bl_counterfactual  (the boundary point, printed in raw units)
   ├── bl_result = bl_results_v2
   └── set_filters = flt
      │
@@ -726,15 +806,15 @@ bl_local  [bl_local_result]
      │
      │  bl_shapley(bl_local)
      │    → start = x_obs, end = B_x
-     │    → exact Shapley (p=6 ≤ 14): enumerate all 2^6 = 64 subsets
+     │    → exact Shapley (p=4 ≤ 14): enumerate all 2^4 = 16 subsets
      │    → classify each feature as Supports/Contradicts
-     │    → sort by contribution magnitude
+     │    → sort by signed Shapley value
      ▼
 bl_shapley_values  [bl_shapley]
-  ├── shapley_df   (6 rows: varnames, pred_data, data_to_boundary,
-  │                 shapley_cause, Contribute, varnames_p)
+  ├── shapley_df   (4 rows: varnames, pred_data, data_to_boundary,
+  │                 shapley_cause, pred_use, Contribute, varnames_p)
   ├── pred_prob, pred_class, pred_boundary
-  ├── row_id = 2
+  ├── row_id = 13
   └── bl_local_result = bl_local
      │
      ├── print(bl_shapley_values) → Shapley table to console
@@ -763,7 +843,7 @@ bl_sparse  [bl_sparse_result]
 
 ## Key Methodological Points
 
-1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 12) rotates the projection specifically around the target observation and tries multiple eigenvector pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
+1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 11) rotates the projection specifically around the target observation and tries multiple eigenvector pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
 
 2. **The convex hull is NOT applied in Phase 3.** Because each eigenvector pair rotation invalidates the original grid polygon, `bl_find_local_cf()` uses `train_ranges` (per-feature min/max) and `set_filters` actionability constraints instead of the Z-space hull. The hull was the right constraint in global space; in locally-rotated space it would be incorrect.
 
@@ -771,6 +851,6 @@ bl_sparse  [bl_sparse_result]
 
 4. **Sparse CF is a greedy subset selection.** It keeps only features that `"Support"` the flip. This is not guaranteed to be the minimal subset (optimal sparse CF is NP-hard), but it is a principled, Shapley-ordered approximation. If `solution_valid = FALSE`, the remaining "supporting" features alone are not sufficient to flip the prediction — the "contradicting" features' reversal to observed values pulled the probability back below 0.5.
 
-5. **`"fixed"` constraint has two effects:** During `bl_find_local_cf()`, it limits counterfactual search to values within ±0.5 of observed. During `bl_find_sparse_cf()`, it always reverts to observed — regardless of Shapley classification. This models features the analyst knows cannot or should not change (e.g. interest rate set by lender).
+5. **`"fixed"` constraint has two effects:** During `bl_find_local_cf()`, it limits counterfactual search to values within ±0.5 of observed, in model units (±0.5 SD for the z-scored `bl_results_v2`). During `bl_find_sparse_cf()`, it always reverts to observed — regardless of Shapley classification. This models features the analyst knows cannot or should not change (for example a person's age). The script's Step 10 uses no `"fixed"` constraint; it keeps the lender-set interest rate and the credit score to `"increase"`.
 
 6. **The chain is fully self-contained.** Each object carries references to its parents: `bl_sparse$bl_shapley$bl_local_result$bl_result`. Every downstream method can re-extract whatever it needs (projection matrices, model, feature names) without requiring the user to pass additional arguments.

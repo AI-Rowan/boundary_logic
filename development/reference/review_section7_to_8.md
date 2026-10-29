@@ -13,9 +13,15 @@ This document continues from `review_section4_to_6.md`. At this point `bl_result
 **Call:**
 ```r
 bl_bnd <- bl_find_boundary(bl_results)
-print(bl_bnd)
-plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
+hist(bl_bnd$B_pred)                  # diagnostic: B_pred should cluster near 0.5
+
+plot(bl_results, points = test_pts)  # or plot_biplotEZ(...)
+
+plot(bl_bnd)
+plot(bl_bnd, type = "boxplot")
 ```
+
+`print(bl_bnd)` is not called in Step 7; the reduced-model pass (Step 7b) prints it. In the harness run `bl_find_boundary()` also reports: "27 identified counterfactual(s) are outside the training feature ranges, but are retained."
 
 ### What `bl_find_boundary()` does
 
@@ -49,7 +55,7 @@ Z_obs      = X_centered %*% Vr        # project to 2D Z-space  (n × 2)
 ```
 (No division by `X_sd` because CVA uses `standardise = FALSE`.)
 
-Each observation is also scored through the XGBoost model via `.pred_function()` to produce `pred_obs` (probabilities) and `pred_class_obs` (0/1 at cutoff 0.5).
+Each observation is also scored through the XGBoost model via `.pred_function()` (model type `"custom"`, which calls the stored `predict_fn`) to produce `pred_obs` (probabilities) and `pred_class_obs` (0/1 at cutoff 0.5).
 
 ---
 
@@ -57,13 +63,18 @@ Each observation is also scored through the XGBoost model via `.pred_function()`
 
 The pre-computed contours in `ct` extend across the entire grid. Only points inside the training convex hull polygon are meaningful.
 
+**The polygon** is `bl_results$polygon`: the convex hull of the projected training data in the final biplot plane.
+- **Where it is built:** `.build_hull_polygon()` (`R/hull_utils.R`) builds it inside `bl_build_grid()` (Section 6.2 of `review_section4_to_6.md`).
+- **Why clip to it:** a boundary point outside the hull lies where the model has seen no training data, so a counterfactual there would rest on extrapolation.
+- **Graphics device:** `.build_hull_polygon()` computes the hull by drawing it with `aplpack::plothulls()` on a temporary off-screen `png()`. It closes only that device and re-activates the caller's device, so building the result leaves the user's active plot where it was.
+
 For each raw contour segment:
 ```
 Mi_clipped = rows of Mi where sp::point.in.polygon(Mi, polygon) > 0
 ```
 This is done via `.poly_clip()` (defined in `R/boundary.R`), which uses `sp::point.in.polygon()` to test each contour vertex against the polygon.
 
-Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_type` — the probability level of each contour (either `cutoff - b_margin` = 0.49 or `cutoff + b_margin` = 0.51, because `b_margin = 0.01`).
+Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_type` — the probability level of each contour (either `cutoff - b_margin` = 0.499 or `cutoff + b_margin` = 0.501, because `b_margin = 0.001`).
 
 ---
 
@@ -85,7 +96,7 @@ If no contours survive pruning, all original contours are retained as a fallback
 Each surviving contour segment is back-projected to X-space point by point:
 ```
 Bx = (Mi %*% tVr) + X_center          # Z → X
-pred_bnd = .pred_function(model, "XGB", Bx)
+pred_bnd = .pred_function(model, model_type, Bx)   # model_type "custom" here
 ```
 
 A contour at probability level `p_level` is consistent only if back-projected X-space predictions agree:
@@ -148,7 +159,7 @@ After selecting the nearest boundary, `train_ranges` are used to check whether t
 #### Stage 9 — Score and measure
 
 ```
-B_pred  = .pred_function(model, "XGB", B_x)          # predicted probability at counterfactual
+B_pred  = .pred_function(model, model_type, B_x)     # predicted probability at counterfactual
 dist_z  = sqrt(rowSums((Z_obs - B_z)^2))              # Euclidean distance in Z-space
 diff_sd = (x_obs_mat - B_x_mat) / X_sd               # per-feature diff in SD units
 dist_x  = sqrt(rowSums(diff_sd^2))                    # Euclidean distance in standardised X-space
@@ -172,7 +183,7 @@ dist_x  = sqrt(rowSums(diff_sd^2))                    # Euclidean distance in st
 | `pred_obs` | numeric vector | n | Model probability at the observation (floor-rounded to 3 d.p.). |
 | `class_obs` | integer vector | n | True loan status (0/1), or NA if absent. |
 | `z_boundaries_list` | list | nr_boundaries elements | Clipped + pruned contour matrices; each element is a k × 2 matrix. |
-| `z_boundary_type` | numeric vector | nr_boundaries | Probability level of each surviving contour (0.49 or 0.51 here). |
+| `z_boundary_type` | numeric vector | nr_boundaries | Probability level of each surviving contour (0.499 or 0.501 here). |
 | `nr_boundaries` | integer | 1 | Count of surviving contour segments. |
 | `position_store` | integer matrix | n × 2 | Contour index used per observation; col 1 = class-1 contour, col 2 = class-0. |
 | `bl_result` | S3 object | — | Reference to parent `bl_results` (used by downstream methods). |
@@ -190,7 +201,7 @@ Prints to console:
   Boundaries used: [nr_boundaries]
   Dist Z (mean)  : [mean of dist_z, 4 d.p.]
   Dist X (mean)  : [mean of dist_x, 4 d.p.]
-  B_pred range   : [min(B_pred)] – [max(B_pred)]
+  B_pred range   : [min(B_pred), max(B_pred)]   (each 4 d.p.)
 ```
 
 `B_pred range` is the diagnostic check: values should be close to 0.5. Wide range or values far from 0.5 indicate consistency issues.
@@ -199,36 +210,38 @@ Prints to console:
 
 ### `plot(bl_results, points = test_pts)` (or `plot_biplotEZ(bl_results, points = test_pts)`)
 
-`plot_biplotEZ()` no longer accepts a `boundary =` parameter. The biplot renders without
-arrow overlays. To inspect boundary counterfactuals for individual observations, call
-`bl_pick_point()` on the active plot after rendering:
+`plot_biplotEZ()` draws no boundary arrows. To inspect boundary counterfactuals for
+individual observations, call `bl_pick_point()` on the active plot after rendering:
 
 ```r
 plot(bl_results, points = test_pts)   # or plot_biplotEZ(...)
-bl_pick_point(bl_results, bl_boundary = bl_bnd)
+bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)
 ```
 
-Each click identifies the nearest training observation and draws its counterfactual on the
-plot: an `×` cross at `B_z` (the counterfactual position in Z-space) and an arrow from
-the observation to `B_z`. If no boundary was found for that observation (`B_z = NA`), a
-message is printed. Press Escape to finish clicking.
+`bl_bnd` holds one row per `bl_results$test_data` row (the `bl_find_boundary()` default), so
+`bl_pick_point()` must search the same rows: `data = bl_results$test_data`. Its own default is
+`train_data`, which would pair clicks with the wrong counterfactuals (it warns when the row
+counts differ). Each click identifies the nearest test observation and draws its
+counterfactual on the plot: an `×` cross at `B_z` (the counterfactual position in Z-space) and
+an arrow from the observation to `B_z`. If no boundary was found for that observation
+(`B_z = NA`), a message is printed. Press Escape to finish clicking.
 
-**Why interactive instead of global:** The global overlay drew n arrows at once, causing
-zero-length arrow warnings from R's graphics device (when an observation is exactly on the
-boundary) and visual clutter at large n. The per-click approach fires at most one arrow per
-interaction, in interactive mode where the warning is visible and actionable.
+**Why interactive, one observation at a time:** drawing all n arrows at once clutters the plot
+at large n and raises a zero-length arrow warning for every observation that lies exactly on
+the boundary. Drawing one arrow per click keeps the plot readable and confines any such warning
+to the observation being inspected.
 
 **Complete layer order:**
 
 | Layer | Content |
 |---|---|
 | 1 | Grey axes + variable labels (biplotEZ) |
-| 2 | 200 × 200 probability grid (blue→white→red) |
+| 2 | Probability grid (blue→white→red), the 200 × 200 grid trimmed to the hull |
 | 3 | Test data points coloured by confusion category (from `test_pts`) |
 | 4 | Darker axes redrawn on top |
 | 5 | Decision boundary contour lines |
 
-**Per-click additions (via `bl_pick_point(bl_results, bl_boundary = bl_bnd)`):**
+**Per-click additions (via `bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)`):**
 
 | Element | Content |
 |---|---|
@@ -262,17 +275,17 @@ Because CVA has `standardise = FALSE`, no `X_sd` multiplication is needed here.
 
 Then standardise by dividing by a per-feature denominator so all features are on the same scale. The denominator depends on the `distance` argument:
 ```
-# distance = "mahalanobis" (default, new):
+# distance = "mahalanobis" (default):
 denom              = sqrt(diag(bl_results$metric))    # within-class SD per feature
 vec_to_boundary_sd = vec_to_boundary / denom          # n x p signed standardised distances
 
-# distance = "euclidean" (legacy):
+# distance = "euclidean" (total-SD alternative):
 vec_to_boundary_sd = vec_to_boundary / X_sd           # n x p, total SD denominator
 ```
 
 Each cell `[i, j]` is the **signed standardised distance** from observation `i` to its counterfactual in the direction of feature `j`. The sign indicates which side of the boundary the observation is on for that feature.
 
-**Why within-class SD (the new default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the new default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
+**Why within-class SD (the default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
 
 A cross-correlation diagnostic is printed to the console when `distance = "mahalanobis"`, comparing the diagonal d_M^2 contribution to the full d_M^2: small cross-correlation percentage means the diagonal approximation is essentially lossless. See `2 implementation_summary.txt` Section 4.6.1 for why the full Shapley decomposition is theoretically more correct but is not used (`O(n * 2^p)` cost).
 
@@ -325,15 +338,31 @@ The n × p matrix is stacked into a three-column data frame:
 - **Spread** along the x-axis for a variable shows how varied the distance-to-boundary is across observations
 - **Variables near the top** (largest total) are most important for distinguishing the boundary — the model uses those features most to draw the decision boundary
 
-**Console output after plot:**
+**Console output after plot** (each `plot(bl_bnd)` call prints this; from the harness run):
 ```
-Robustness (total distance): [sum of all sum_of_distance values]
+Distance metric: mahalanobis
+Robustness (total distance): 9203.63
 
 Per-variable totals (descending):
-loan_int_rate       : [value]
-loan_percent_income : [value]
-...
+             loan_int_rate        loan_percent_income 
+                   3929.70                    1570.89 
+                 loan_amnt              person_income 
+                   1301.72                     777.83 
+              credit_score                 person_age 
+                    556.14                     390.67 
+            person_emp_exp cb_person_cred_hist_length 
+                    323.82                     305.43 
+             person_gender 
+                     47.44 
+
+Mahalanobis decomposition (sum across obs):
+  diagonal = 16763.11 | cross-correlation = -5008.40 (-42.6% of total d_M^2)
+  Note: |cross-correlation| >= 25% -- the diagonal approximation
+        is meaningfully lossy for this data. See implementation_summary.txt
+        Section 4.6.1 for theoretical alternatives.
 ```
+
+The decomposition block appears only for `distance = "mahalanobis"`, and the note only when the cross-correlation share is at least 25% in absolute value. Here it is -42.6%, so the diagonal (per-feature) importance leaves out a large part of the full Mahalanobis distance for this data.
 
 ---
 
@@ -366,6 +395,7 @@ Returns a list invisibly:
 | `sum_of_distance` | named numeric vector (length p) | Per-feature total absolute standardised distance |
 | `robustness` | numeric scalar | Sum of `sum_of_distance` across all features |
 | `vec_to_boundary_sd` | numeric matrix (n × p) | Full signed standardised distance matrix |
+| `distance` | character | The denominator used: `"mahalanobis"` (within-class SD) or `"euclidean"` (total SD) |
 
 ---
 
@@ -398,22 +428,25 @@ bl_bnd  [bl_boundary]
   ├── x_obs        (observation feature values)
   ├── pred_obs     (predicted probability at obs)
   ├── class_obs    (true labels)
+  ├── z_boundaries_list, z_boundary_type, nr_boundaries  (surviving contours)
+  ├── position_store  (contour index used per obs)
   └── bl_result    (reference to bl_results)
      │
-     ├── print(bl_bnd)
-     │     └─→ console: n, boundaries, mean distances, B_pred range
+     ├── hist(bl_bnd$B_pred)
+     │     └─→ diagnostic: B_pred should cluster near 0.5
      │
      ├── plot(bl_results, points=test_pts)   [or plot_biplotEZ(...)]
      │     └─→ clean biplot (no boundary overlay)
      │
-     ├── bl_pick_point(bl_results, bl_boundary=bl_bnd)    [interactive]
+     ├── bl_pick_point(bl_results, data=bl_results$test_data, bl_boundary=bl_bnd)    [interactive]
      │     └─→ per-click: yellow circle + ×-cross at B_z + arrow from Z_obs → B_z
      │
      ├── plot(bl_bnd)                     [type = "jitter"]
      │     ├── compute vec_to_boundary_sd  (n × p signed distances)
      │     ├── sort variables by sum_of_distance
      │     ├── render jitter plot (one dot per obs per variable)
-     │     └─→ console: robustness scalar + per-variable totals
+     │     └─→ console: metric, robustness scalar, per-variable totals,
+     │                  Mahalanobis decomposition (+ note when |cross| >= 25%)
      │
      └── plot(bl_bnd, type = "boxplot")   [type = "boxplot"]
            ├── same vec_to_boundary_sd computation

@@ -53,6 +53,6 @@ and \code{previous_loan_defaults_on_file}. These must be integer-encoded
 before passing to \code{bl_prepare_data()}. The vignette
 \code{vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")}
 shows the encoding step and an iterative three-phase workflow, including a
-domain filter that retains only applicants with a prior default on file.
+domain filter that retains only applicants with no prior default on file.
 }
 \keyword{datasets}

@@ -12,8 +12,9 @@
 \item{...}{Currently ignored.}
 }
 \value{
-A \code{ggplot} object (invisible printing -- assign or call
-explicitly to display).
+A \code{ggplot} object, returned visibly: it draws when called at
+the console. Inside a function, a loop or a \code{source()}d script, wrap
+the call in \code{print()} to draw it.
 }
 \description{
 Returns a \pkg{ggplot2} bar chart showing each variable's Shapley

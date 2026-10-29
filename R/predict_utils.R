@@ -47,12 +47,12 @@
 #'
 #' Dispatches to one of three paths:
 #'
-#' 1. **tidymodels workflow** (`inherits(model_use, "workflow")`): all model
-#'    types fitted by `bl_fit_model()` except `"GBM"`. Uses
+#' 1. **tidymodels workflow** (`inherits(model_use, "workflow")`): the model
+#'    types fitted by `bl_fit_model()` (GLM, SVM, NNET, RForest). Uses
 #'    `predict(<workflow>, new_data, type = "prob")` and extracts `.pred_1`.
 #'
-#' 2. **Legacy / raw model**: `"GBM"` (raw `gbm` object) and any model passed
-#'    via `bl_wrap_model()` using a raw fitted object. Model-type-specific
+#' 2. **Raw model**: any model passed via `bl_wrap_model()` as a raw fitted
+#'    object (GLM, GAM, GBM, LDA, SVM, NNET, RForest, XGB). Model-type-specific
 #'    predict calls are used.
 #'
 #' 3. **Custom**: `model_type = "custom"` from `bl_wrap_model()`. Calls the
@@ -93,8 +93,7 @@
     floor_round(preds$.pred_1)
 
   } else {
-    # Legacy: raw model object (GBM fitted by bl_fit_model(), or a raw
-    # model object passed via bl_wrap_model())
+    # Raw model object passed via bl_wrap_model()
     switch(
       model_type,
 

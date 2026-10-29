@@ -69,8 +69,9 @@ axis uses \code{ticks_v}.}
 
 \item{ticks_n}{Integer or integer vector; tick-mark count(s) for
 the variable(s) named in \code{ticks_var}. A single value applies to all
-listed variables; a vector must match the length of \code{ticks_var}.
-Default \code{5L}.}
+listed variables; a vector must match the length of \code{ticks_var} and
+pairs with it position by position. A name not in the model is dropped,
+with a warning, together with its value. Default \code{5L}.}
 
 \item{which}{Integer vector; indices of variables to draw axes for.
 Defaults to all variables.}
@@ -83,7 +84,10 @@ vector; variable(s) whose axis labels should be shifted outward. Supply
 variable names or integer indices. \code{0} (default) means no offset.}
 
 \item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
-in margin lines. Useful range 1--3. Default \code{1.5}.}
+in margin lines. A single value applies to all listed variables; a vector
+must match the length of \code{label_offset_var} and pairs with it
+position by position. A name not in the model is dropped, with a warning,
+together with its value. Useful range 1--3. Default \code{1.5}.}
 
 \item{rotate_deg}{Numeric; additional clockwise rotation in degrees
 applied on top of the SVD-derived local rotation. Default \code{0}.}
@@ -122,7 +126,8 @@ loading matrix (\code{Vr_rot}) and rotated training coordinates
 in the locally-rotated Z-space. Training points are coloured by confusion
 type (TP = red, TN = blue, FP = purple, FN = orange). The target observation
 is shown as a filled circle coloured by the confusion scheme when its true
-class is known from \code{bl_result$test_data}, or red/blue by predicted
-class for external points. The nearest boundary point is shown as a cross
+class is known (\code{bl_target$class_obs}, resolved by
+\code{\link{bl_select_target}} from the target's own row), or red/blue by
+predicted class when it is not. The nearest boundary point is shown as a cross
 with an arrow.
 }

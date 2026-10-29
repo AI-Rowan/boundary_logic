@@ -83,6 +83,8 @@ utils::globalVariables(c("values", "Variable"))
 #'   \item{`robustness`}{Numeric scalar; `sum(sum_of_distance)`.}
 #'   \item{`vec_to_boundary_sd`}{n x p matrix of signed standardised
 #'     distances (one row per obs, one column per variable).}
+#'   \item{`distance`}{Character; the denominator used, `"mahalanobis"`
+#'     (within-class SD) or `"euclidean"` (total SD).}
 #' }
 #'
 #' @importFrom ggplot2 ggplot aes geom_jitter geom_boxplot geom_vline labs
@@ -228,7 +230,7 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
       total_diag, cross, pct
     ))
     if (abs(pct) >= 25) {
-      cat("  Note: |cross-correlation| >= 25%% -- the diagonal approximation\n")
+      cat("  Note: |cross-correlation| >= 25% -- the diagonal approximation\n")
       cat("        is meaningfully lossy for this data. See implementation_summary.txt\n")
       cat("        Section 4.6.1 for theoretical alternatives.\n")
     }

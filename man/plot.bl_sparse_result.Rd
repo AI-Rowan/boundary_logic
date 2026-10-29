@@ -23,8 +23,9 @@ to control the CF arrow. Default \code{TRUE}.}
 \description{
 Renders the rotated local biplot via \code{\link{plot.bl_local_result}}
 (which uses the biplotEZ pipeline) and then overlays the sparse
-counterfactual as a second cross marker. A blue cross indicates the sparse
-CF successfully flips the predicted class; red indicates it does not.
+counterfactual as a second cross marker. A green (\code{"green3"}) cross
+indicates the sparse CF successfully flips the predicted class; a yellow
+(\code{"yellow2"}) cross indicates it does not.
 All \code{\link{plot.bl_local_result}} parameters are forwarded through
 \code{...}; the local summary is suppressed and replaced by a combined
 sparse CF summary.

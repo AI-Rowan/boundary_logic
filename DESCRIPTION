@@ -31,7 +31,11 @@ Imports:
     workflows,
     biplotEZ,
     aplpack,
-    ggplot2
+    ggplot2,
+    grDevices,
+    graphics,
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0),
     knitr,

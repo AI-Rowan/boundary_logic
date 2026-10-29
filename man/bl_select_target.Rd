@@ -25,6 +25,12 @@ A list of class \code{"bl_target"} with the following fields:
 \item{pred_class}{Integer predicted class (0 or 1).}
 \item{row_id}{Integer row index, or \code{NA_integer_} when
 \code{target} is a data frame.}
+\item{class_obs}{Integer true class of the target (0 or 1), or
+\code{NA_integer_} when the source has no class column. Used by
+\code{\link{plot.bl_local_result}} to colour the target by its
+confusion group.}
+\item{scaling}{The display-only raw-unit scaling from
+\code{bl_result$scaling}, or \code{NULL}.}
 }
 }
 \description{
@@ -32,4 +38,11 @@ Prepares a single observation as the target for
 \code{\link{bl_find_local_cf}}. The target can be specified either as
 an integer row index into a data frame, or as a single-row data frame
 containing all feature columns.
+}
+\details{
+The target's true class is read from the same row that supplies
+its features: \code{data[target, ]} for an index, or \code{target} itself
+for a data frame. The class column is \code{"class"} when present,
+otherwise the first non-feature column. When there is no such column the
+true class is unknown (\code{NA}).
 }

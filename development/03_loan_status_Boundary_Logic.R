@@ -5,14 +5,14 @@
 #           45,000 observations, 14 columns (5 categorical), binary outcome
 #           Source: https://github.com/TSMathi/loan_approval_analysis/tree/main
 # Model   : SVM baseline (bl_fit_model) + XGBoost full analysis (bl_wrap_model)
-# Biplot  : PCA
+# Biplot  : PCA (exploratory, Step 2) and CVA (model biplots, Steps 4-16)
 #
 # Iterative workflow:
 #
 #   Step 1   : Load and integer-encode categorical variables
 #   Step 2   : Exploratory biplot (no model) — inspect cluster structure
-#   Step 3   : Domain filter: keep only prior-defaulter sub-population
-#   Steps 4-6: Fit XGBoost model, build first PCA biplot
+#   Step 3   : Domain filter: keep only applicants with no prior default on file
+#   Steps 4-6: Fit XGBoost model, build first CVA biplot
 #
 #   Phase 2 (Steps 7-8): Global interpretations
 #     7. Find nearest boundary point + distance-to-boundary plots
@@ -91,9 +91,9 @@
 # Purpose: inspect class separation and variable loading directions
 # to guide modelling and feature decisions.
 #
-# bl_build_result() with no bl_model argument returns a bl_projection
-# object (not a full bl_result). plot_biplotEZ() renders it in the
-# same style as a model-backed biplot.
+# bl_build_result() with no bl_model argument returns a model-free
+# bl_result (no prediction grid or contours). plot_biplotEZ() renders it
+# coloured by true class.
 {
   bl_dat_exp <- bl_prepare_data(
     data           = loan_encoded,
@@ -151,6 +151,10 @@ names(loan_encoded)
 # ---- Steps 4-6: Prepare data, fit XGBoost, build biplot ---------------
 # Standard path: bl_prepare_data() handles feature selection, class encoding,
 # seeded train/test split, and outlier filtering in one call.
+#
+# bl_prepare_data() (outlier hull) and bl_build_result() (hull + grid bounds)
+# compute by drawing on a temporary off-screen device. They close only that
+# device and re-activate yours, so plots you have open stay the active ones.
 #
 # Alternative path using bl_wrap_data() — use this when your data is already
 # split (e.g. from a cross-validation framework or external pipeline):
@@ -279,7 +283,8 @@ names(loan_encoded)
   hist(bl_bnd$B_pred)
 
   plot(bl_results, points = test_pts)
-  # To inspect individual counterfactuals: bl_pick_point(bl_results, bl_boundary = bl_bnd)
+  # To inspect individual counterfactuals (bl_bnd rows are test_data rows):
+  # bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)
 
   plot(bl_bnd)
   plot(bl_bnd, type = "boxplot")
@@ -402,13 +407,17 @@ names(loan_encoded)
 # ===========================================================
 # PHASE 2 (second pass) — Global interpretations, reduced model
 # ===========================================================
+# person_age was pruned in "Prune least-important variables" (vars_to_drop),
+# so the plot arguments below do not name it. Each label_offset_dist / ticks_n vector pairs position
+# by position with its label_offset_var / ticks_var vector.
 
 # ---- Step 7b: Boundary + distance-to-boundary plots (reduced model) ---
 {
   bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
   print(bl_bnd_v2)
   plot(bl_results_v2, points = test_pts_v2)
-  # To inspect individual counterfactuals: bl_pick_point(bl_results_v2, bl_boundary = bl_bnd_v2)
+  # To inspect individual counterfactuals (bl_bnd_v2 rows are test_data rows):
+  # bl_pick_point(bl_results_v2, data = bl_results_v2$test_data, bl_boundary = bl_bnd_v2)
 
   plot(bl_bnd_v2)
   plot(bl_bnd_v2, type = "boxplot")
@@ -421,12 +430,11 @@ names(loan_encoded)
   print(bl_surr_v2)
   plot(bl_surr_v2,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c("person_age",
-                             "loan_amnt",
+       label_offset_var  = c("loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",
                              "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0,0.5,0,0),
+       label_offset_dist = c(0,0.5,0,0),
        ticks_v = 5)
 }
 
@@ -458,12 +466,11 @@ names(loan_encoded)
     target_point = target_value,
     target_label = tdp,
     label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-    label_offset_var  = c("person_age",
-                          "loan_amnt",
+    label_offset_var  = c("loan_amnt",
                           "loan_int_rate",
                           "loan_percent_income",
                           "credit_score"),         # or a character/integer vector of variable names/indices
-    label_offset_dist = c(0,0,0.5,0,0),
+    label_offset_dist = c(0,0.5,0,0),
     ticks_v = 3
   )
 }
@@ -482,7 +489,16 @@ names(loan_encoded)
 #   "fixed"     — constrained to ± 0.5 of observed; always reverts in sparse CF
 #   c(min, max) — counterfactual must lie within this absolute range
 {
+  # bl_select_target() reads the target's features AND its true class
+  # (tgt$class_obs) from the same row -- here test_data[tdp, ]. The local
+  # biplot (Step 12) colours the target by its confusion group, class_obs
+  # against the model's predicted class: TP red, TN blue, FP purple, FN orange.
   tgt <- bl_select_target(bl_results_v2, target = tdp)
+
+  # To explain a training row instead, index train_data; class_obs then comes
+  # from that same training row:
+  # tgt <- bl_select_target(bl_results_v2, target = 5L,
+  #                         data = bl_results_v2$train_data)
 
   flt <- set_filters(
     tgt,
@@ -510,19 +526,16 @@ names(loan_encoded)
 {
   plot(bl_local,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c(#"person_age",
-                             "loan_amnt",
+       label_offset_var  = c("loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",
                              "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0,0,1,0),
-       ticks_var = c(#"person_age",
-                      "loan_amnt",
-                      "loan_int_rate",
-                      "loan_percent_income",
-                      "credit_score"),
-       ticks_n = c(#2,
-                   4,5,5,5)
+       label_offset_dist = c(0,0,1,0),
+       ticks_var = c("loan_amnt",
+                     "loan_int_rate",
+                     "loan_percent_income",
+                     "credit_score"),
+       ticks_n = c(4,5,5,5)
   )
 }
 
@@ -541,19 +554,16 @@ names(loan_encoded)
   print(bl_sparse)
   plot(bl_sparse,
        new_title = "xx",
-       label_offset_var  = c(#"person_age",
-         "loan_amnt",
-         "loan_int_rate",
-         "loan_percent_income",
-         "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0,0,1,0),
-       ticks_var = c(#"person_age",
-         "loan_amnt",
-         "loan_int_rate",
-         "loan_percent_income",
-         "credit_score"),
-       ticks_n = c(#2,
-         4,5,5,5)
+       label_offset_var  = c("loan_amnt",
+                             "loan_int_rate",
+                             "loan_percent_income",
+                             "credit_score"),         # or a character/integer vector of variable names/indices
+       label_offset_dist = c(0,0,1,0),
+       ticks_var = c("loan_amnt",
+                     "loan_int_rate",
+                     "loan_percent_income",
+                     "credit_score"),
+       ticks_n = c(4,5,5,5)
   )
 }
 
@@ -568,18 +578,16 @@ names(loan_encoded)
   print(bl_local_free)
   plot(bl_local_free,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c("person_age",
-                             "loan_amnt",
+       label_offset_var  = c("loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",
                              "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0,0,0,1),
-       ticks_var = c("person_age",
-                     "loan_amnt",
+       label_offset_dist = c(0,0,0,1),
+       ticks_var = c("loan_amnt",
                      "loan_int_rate",
                      "loan_percent_income",
                      "credit_score"),
-       ticks_n = c(2,4,200,200,20)
+       ticks_n = c(4,200,200,20)
   )
 
   bl_shap_free   <- bl_shapley(bl_local_free)
@@ -588,18 +596,16 @@ names(loan_encoded)
   plot(bl_shap_free)
   plot(bl_sparse_free,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
-       label_offset_var  = c("person_age",
-                             "loan_amnt",
+       label_offset_var  = c("loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",
                              "credit_score"),         # or a character/integer vector of variable names/indices
-       label_offset_dist = c(0,0,0,0,1),
-       ticks_var = c("person_age",
-                     "loan_amnt",
+       label_offset_dist = c(0,0,0,1),
+       ticks_var = c("loan_amnt",
                      "loan_int_rate",
                      "loan_percent_income",
                      "credit_score"),
-       ticks_n = c(2,4,200,200,20)
+       ticks_n = c(4,200,200,20)
   )
 }
 
@@ -625,12 +631,16 @@ names(loan_encoded)
     cb_person_cred_hist_length = 4,
     credit_score               = 420
   )
-  # Drop any columns that were pruned in Step 9
+  # Drop any columns pruned in "Prune least-important variables"
   new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
                                   drop = FALSE]
 
 
-  # Local search — no actionability constraints for this new applicant
+  # Local search — no actionability constraints for this new applicant.
+  # new_applicant has no class column, so tgt_ext$class_obs is NA and the
+  # local biplot colours the target by its predicted class only (red = 1,
+  # blue = 0). A one-row frame that does carry a "class" column gets its
+  # confusion colour (TP/TN/FP/FN) instead.
   tgt_ext       <- bl_select_target(bl_results_v2, target = new_applicant)
   bl_local_ext  <- bl_find_local_cf(bl_results_v2, tgt_ext)
   print(bl_local_ext)
@@ -682,9 +692,9 @@ names(loan_encoded)
 
 # ---- Global: SHAP vs Boundary Logic variable selection --------------------
 # Phase 2's distance-to-boundary importance (rob$sum_of_distance) picked the
-# five variables in feature_cols_v2. Ask SHAP the same question on the full
-# nine-feature model: rank by mean absolute SHAP value and compare its top
-# five against the distance-to-boundary top five.
+# four variables in feature_cols_v2. Ask SHAP the same question on the full
+# nine-feature model: rank by mean absolute SHAP value and print the two full
+# rankings side by side (SHAP against distance-to-boundary).
 {
   if (has_shap) {
     set.seed(42L)
@@ -711,8 +721,8 @@ names(loan_encoded)
 }
 
 
-# ---- Global SHAP of the retained five variables ----------------------------
-# Run SHAP on the reduced model -- the five variables the workflow proceeded
+# ---- Global SHAP of the retained four variables ----------------------------
+# Run SHAP on the reduced model -- the four variables the workflow proceeded
 # with -- and view the standard global summaries. Compare against
 # plot(bl_bnd_v2) and bl_surrogate(bl_results_v2) above.
 {

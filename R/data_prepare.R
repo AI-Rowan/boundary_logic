@@ -30,8 +30,9 @@
 #'   numeric 0/1.
 #' @param feature_cols   Character vector of column names to use as features.
 #'   If `NULL` (default), all columns except `class_col` are used.
-#' @param train_fraction Numeric in (0, 1); proportion of rows allocated to
-#'   training. Default `0.8`.
+#' @param train_fraction Numeric in (0, 1]; proportion of rows allocated to
+#'   training. `1` uses every row for training; `bl_assemble()` then sets
+#'   `test_data` to `train_data`. Default `0.8`.
 #' @param seed           Integer; random seed for the train/test split.
 #'   Default `121`.
 #' @param hull_fraction  Numeric in (0, 1]; fraction argument for the convex
@@ -49,6 +50,8 @@
 #'   \item{`num_vars`}{Integer; number of features.}
 #'   \item{`target_class`}{The value that was mapped to `1`, or `NULL` if
 #'     no conversion was applied.}
+#'   \item{`scaling`}{Display-only raw-unit scaling; `NULL` until
+#'     [bl_set_scaling()] is used.}
 #'   \item{`polygon`}{`SpatialPolygons` convex hull in standardised PCA space.}
 #'   \item{`hull_fraction`}{The fraction value used for the hull filter.}
 #'   \item{`n_retained`}{Number of training rows retained after filtering.}

@@ -285,8 +285,9 @@ print.bl_surrogate <- function(x, ...) {
 #'   `ticks_v`.
 #' @param ticks_n          Integer or integer vector; tick-mark count(s) for
 #'   the variable(s) named in `ticks_var`. A single value applies to all
-#'   listed variables; a vector must match the length of `ticks_var`.
-#'   Default `5L`.
+#'   listed variables; a vector must match the length of `ticks_var` and pairs
+#'   with it position by position. A name not in the model is dropped, with a
+#'   warning, together with its value. Default `5L`.
 #' @param which            Integer vector; indices of variables to draw axes
 #'   for. Defaults to all variables.
 #' @param X_names          Character vector; custom variable names for axis
@@ -295,7 +296,10 @@ print.bl_surrogate <- function(x, ...) {
 #'   vector; variable(s) whose axis labels should be shifted outward. Supply
 #'   variable names or integer indices. `0` (default) means no offset.
 #' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
-#'   in margin lines. Useful range 1--3. Default `1.5`.
+#'   in margin lines. A single value applies to all listed variables; a vector
+#'   must match the length of `label_offset_var` and pairs with it position by
+#'   position. A name not in the model is dropped, with a warning, together
+#'   with its value. Useful range 1--3. Default `1.5`.
 #' @param rotate_deg       Numeric; clockwise rotation in degrees for the entire
 #'   plot. Default `0` (no rotation).
 #' @param new_title        Character; overrides the biplot title inherited from

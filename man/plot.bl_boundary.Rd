@@ -31,6 +31,8 @@ absolute standardised distance.}
 \item{\code{robustness}}{Numeric scalar; \code{sum(sum_of_distance)}.}
 \item{\code{vec_to_boundary_sd}}{n x p matrix of signed standardised
 distances (one row per obs, one column per variable).}
+\item{\code{distance}}{Character; the denominator used, \code{"mahalanobis"}
+(within-class SD) or \code{"euclidean"} (total SD).}
 }
 }
 \description{

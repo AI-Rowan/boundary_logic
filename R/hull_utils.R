@@ -7,8 +7,9 @@
 #' Build a convex hull polygon from projected 2D coordinates
 #'
 #' Uses `aplpack::plothulls()` to compute the hull boundary and wraps
-#' the result as an `sp::SpatialPolygons` object. The graphics device
-#' is opened and closed internally; no plot is visible to the user.
+#' the result as an `sp::SpatialPolygons` object. A temporary off-screen
+#' device is opened and closed internally; no plot is visible to the user,
+#' and the caller's active graphics device is restored on exit.
 #'
 #' @param Z       Numeric matrix with exactly 2 columns (x, y). Typically
 #'   the projected training data (`Z_train`).
@@ -21,18 +22,24 @@
 #'
 #' @importFrom aplpack plothulls
 #' @importFrom sp Polygon Polygons SpatialPolygons coordinates over point.in.polygon
-#' @importFrom grDevices png dev.off
+#' @importFrom grDevices png dev.off dev.cur dev.set
 #' @importFrom graphics par
 #' @return An `sp::SpatialPolygons` object representing the convex hull.
 #' @keywords internal
 .build_hull_polygon <- function(Z, min_val, max_val, outlie = 0.9) {
-  # Suppress the graphics output from plothulls using an off-screen device
+  # Suppress the graphics output from plothulls using an off-screen device.
+  # Close only that device and re-activate the caller's one: a bare dev.off()
+  # would leave R's *next* open device active, not the caller's.
+  prev_dev <- grDevices::dev.cur()
   tmp_file <- tempfile(fileext = ".png")
   grDevices::png(tmp_file, width = 600L, height = 600L)
+  hull_dev <- grDevices::dev.cur()
   # Minimise margins so plot.new() does not fail on small devices
   graphics::par(mar = c(1, 1, 1, 1))
   on.exit({
-    grDevices::dev.off()
+    grDevices::dev.off(hull_dev)
+    # dev.cur() is 1 when no device was open; dev.set(1) would open a new one
+    if (prev_dev > 1L) grDevices::dev.set(prev_dev)
     unlink(tmp_file)
   }, add = TRUE)
 

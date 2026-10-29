@@ -41,10 +41,14 @@ A list of class \code{"bl_local_result"} with the following fields:
 \item{B_z}{1 x 2 matrix; best boundary point in rotated Z-space.}
 \item{B_x}{Data frame (1 row); back-projected boundary in X-space.}
 \item{B_pred}{Scalar predicted probability at the boundary.}
-\item{dist_z}{Euclidean distance from target to boundary in Z-space
-(reported for all pairs).}
+\item{dist_z}{Euclidean distance from target to boundary in the rotated
+Z-space of \code{best_pair} only (per-pair values are in
+\code{all_distances}). It is the selection criterion only when
+\code{distance = "euclidean"}. \code{NA} when no solution is found.}
 \item{dist_mahalanobis}{Squared Mahalanobis distance from target to
-boundary in X-space (reported for all pairs).}
+boundary in X-space, for \code{best_pair} only (per-pair values are in
+\code{all_distances_mahalanobis}). The selection criterion when
+\code{distance = "mahalanobis"}. \code{NA} when no solution is found.}
 \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
 or \code{"euclidean"}).}
 \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
@@ -80,14 +84,15 @@ via \code{\link{bl_set_scaling}}.}
 \description{
 Searches across multiple eigenvector pairs for the closest decision boundary
 to the target observation in the rotated biplot space. For each pair, the
-loading matrix is rotated so that the target observation lies along the first
-rotated axis, then a fine grid is scored and the boundary contour is
-extracted.
+loading matrix is rotated so that the target observation is aligned with the
+plane of that pair (see \strong{Rotation}), then a fine grid is scored and
+the boundary contour is extracted.
 }
 \section{Rotation}{
 
 The rotation adapts \code{Biplot_rotation()} from the research script
-(\file{scripts/1.3 Optimal Rotation.R}). An SVD-based orthogonal rotation
+(\file{scripts/1.3 Optimal Rotation.R} on the \code{original_PhD_code}
+branch of the repository). An SVD-based orthogonal rotation
 matrix \eqn{A} is computed such that the rotated loading matrix aligns the
 target observation with the projection plane defined by \code{proj_pair}.
 This gives each eigenvector pair the best possible chance of revealing a

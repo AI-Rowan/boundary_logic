@@ -120,6 +120,12 @@
 #' @param data Data frame to index when \code{target} is an integer. Defaults
 #'   to \code{bl_result$test_data}.
 #'
+#' @details The target's true class is read from the same row that supplies
+#'   its features: \code{data[target, ]} for an index, or \code{target} itself
+#'   for a data frame. The class column is \code{"class"} when present,
+#'   otherwise the first non-feature column. When there is no such column the
+#'   true class is unknown (\code{NA}).
+#'
 #' @return A list of class \code{"bl_target"} with the following fields:
 #'   \describe{
 #'     \item{x_obs}{Single-row data frame of observed feature values.}
@@ -128,6 +134,12 @@
 #'     \item{pred_class}{Integer predicted class (0 or 1).}
 #'     \item{row_id}{Integer row index, or \code{NA_integer_} when
 #'       \code{target} is a data frame.}
+#'     \item{class_obs}{Integer true class of the target (0 or 1), or
+#'       \code{NA_integer_} when the source has no class column. Used by
+#'       \code{\link{plot.bl_local_result}} to colour the target by its
+#'       confusion group.}
+#'     \item{scaling}{The display-only raw-unit scaling from
+#'       \code{bl_result$scaling}, or \code{NULL}.}
 #'   }
 #'
 #' @export
@@ -167,6 +179,18 @@ bl_select_target <- function(bl_result, target, data = NULL) {
          call. = FALSE)
   }
 
+  # True class, read from the same row that supplies x_obs. Prefer the
+  # package's "class" column; otherwise the first non-feature column. A
+  # non-numeric label is treated as unknown (NA).
+  src  <- if (is.data.frame(target)) target else data[row_id, , drop = FALSE]
+  resp <- setdiff(names(src), var_names)
+  if ("class" %in% resp) resp <- "class"
+  class_obs <- if (length(resp) >= 1L) {
+    suppressWarnings(as.integer(as.character(src[[resp[1L]]])))
+  } else {
+    NA_integer_
+  }
+
   # Project to Z-space
   sv    <- if (isTRUE(standardise)) X_sd else FALSE
   X_st  <- scale(as.matrix(x_obs), center = X_center, scale = sv)
@@ -188,6 +212,7 @@ bl_select_target <- function(bl_result, target, data = NULL) {
       pred_prob  = pred_prob,
       pred_class = pred_class,
       row_id     = row_id,
+      class_obs  = class_obs,
       scaling    = bl_result$scaling   # display-only raw-unit scaling (or NULL)
     ),
     class = "bl_target"
@@ -268,13 +293,14 @@ set_filters <- function(bl_target, ...) {
 #'
 #' Searches across multiple eigenvector pairs for the closest decision boundary
 #' to the target observation in the rotated biplot space. For each pair, the
-#' loading matrix is rotated so that the target observation lies along the first
-#' rotated axis, then a fine grid is scored and the boundary contour is
-#' extracted.
+#' loading matrix is rotated so that the target observation is aligned with the
+#' plane of that pair (see \strong{Rotation}), then a fine grid is scored and
+#' the boundary contour is extracted.
 #'
 #' @section Rotation:
 #' The rotation adapts \code{Biplot_rotation()} from the research script
-#' (\file{scripts/1.3 Optimal Rotation.R}). An SVD-based orthogonal rotation
+#' (\file{scripts/1.3 Optimal Rotation.R} on the \code{original_PhD_code}
+#' branch of the repository). An SVD-based orthogonal rotation
 #' matrix \eqn{A} is computed such that the rotated loading matrix aligns the
 #' target observation with the projection plane defined by \code{proj_pair}.
 #' This gives each eigenvector pair the best possible chance of revealing a
@@ -330,10 +356,14 @@ set_filters <- function(bl_target, ...) {
 #'     \item{B_z}{1 x 2 matrix; best boundary point in rotated Z-space.}
 #'     \item{B_x}{Data frame (1 row); back-projected boundary in X-space.}
 #'     \item{B_pred}{Scalar predicted probability at the boundary.}
-#'     \item{dist_z}{Euclidean distance from target to boundary in Z-space
-#'       (reported for all pairs).}
+#'     \item{dist_z}{Euclidean distance from target to boundary in the rotated
+#'       Z-space of \code{best_pair} only (per-pair values are in
+#'       \code{all_distances}). It is the selection criterion only when
+#'       \code{distance = "euclidean"}. \code{NA} when no solution is found.}
 #'     \item{dist_mahalanobis}{Squared Mahalanobis distance from target to
-#'       boundary in X-space (reported for all pairs).}
+#'       boundary in X-space, for \code{best_pair} only (per-pair values are in
+#'       \code{all_distances_mahalanobis}). The selection criterion when
+#'       \code{distance = "mahalanobis"}. \code{NA} when no solution is found.}
 #'     \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
 #'       or \code{"euclidean"}).}
 #'     \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
@@ -730,8 +760,9 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' in the locally-rotated Z-space. Training points are coloured by confusion
 #' type (TP = red, TN = blue, FP = purple, FN = orange). The target observation
 #' is shown as a filled circle coloured by the confusion scheme when its true
-#' class is known from \code{bl_result$test_data}, or red/blue by predicted
-#' class for external points. The nearest boundary point is shown as a cross
+#' class is known (\code{bl_target$class_obs}, resolved by
+#' \code{\link{bl_select_target}} from the target's own row), or red/blue by
+#' predicted class when it is not. The nearest boundary point is shown as a cross
 #' with an arrow.
 #'
 #' @param x               A \code{"bl_local_result"} object.
@@ -761,8 +792,9 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #'   axis uses \code{ticks_v}.
 #' @param ticks_n         Integer or integer vector; tick-mark count(s) for
 #'   the variable(s) named in \code{ticks_var}. A single value applies to all
-#'   listed variables; a vector must match the length of \code{ticks_var}.
-#'   Default \code{5L}.
+#'   listed variables; a vector must match the length of \code{ticks_var} and
+#'   pairs with it position by position. A name not in the model is dropped,
+#'   with a warning, together with its value. Default \code{5L}.
 #' @param which           Integer vector; indices of variables to draw axes for.
 #'   Defaults to all variables.
 #' @param X_names         Character vector; custom variable names for axis
@@ -771,7 +803,10 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #'   vector; variable(s) whose axis labels should be shifted outward. Supply
 #'   variable names or integer indices. \code{0} (default) means no offset.
 #' @param label_offset_dist Numeric or numeric vector; outward offset distance(s)
-#'   in margin lines. Useful range 1--3. Default \code{1.5}.
+#'   in margin lines. A single value applies to all listed variables; a vector
+#'   must match the length of \code{label_offset_var} and pairs with it
+#'   position by position. A name not in the model is dropped, with a warning,
+#'   together with its value. Useful range 1--3. Default \code{1.5}.
 #' @param rotate_deg      Numeric; additional clockwise rotation in degrees
 #'   applied on top of the SVD-derived local rotation. Default \code{0}.
 #' @param show_arrows     Logical; if \code{TRUE} (default) an arrow is drawn
@@ -881,17 +916,12 @@ plot.bl_local_result <- function(x,
   pred_class <- bl_target$pred_class
 
   # ---- Target point colour ---------------------------------------------
-  # Known true class (from test_data by row_id): confusion colour.
-  # Unknown true class (external point or no class column): red/blue by prediction.
-  target_true_class <- NA_integer_
-  if (!is.na(row_id)) {
-    test_src <- bl_result$test_data
-    if (!is.null(test_src) && row_id >= 1L && row_id <= nrow(test_src)) {
-      resp <- setdiff(names(test_src), var_names)
-      if (length(resp) >= 1L)
-        target_true_class <- as.integer(as.character(test_src[[resp[1L]]][row_id]))
-    }
-  }
+  # Known true class (bl_target$class_obs, resolved by bl_select_target()):
+  # confusion colour. Unknown true class (no class column): red/blue by
+  # prediction.
+  # A bl_target built before class_obs existed has no such field.
+  target_true_class <- bl_target$class_obs
+  if (is.null(target_true_class)) target_true_class <- NA_integer_
   target_bg <- if (is.na(target_true_class)) {
     if (pred_class == 1L) "red" else "blue"
   } else {

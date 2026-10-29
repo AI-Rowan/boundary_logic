@@ -131,8 +131,9 @@ names(loan_encoded)
 
 A PCA biplot coloured by `loan_status` — built **before** any model — shows
 the class structure and the variable loading directions. Passing no
-`bl_model` to `bl_build_result()` returns a projection-only object that
-`plot_biplotEZ()` renders in the usual style.
+`bl_model` to `bl_build_result()` returns a model-free `bl_result` (no
+prediction grid or decision boundary) that `plot_biplotEZ()` renders
+coloured by true class.
 
 ```{r step2-explore}
 set.seed(121L)
@@ -268,8 +269,11 @@ plot(bl_results, points = test_pts)
 ### Step 7 — Find nearest boundary point: `bl_find_boundary()`
 
 `bl_find_boundary()` finds, for every observation, the nearest point on
-the decision boundary and back-projects it to feature space. The search
-is constrained to the training feature envelope (`train_ranges`).
+the decision boundary and back-projects it to feature space. The boundary
+contours are clipped to the convex hull of the training data, so the
+search stays in the region the data supports. Counterfactuals that fall
+outside the training feature ranges (`train_ranges`) are counted in a
+message but kept.
 
 ```{r step7-boundary}
 bl_bnd <- bl_find_boundary(bl_results)
@@ -279,8 +283,9 @@ plot_biplotEZ(bl_results, points = test_pts)
 ```
 
 ```{r step7-pick, eval=FALSE}
-# Interactive: click an observation to see its counterfactual arrow
-bl_pick_point(bl_results, bl_boundary = bl_bnd)
+# Interactive: click an observation to see its counterfactual arrow.
+# bl_bnd holds one row per test_data row, so pick from test_data too.
+bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)
 ```
 
 ------------------------------------------------------------------------
@@ -471,7 +476,8 @@ print(flt)
 `bl_find_local_cf()` rotates the biplot around the target, builds a local
 prediction grid, applies `train_ranges` and the actionability filters,
 and finds the nearest opposing-class boundary point — repeating across
-eigenvector pairs and keeping the closest.
+eigenvector pairs and keeping the pair whose counterfactual has the
+smallest squared Mahalanobis distance from the target in feature space.
 
 ```{r step13-local-cf}
 bl_local <- bl_find_local_cf(
@@ -486,9 +492,10 @@ print(bl_local)
 
 ### Step 14 — Local biplot
 
-`plot(bl_local)` renders the rotated eigenvector plane that minimises the
-distance to the boundary, showing the target (filled circle) and the
-counterfactual (grey cross with arrow).
+`plot(bl_local)` renders the rotated plane of the selected eigenvector
+pair (the one with the smallest Mahalanobis distance to the boundary),
+showing the target (filled circle) and the counterfactual (grey cross
+with arrow).
 
 ```{r step14-local-biplot}
 plot(bl_local,

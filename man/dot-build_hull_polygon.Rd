@@ -24,7 +24,8 @@ An \code{sp::SpatialPolygons} object representing the convex hull.
 }
 \description{
 Uses \code{aplpack::plothulls()} to compute the hull boundary and wraps
-the result as an \code{sp::SpatialPolygons} object. The graphics device
-is opened and closed internally; no plot is visible to the user.
+the result as an \code{sp::SpatialPolygons} object. A temporary off-screen
+device is opened and closed internally; no plot is visible to the user,
+and the caller's active graphics device is restored on exit.
 }
 \keyword{internal}

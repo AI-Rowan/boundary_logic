@@ -17,7 +17,8 @@ Numeric vector of length 2: \code{c(min_val, max_val)}.
 }
 \description{
 Opens a temporary off-screen device, renders the biplot axes only
-(no points, no grid), reads \code{par("usr")}, then closes the device.
+(no points, no grid), reads \code{par("usr")}, then closes that device and
+restores the caller's active graphics device.
 Returns \code{c(min_val, max_val)} for a square plot.
 }
 \keyword{internal}

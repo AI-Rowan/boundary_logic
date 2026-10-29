@@ -88,8 +88,9 @@ Supply variable names (e.g. \code{"Sepal.Length"}) or integer indices
 
 \item{ticks_n}{Integer or integer vector; tick-mark count(s) for
 the variable(s) named in \code{ticks_var}. A single value applies to all
-listed variables; a vector must match the length of \code{ticks_var}.
-Default \code{5L}.}
+listed variables; a vector must match the length of \code{ticks_var} and pairs
+with it position by position. A name not in the model is dropped, with a
+warning, together with its value. Default \code{5L}.}
 
 \item{which}{Integer vector; indices of variables to draw axes
 for. Defaults to all variables.}
@@ -104,8 +105,10 @@ border. Supply variable names (e.g., \code{"Sepal.Length"}) or integer indices
 
 \item{label_offset_dist}{Numeric or numeric vector; outward offset distance(s)
 in margin lines for \code{label_offset_var}. A single value applies to all
-listed variables; a vector must match the length of \code{label_offset_var}.
-Useful range 1--3. Default \code{1.5}.}
+listed variables; a vector must match the length of \code{label_offset_var}
+and pairs with it position by position. A name not in the model is
+dropped, with a warning, together with its value. Useful range 1--3.
+Default \code{1.5}.}
 
 \item{rotate_deg}{Numeric; angle in degrees to rotate the entire plot
 clockwise. Rotates all plotted elements -- grid, training points, contour

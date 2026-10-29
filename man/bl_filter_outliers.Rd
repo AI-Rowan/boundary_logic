@@ -7,8 +7,9 @@
 bl_filter_outliers(bl_data, hull_fraction = 0.9, verbose = TRUE)
 }
 \arguments{
-\item{bl_data}{A \code{"bl_data"} object returned by \code{bl_prepare_data()}
-or \code{bl_wrap_data()}.}
+\item{bl_data}{A \code{"bl_data"} object, as returned by \code{bl_wrap_data()}.
+(\code{bl_prepare_data()} already applies this filter and returns a
+\code{"bl_filter_result"}, which this function does not accept.)}
 
 \item{hull_fraction}{Numeric in (0, 1]; the \code{fraction} argument for
 \code{aplpack::plothulls()}. Values below \code{1} trim the most extreme points.
@@ -26,6 +27,8 @@ filtering later via \code{bl_project_points(..., filter_to_train_ranges = TRUE)}
 \item{\code{var_names}}{Feature column names.}
 \item{\code{num_vars}}{Number of features.}
 \item{\code{target_class}}{The positive class value (passed through).}
+\item{\code{scaling}}{Display-only raw-unit scaling (passed through), or
+\code{NULL}.}
 \item{\code{polygon}}{\code{SpatialPolygons} convex hull in standardised PCA space.}
 \item{\code{hull_fraction}}{The fraction value used.}
 \item{\code{n_retained}}{Number of training rows retained.}
@@ -48,8 +51,9 @@ hull, and reports the number and percentage of rows retained and removed.
 The polygon is constructed in the standardised feature space (all variables
 centred and scaled), not in a biplot Z-space, so that it can be applied
 before the projection matrix is computed. The convex hull is computed using
-\code{aplpack::plothulls()} on the first two principal components of the raw
-feature matrix, which is a lightweight proxy for the full biplot projection.
+\code{aplpack::plothulls()} on the first two principal components of the
+standardised feature matrix, which is a lightweight proxy for the full
+biplot projection.
 }
 
 \examples{

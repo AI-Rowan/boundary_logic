@@ -48,11 +48,11 @@ test_that("bl_set_scaling rejects bad inputs", {
                "bl_data")
 })
 
-test_that("scaling propagates into bl_result and bl_projection", {
+test_that("scaling propagates into the model-free bl_result", {
   d  <- make_std_data()
   bl <- bl_wrap_data(d$std, d$std, var_names = d$feats)
   bl <- bl_set_scaling(bl, center = d$center, scale = d$scale)
-  proj <- bl_build_result(bl, method = "PCA")   # no model -> bl_projection-style result
+  proj <- bl_build_result(bl, method = "PCA")   # no model -> model-free bl_result
   expect_false(is.null(proj$scaling))
   expect_equal(proj$scaling$center, d$center[d$feats])
 })
