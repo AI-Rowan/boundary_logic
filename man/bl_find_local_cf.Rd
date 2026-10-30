@@ -38,9 +38,12 @@ selection criterion} section above.}
 \value{
 A list of class \code{"bl_local_result"} with the following fields:
 \describe{
-\item{B_z}{1 x 2 matrix; best boundary point in rotated Z-space.}
-\item{B_x}{Data frame (1 row); back-projected boundary in X-space.}
-\item{B_pred}{Scalar predicted probability at the boundary.}
+\item{B_z}{1 x 2 matrix; the counterfactual in rotated Z-space: the best
+boundary point, or the projection of the restored point when a
+\code{"fixed"} restore was applied (see \strong{Fixed constraints}).}
+\item{B_x}{Data frame (1 row); the counterfactual in X-space: the
+back-projected boundary point, or the restored point.}
+\item{B_pred}{Scalar predicted probability at the counterfactual.}
 \item{dist_z}{Euclidean distance from target to boundary in the rotated
 Z-space of \code{best_pair} only (per-pair values are in
 \code{all_distances}). It is the selection criterion only when
@@ -79,6 +82,13 @@ via \code{\link{bl_set_scaling}}.}
 \item{set_filters}{The \code{"bl_filters"} object passed in, or
 \code{NULL}. Stored so that \code{\link{bl_find_sparse_cf}} can identify
 \code{"fixed"} variables and revert them to their observed values.}
+\item{fixed_check}{\code{NULL} when no solution was found or the search
+moved no \code{"fixed"} feature. Otherwise a list: \code{vars} (the
+fixed features the search moved), \code{applied} (\code{TRUE} when the
+restored point is the counterfactual), \code{pred_restored} (model
+probability at the restored point), \code{in_range} (whether it lies
+within \code{train_ranges}), and \code{search_point} (the search's own
+\code{B_x}, \code{B_z}, \code{B_pred}).}
 }
 }
 \description{
@@ -110,6 +120,22 @@ per-variable ranges observed in the training data.}
 \item{set_filters}{Actionability constraints supplied via
 \code{\link{set_filters}}.}
 }
+}
+
+\section{Fixed constraints}{
+
+During the search a \code{"fixed"} feature may move by up to 0.5 in model
+units, because a vertex of the 2D boundary contour rarely holds a feature at
+exactly its observed value. After the best pair is chosen, each fixed
+feature the search moved is set back to its observed value and the point is
+re-scored. If the restored point still crosses the decision boundary and
+lies within \code{train_ranges}, it becomes the counterfactual
+(\code{B_x}, \code{B_z}, \code{B_pred}); otherwise the search's point is
+kept. Either way \code{fixed_check} records what happened, and
+\code{print()} explains it. The restored point satisfies the fixed
+constraint exactly but lies off the 2D boundary, so it need not be the
+nearest valid point; the pair choice and the reported distances are those
+of the search.
 }
 
 \section{Cross-pair selection criterion}{

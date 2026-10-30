@@ -81,7 +81,7 @@ entry point was used.
 When features are standardised *before* model fitting (common for scale-sensitive models),
 the data the package holds is in standardised units, so biplotEZ labels every axis in those
 units. In the loan script this is the v2 (reduced-model) flow: the `feature_cols_v2` columns
-are standardised with `scale()`, the XGB model and projection are built on the standardised
+(chosen in the variable-pruning step; see `review_section7_to_8.md`) are standardised with `scale()`, the XGB model and projection are built on the standardised
 data, and the transform is recorded so the axes display in raw loan units:
 
 ```r
@@ -135,6 +135,19 @@ bl_dat <- bl_prepare_data(
   hull_fraction  = 0.9
 )
 ```
+
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `feature_cols` | `NULL` | `feature_cols` (9 names) | Predictor columns; `NULL` uses every column except `class_col` |
+| `target_class` | `NULL` | default | The `class_col` value coded as `1`; `NULL` requires the column to be 0/1 already, as `loan_status` is |
+| `train_fraction` | `0.8` | `0.8` | Share of rows sampled for training; `1` keeps every row, and `bl_assemble()` then sets `test_data` to `train_data` |
+| `seed` | `121L` | `121L` | Fixes the train/test split, so every downstream count is reproducible |
+| `hull_fraction` | `0.9` | `0.9` | Share of training rows the outlier hull keeps (15,970 of 17,713 here); `1` removes nothing |
+| `verbose` | `TRUE` | default | Prints the one-line hull-filter summary |
+
+Full argument list: `?bl_prepare_data`.
 
 **What it does, step by step:**
 
@@ -198,6 +211,16 @@ bl_mod_svm <- bl_fit_model(
   model_type = "SVM"
 )
 ```
+
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `model_type` | `"GLM"` | `"SVM"` | One of GLM, SVM, NNET, RForest; selects the parsnip model spec in `.fit_model()` |
+| `model_params` | `list()` | default | Hyperparameter overrides with parsnip names (e.g. NNET `hidden_units`); unknown names warn |
+| `cutoff` | `0.5` | default | Threshold for the training accuracy; copied to `bl_result$cutoff`. Only `0.5` is valid under the current method |
+
+Full argument list: `?bl_fit_model`.
 
 **What it does, step by step:**
 
@@ -268,6 +291,17 @@ bl_mod <- bl_wrap_model(
 )
 ```
 
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `model_type` | required | `"custom"` | `"custom"` predicts through `predict_fn`; a built-in type such as `"XGB"` uses its own branch in `.pred_function()` |
+| `predict_fn` | `NULL` | the `xgb.DMatrix` function | `function(model, new_data)` returning probabilities; required for `"custom"`, ignored otherwise |
+| `train_data` | `NULL` | `bl_dat$train_data` | Rows scored for `accuracy` and `gini`; `NULL` leaves both `NA` |
+| `cutoff` | `0.5` | default | Threshold for the training accuracy; copied to `bl_result$cutoff`. Only `0.5` is valid under the current method |
+
+Full argument list: `?bl_wrap_model`.
+
 **What it does, step by step:**
 
 1. `bl_wrap_model()` validates inputs. Because `model_type = "custom"`, it bundles the raw `xgb_fit` object and the user-supplied `predict_fn` together:
@@ -322,6 +356,24 @@ bl_results <- bl_build_result(
   b_margin = 0.001
 )
 ```
+
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `method` | `"PCA"` | `"CVA"` | CVA separates the four confusion groups (TP/TN/FP/FN); PCA maximises total variance |
+| `title` | `""` | `"Loan default ... CVA biplot"` | Biplot title; `plot(..., new_title = )` overrides it at plot time |
+| `b_margin` | `0.001` | `0.001` | Half-width of the boundary band: contours at `0.5 ± b_margin` (6.2, item 9) |
+| `m` | `200L` | default | Grid resolution: m × m = 40,000 scored points |
+| `proj_dims` | `c(1L, 2L)` | default | Eigenvectors that span the biplot plane |
+| `standardise` | `TRUE` | default | Ignored here: CVA forces `FALSE` |
+| `cva_classes` | `NULL` | default | CVA groups; `NULL` with a model uses the TP/TN/FP/FN labels |
+| `outlie` | `1` | default | Fraction of training points inside the grid hull; `1` encloses all of them |
+| `calc_hull` | `TRUE` | default | Trims the stored grid to the hull (6.2, item 10); visual only |
+
+`bl_build_result()` has no `cutoff` argument. The grid draws its contours around `bl_build_grid()`'s default cutoff, `0.5`, while `bl_results$cutoff` is copied from `bl_mod$cutoff`. The two agree here because `bl_mod` uses `0.5`.
+
+Full argument list: `?bl_build_result`.
 
 This is the **Phase 1 anchor function**. It orchestrates three sub-steps and returns the central `bl_result` object that everything in Phases 2 and 3 consumes.
 
@@ -469,17 +521,27 @@ plot(
 )
 ```
 
-Parameter notes:
-- `plot_points = TRUE` (default): shows data points; `FALSE` hides them.
-- `label_dir`: `"Paral"` (the default) is border-adaptive -- left/right labels are vertical, top/bottom are horizontal. The script uses `"Hor"` (all horizontal); `"Orthog"` draws labels perpendicular to the axis.
-- `label_offset_var = 0L` means no label is offset, so `label_offset_dist` has no effect in this call.
-- `label_offset_var` and `ticks_var` accept variable names (`"loan_amnt"`) or integer indices.
-- **Pairing rule for offsets and ticks.** `label_offset_dist` pairs with `label_offset_var` position by position, and `ticks_n` pairs with `ticks_var` in the same way. The private helpers `.make_label_line_vec()` and `.make_ticks_vec()` (`R/plot_biplot.R`) build these into one value per axis. They are shared by `plot_biplotEZ()`, `plot.bl_local_result()` and `plot.bl_surrogate()`.
-  - **A single value** applies to every listed variable.
-  - **A name the model does not have,** such as a variable pruned from a reduced model, is dropped with a warning, together with its value. The remaining values stay with their own variables.
-  - **A value vector of any other length** (neither 1 nor the length of the variable vector) is recycled with a warning.
-  - **Unlisted axes** keep the defaults: label line `0.1`, and `ticks_v` ticks.
-- `rotate_deg` rotates the entire plot clockwise; all elements (grid, points, contours, axes) rotate together.
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `points` | `NULL` | default | `NULL` projects and draws `bl_results$train_data`; a `bl_points` object draws other rows (6.6) |
+| `plot_points` | `TRUE` | default | `FALSE` skips the data-points layer |
+| `label_dir` | `"Paral"` | `"Hor"` | `"Paral"` is border-adaptive (left/right labels vertical, top/bottom horizontal); `"Hor"` is all horizontal; `"Orthog"` is perpendicular to each axis |
+| `label_offset_var` | `0L` | `0L` | Variables whose labels move outward, by name (`"loan_amnt"`) or index; `0L` moves none |
+| `label_offset_dist` | `1.5` | `0.5` | Outward distance, in margin lines, for each listed variable; no effect here, as no variable is listed |
+| `ticks_v` | `1L` | default | Tick marks on each axis not listed in `ticks_var` |
+| `ticks_var`, `ticks_n` | `0L`, `5L` | default | Axes with their own tick count, and those counts; `0L` overrides none |
+| `rotate_deg` | `0` | default | Rotates the whole plot clockwise; grid, points, contours and axes turn together |
+| `new_title` | `NA` | default | Replaces the title stored by `bl_build_result()` |
+
+Full argument list: `?plot_biplotEZ`.
+
+**Pairing rule for offsets and ticks.** `label_offset_dist` pairs with `label_offset_var` position by position, and `ticks_n` pairs with `ticks_var` in the same way. The private helpers `.make_label_line_vec()` and `.make_ticks_vec()` (`R/plot_biplot.R`) build these into one value per axis. They are shared by `plot_biplotEZ()`, `plot.bl_local_result()` and `plot.bl_surrogate()`.
+- **A single value** applies to every listed variable.
+- **A name the model does not have,** such as a variable pruned from a reduced model, is dropped with a warning, together with its value. The remaining values stay with their own variables.
+- **A value vector of any other length** (neither 1 nor the length of the variable vector) is recycled with a warning.
+- **Unlisted axes** keep the defaults: label line `0.1`, and `ticks_v` ticks.
 
 **What it renders (in layer order):**
 
@@ -544,7 +606,14 @@ work (see CLAUDE.md Section 9, "Deferred / Future Work").
 test_pts <- bl_project_points(bl_results$test_data, bl_results, filter_to_polygon = TRUE)
 ```
 
-`filter_to_polygon = TRUE` drops the test rows that fall outside the training hull before plotting (9 of the 4,429 in the harness run, leaving 4,420), so the overlay shows only points in the region the training data supports.
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `filter_to_polygon` | `FALSE` | `TRUE` | Drops rows that project outside the training hull (`bl_results$polygon`), so the overlay shows only the region the training data supports: 9 of 4,429 here, leaving 4,420 |
+| `filter_to_train_ranges` | `FALSE` | default | Drops rows with any feature outside `train_ranges`, before projecting |
+
+Full argument list: `?bl_project_points`.
 
 **What it does:**
 

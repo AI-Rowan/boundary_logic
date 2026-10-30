@@ -12,5 +12,13 @@
 \item{...}{Currently ignored.}
 }
 \description{
-Print method for bl_local_result
+Prints, in order: the search summary (best pair, selector, distances,
+prediction at the counterfactual); the Target and Counterfactual blocks; the
+per-pair distances; and, when a solution was found, a table comparing the
+observed and counterfactual value of each feature with its change and its
+\code{\link{set_filters}} constraint. Values are in original (raw) units
+when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
+units. When the search moved a \code{"fixed"} feature, a note under the
+table explains why and whether the restored point was used (see
+\strong{Fixed constraints} in \code{\link{bl_find_local_cf}}).
 }

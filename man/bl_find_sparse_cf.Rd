@@ -11,9 +11,13 @@ bl_find_sparse_cf(bl_shapley_result, round_to = NULL)
 \code{\link{bl_shapley}}.}
 
 \item{round_to}{Positive numeric or \code{NULL}. If not \code{NULL}, rounds
-supporting variable values to the nearest multiple of this value (e.g.
+each changed variable's value to the nearest multiple of this value (e.g.
 \code{round_to = 0.5} rounds to the nearest 0.5; \code{round_to = 1}
-rounds to the nearest integer). Default \code{NULL} (no rounding).}
+rounds to the nearest integer). Rounding acts on the stored model-unit
+values, which are z-scores for a standardised model, and constraints are
+not re-checked afterwards; see
+\file{documentation/sparse-counterfactual.md}. Default \code{NULL} (no
+rounding).}
 }
 \value{
 A list of class \code{"bl_sparse_result"} with the following fields:
@@ -24,17 +28,29 @@ X-space.}
 \item{solution_valid}{Logical; \code{TRUE} if the sparse CF flips the
 predicted class.}
 \item{shapley_df}{The annotated Shapley data frame with columns
-\code{used_in_sparse} and \code{x_sparse_val}.}
+\code{used_in_sparse} (\code{TRUE} when the sparse CF changes the
+variable to its counterfactual value) and \code{x_sparse_val}.}
+\item{sparse_path}{Data frame, one row per step: \code{step},
+\code{variable} (the variable changed), \code{shapley} (its Shapley
+value), \code{pred} (the model probability after the step) and
+\code{crosses} (whether the predicted class has flipped). Zero rows
+when no variable is a candidate.}
 \item{bl_shapley}{The \code{"bl_shapley"} object passed in.}
 }
 }
 \description{
-Builds a sparse version of the boundary counterfactual by retaining only
-the variables whose Shapley contribution \emph{supports} the prediction
-direction. Variables classified as \code{"Contradicts"} or \code{"Unknown"}
-revert to their observed values. Additionally, any variable constrained as
-\code{"fixed"} in \code{\link{set_filters}} always reverts to its observed
-value regardless of its Shapley classification, because the \code{"fixed"}
-constraint permits only a \eqn{\pm 0.5} search window and the observed value
-is the intended sparse target.
+Builds a sparse version of the counterfactual that changes as few variables
+as needed. Starting from the observed point, it changes the variables whose
+Shapley contribution \emph{supports} the prediction direction one at a time,
+largest absolute Shapley value first, and re-scores the model after each.
+It stops at the first point whose predicted class differs from the
+target's; the remaining variables stay at their observed values. Variables
+classified as \code{"Contradicts"}, \code{"No effect"} or \code{"Unknown"},
+and any variable constrained as \code{"fixed"} in \code{\link{set_filters}},
+are never changed. If no step crosses the boundary, every supporting
+variable has been changed and \code{solution_valid} is \code{FALSE}.
+}
+\details{
+The selection follows the Shapley order, so it is not guaranteed to be the
+smallest possible subset: a smaller set outside that order may also cross.
 }

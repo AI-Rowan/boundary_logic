@@ -12,5 +12,11 @@
 \item{...}{Currently ignored.}
 }
 \description{
-Print method for bl_shapley
+Prints the predictions at the observed point and the counterfactual, the sum
+of the Shapley values, then a table in the same layout as \code{print()} of
+a \code{bl_local_result}: one row per feature with the observed and
+counterfactual values, the change, the \code{\link{set_filters}} constraint,
+the Shapley value and its \code{Contribute} class. Feature values are in
+original (raw) units when a scaling was set via \code{\link{bl_set_scaling}},
+otherwise in model units; Shapley values are in prediction units.
 }

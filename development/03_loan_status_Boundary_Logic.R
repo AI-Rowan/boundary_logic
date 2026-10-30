@@ -14,13 +14,14 @@
 #   Step 3   : Domain filter: keep only applicants with no prior default on file
 #   Steps 4-6: Fit XGBoost model, build first CVA biplot
 #
-#   Phase 2 (Steps 7-8): Global interpretations
+#   Phase 2 (Step 7): Global interpretations
 #     7. Find nearest boundary point + distance-to-boundary plots
-#     8. Surrogate model
 #
 #   Prune least-important variables
 #   Steps 4b-6b: Refit XGBoost on reduced feature set, rebuild biplot
-#   Phase 2 second pass (Steps 7b-8b): re-inspect with reduced model
+#   Phase 2 second pass (Step 7b): re-inspect with reduced model
+#   Steps 8 and 8b: Surrogate models, full and reduced (not used directly
+#                   in this workflow)
 #
 #   Phase 3 (Steps 9-16): Local interpretation of one target
 #     9. Inspect predictions and select target
@@ -291,26 +292,25 @@ names(loan_encoded)
 }
 
 
-# ---- Step 8: Surrogate model -------------------------------------------
-{
-  bl_surr <- bl_surrogate(bl_results)
-  print(bl_surr)
-  plot(bl_surr)
-}
-
-
 # ===========================================================
 # Prune least-important variables
 # ===========================================================
-# bl_robustness() prints sum_of_distance: the total absolute standardised
-# distance contribution per variable (ascending = weakest first).
+# bl_robustness() returns sum_of_distance: the total absolute standardised
+# distance contribution per variable (sorted ascending = weakest first).
 # Review var_imp, then explicitly list the variables to drop in vars_to_drop.
 {
   rob     <- bl_robustness(bl_bnd)
   var_imp <- sort(rob$sum_of_distance)     # ascending: weakest variable first
   print(round(var_imp, 2))
 
+  # The overall score is the sum of the per-variable totals. It is printed
+  # for reference only; the pruning uses the per-variable totals above.
+  cat(sprintf("Overall robustness (not used here): %.2f\n", rob$robustness))
+
   # List variables to remove based on the var_imp output above.
+  # person_income goes although it outranks credit_score: loan_percent_income
+  # is loan_amnt / person_income, so income is redundant once both loan
+  # variables are kept. credit_score stays because it is actionable (Step 10).
   vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length", "person_income", "person_age")
   
   feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
@@ -424,6 +424,22 @@ names(loan_encoded)
 }
 
 
+# ---- Surrogate models (Steps 8 and 8b) ---------------------------------
+# The surrogate models are not used directly in this workflow: no later
+# step reads bl_surr or bl_surr_v2. bl_surrogate() classifies each training
+# row by its nearest boundary contour in the biplot, not by the model, and
+# reports how often the two agree -- a check of how faithfully the 2D biplot
+# represents the model. Step 8 uses the full model (bl_results), Step 8b
+# the reduced model (bl_results_v2).
+
+# ---- Step 8: Surrogate model -------------------------------------------
+{
+  bl_surr <- bl_surrogate(bl_results)
+  print(bl_surr)
+  plot(bl_surr)
+}
+
+
 # ---- Step 8b: Surrogate model ------------------------------------------
 {
   bl_surr_v2 <- bl_surrogate(bl_results_v2)
@@ -502,8 +518,8 @@ names(loan_encoded)
 
   flt <- set_filters(
     tgt,
-   # person_age     = "fixed",       # not actionable
-   # loan_amnt      = "fixed",    # borrow less to reduce repayment risk
+    #loan_percent_income     = "fixed",       # 
+    loan_amnt      = "fixed",    # make not actionable
     loan_int_rate  = "increase",        # set by the lender, not the applicant
     credit_score = "increase"
   )
@@ -518,6 +534,9 @@ names(loan_encoded)
     set_filters = flt,
     bl_target   = tgt
     )
+  # print(bl_local) ends with the observed vs counterfactual table (one row
+  # per feature, with its Step 10 constraint, in raw loan units) and a note
+  # explaining any "fixed" feature the search moved and whether it was restored.
   print(bl_local)
 }
 
@@ -550,7 +569,7 @@ names(loan_encoded)
 
 # ---- Step 14: Sparse counterfactual ------------------------------------
 {
-  bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
+  bl_sparse <- bl_find_sparse_cf(bl_shapley_values)
   print(bl_sparse)
   plot(bl_sparse,
        new_title = "xx",
@@ -587,12 +606,12 @@ names(loan_encoded)
                      "loan_int_rate",
                      "loan_percent_income",
                      "credit_score"),
-       ticks_n = c(4,200,200,20)
+       ticks_n = c(4,10,10,10)
   )
 
   bl_shap_free   <- bl_shapley(bl_local_free)
-  bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
-
+  bl_sparse_free <- bl_find_sparse_cf(bl_shap_free)
+  print(bl_sparse_free)
   plot(bl_shap_free)
   plot(bl_sparse_free,
        label_dir         = "Paral",   # default; "Hor" and "Orthog" also accepted
@@ -605,7 +624,7 @@ names(loan_encoded)
                      "loan_int_rate",
                      "loan_percent_income",
                      "credit_score"),
-       ticks_n = c(4,200,200,20)
+       ticks_n = c(4,10,10,10)
   )
 }
 

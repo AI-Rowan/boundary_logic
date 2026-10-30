@@ -221,7 +221,9 @@ bl_select_target(bl_result, target, data)
 set_filters(bl_target, ...)
   - Encodes actionability constraints for the local counterfactual search
   - Valid types: "decrease", "increase", "fixed", c(min, max)
-  - "fixed": search allows ±0.5 of observed; always reverts in sparse CF
+  - "fixed": search allows ±0.5 of observed (model units); then restored to
+    observed when the restored point still crosses the boundary; always
+    reverts in sparse CF
   - Returns: bl_filters object
 
 bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, verbose)
@@ -257,14 +259,17 @@ G. Shapley Attribution (R/shapley.R)
 bl_shapley(bl_local_result)
   - Decomposes target-to-counterfactual path using exact Shapley formula
     (for p <= 14 variables; permutation approximation otherwise)
-  - Classifies each variable as Supports (darkblue) or Contradicts (grey)
+  - Classifies each variable as Supports (darkblue), Contradicts (grey), or
+    No effect (mid grey; Shapley value 0)
   - Y-axis labels: "variable: observed_value -> required_change" (3 d.p.)
   - Returns: bl_shapley object
 
 bl_find_sparse_cf(bl_shapley, round_to)
-  - Reverts all Contradicts variables to observed values
-  - Reverts all "fixed" variables to observed values
-  - Optionally rounds Supports variables to nearest multiple (round_to)
+  - Greedy: changes Supports variables one at a time, largest Shapley value
+    first, re-scoring the model after each; stops once the boundary is crossed
+  - Contradicts, No effect and "fixed" variables stay at observed values
+  - Optionally rounds the changed variables to nearest multiple (round_to,
+    in model units)
   - round_to = NULL: keep exact CF values
   - round_to = 0.5:  round to nearest 0.5 (recommended for clinical data)
   - round_to = 1:    round to nearest integer

@@ -360,7 +360,7 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 |---|---|---|
 | `"decrease"` | CF value must be ≤ observed | Not special — Shapley decides |
 | `"increase"` | CF value must be ≥ observed | Not special — Shapley decides |
-| `"fixed"` | CF value within ±0.5 of observed | Always reverts to observed value |
+| `"fixed"` | CF value within ±0.5 of observed (model units); after the search, restored to observed when the restored point still crosses the boundary | Always reverts to observed value |
 | `c(min, max)` | CF value must lie in `[min, max]` | Not special — Shapley decides |
 
 **`bl_find_local_cf()`** iterates over up to `max_pairs` eigenvector pairs in canonical order — (1,2), (1,3), (2,3), (1,4), … — testing a maximum of 10 combinations (configurable). For each pair:
@@ -398,7 +398,9 @@ Within-pair selection (the nearest valid contour vertex) always uses 2D Euclidea
 
 The pair producing the globally minimum value of the chosen selector is selected. The result stores the full grid, contours, rotation matrices (`Vr_rot`, `tVr_rot`), and the `set_filters` object (needed by `bl_find_sparse_cf()`).
 
-**`bl_counterfactual` companion object.** Alongside `bl_target` (the observed point), the result carries `bl_local$bl_counterfactual` -- a `"bl_counterfactual"` S3 object that mirrors `bl_target` and packages the boundary point found by the search (built by private `.make_bl_counterfactual()`; `NULL` when no solution). Fields: `x_cf` (1-row data frame `B_x`, model units), `z_cf` (`B_z`), `pred_prob` (`B_pred`), `pred_class` (`as.integer(B_pred >= cutoff)`), and `scaling`. Its `print.bl_counterfactual()` method displays the feature values in original (raw) units when a scaling was recorded via `bl_set_scaling()` -- using `.scale_to_raw(..., kind = "level")` -- exactly like `print.bl_target()`; storage stays in model units. `print.bl_local_result()` prints the Target and Counterfactual blocks together.
+**Fixed-feature restore (post-selection, private `.restore_fixed()`).** The search accepts a `"fixed"` feature within `.fixed_tol` = 0.5 model units of its observed value, because a vertex of the 2D boundary contour rarely holds a feature at exactly its observed value. After the best pair is chosen, every fixed feature the search moved is set back to its observed value and the point is re-scored. If the restored point still crosses the boundary (predicted class differs from the target's) and lies within `train_ranges`, it replaces `B_x` and `B_pred`, and `B_z` becomes its projection `((B_x - X_center) / sv) %*% Vr_rot`. Otherwise the search's point is kept. The new field `fixed_check` (`NULL` when no fixed feature moved) records `vars`, `applied`, `pred_restored`, `in_range` and `search_point` (the search's `B_x`, `B_z`, `B_pred`). `dist_z`, `dist_mahalanobis` and the per-pair tables stay the search's values, because they describe the pair choice; `bl_counterfactual` is built from the selected point. See `documentation/fixed-constraint-restore.md`.
+
+**`bl_counterfactual` companion object.** Alongside `bl_target` (the observed point), the result carries `bl_local$bl_counterfactual` -- a `"bl_counterfactual"` S3 object that mirrors `bl_target` and packages the boundary point found by the search (built by private `.make_bl_counterfactual()`; `NULL` when no solution). Fields: `x_cf` (1-row data frame `B_x`, model units), `z_cf` (`B_z`), `pred_prob` (`B_pred`), `pred_class` (`as.integer(B_pred >= cutoff)`), and `scaling`. Its `print.bl_counterfactual()` method displays the feature values in original (raw) units when a scaling was recorded via `bl_set_scaling()` -- using `.scale_to_raw(..., kind = "level")` -- exactly like `print.bl_target()`; storage stays in model units. `print.bl_local_result()` prints, in order: the search summary (plus `Fixed restored : <vars>` when a restore was applied), the Target and Counterfactual blocks, the per-pair distances, and finally an observed / counterfactual / change / constraint table (one row per feature, `var_names` order, raw units when scaled) built by the private `.cf_compare_table()`. When the search moved a `"fixed"` feature, a note under the table (private `.fixed_notes()`) gives the move, the tolerance in display units, and whether the restored point was used.
 
 **Important constraint difference from global search:**
 
@@ -442,28 +444,35 @@ This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_bi
 Variables are classified as `"Supports"` or `"Contradicts"` using the following logic from research script `4.4 Local Interpretation Shapley.R`:
 
 ```r
+either class:         |Shapley| < 1e-8 → No effect   (checked first)
 class 0 observation:  positive Shapley → Supports,  negative → Contradicts
 class 1 observation:  negative Shapley → Supports,  positive → Contradicts
 ```
 
-`print.bl_shapley()` shows the per-variable Shapley table. `plot.bl_shapley()` renders a ggplot2 horizontal bar chart (darkblue = Supports, grey70 = Contradicts) with y-axis labels `"variable: observed → change_to_boundary"` in model units; rows are sorted by signed Shapley value (ascending for a class-0 target, descending for class 1).
+The `"No effect"` class (added 2026-10-29) departs from the research script, which counted a zero value as `"Supports"` for a class-0 target. A Shapley value of exactly 0 means the feature's change never moves the prediction, for example a small change that crosses no split of a tree model. The class keeps such a feature out of the sparse counterfactual. See `documentation/sparse-counterfactual.md` §1.
 
-**Raw-unit feature-value display (when `bl_result$scaling` is set via `bl_set_scaling()`).** The observed and counterfactual feature values shown by `plot.bl_shapley()`, `print.bl_shapley()`, `print.bl_sparse_result()`, and `print.bl_target()` are converted back to original units at display time by the private helper `.scale_to_raw(values, scaling, var_names, kind)` (`R/data_prepare.R`). The two conversion kinds matter: a **level** (observed value, full CF `B_x`, sparse CF, counterfactual end) maps as `value * scale + center`, whereas a **delta** (`data_to_boundary = end - start`) maps as `value * scale` with no centre term (a difference is translation-free). When scaling is present the `plot.bl_shapley()` y-axis label switches from `observed → change` to `observed → counterfactual` in raw units (counterfactual = `pred_data + data_to_boundary`, converted as a level). `bl_select_target()` stores `scaling` on the `bl_target` so `print.bl_target()` (and `print.bl_local_result()`, which delegates to it) can convert. Conversion is display-only -- the stored `shapley_df` / `x_sparse` / `x_obs` remain in model units. The Shapley *contributions* (`shapley_cause`) are in prediction-impact units, not feature units, and are deliberately left unconverted. No-op (and warns on incomplete scaling) when `scaling` is absent. See Section 4.4.1 for the axis-relabel counterpart.
+`print.bl_shapley()` shows the predictions (observed, full CF), the Shapley sum, and a table in the same layout as `print.bl_local_result()` (shared builder `.cf_compare_table()`, rows in `var_names` order): `observed`, `counterfactual`, `change`, `constraint`, plus `shapley` (prediction units, not converted) and `contribute`. `plot.bl_shapley()` renders a ggplot2 horizontal bar chart (darkblue = Supports, grey70 = Contradicts) with y-axis labels `"variable: observed → change_to_boundary"` in model units; rows are sorted by signed Shapley value (ascending for a class-0 target, descending for class 1).
 
-**`bl_find_sparse_cf()`** builds a sparse version of the counterfactual:
+**Raw-unit feature-value display (when `bl_result$scaling` is set via `bl_set_scaling()`).** The observed and counterfactual feature values shown by `plot.bl_shapley()`, `print.bl_shapley()`, `print.bl_sparse_result()`, `print.bl_target()`, `print.bl_counterfactual()` and `print.bl_local_result()` are converted back to original units at display time by the private helper `.scale_to_raw(values, scaling, var_names, kind)` (`R/data_prepare.R`). The two conversion kinds matter: a **level** (observed value, full CF `B_x`, sparse CF, counterfactual end) maps as `value * scale + center`, whereas a **delta** (`data_to_boundary = end - start`) maps as `value * scale` with no centre term (a difference is translation-free). When scaling is present the `plot.bl_shapley()` y-axis label switches from `observed → change` to `observed → counterfactual` in raw units (counterfactual = `pred_data + data_to_boundary`, converted as a level). `bl_select_target()` stores `scaling` on the `bl_target` so `print.bl_target()` (and `print.bl_local_result()`, which delegates to it) can convert. Conversion is display-only -- the stored `shapley_df` / `x_sparse` / `x_obs` remain in model units. The Shapley *contributions* (`shapley_cause`) are in prediction-impact units, not feature units, and are deliberately left unconverted. No-op (and warns on incomplete scaling) when `scaling` is absent. See Section 4.4.1 for the axis-relabel counterpart.
 
-1. Retain CF value only for `"Supports"` variables (optionally rounded by resolution `round_to`)
-2. Revert `"Contradicts"` and `"Unknown"` variables to observed value
-3. Revert `"fixed"`-constrained variables to observed value regardless of Shapley class
-4. Score the sparse CF through the model
-5. Set `solution_valid = TRUE` if the predicted class flips
+**`bl_find_sparse_cf()`** builds a sparse version of the counterfactual by greedy selection (since 2026-10-29; previously every `"Supports"` variable was changed at once):
+
+1. Candidates: `"Supports"` variables that are not `"fixed"` in `set_filters`, ordered by absolute Shapley value, largest first. `"Contradicts"`, `"No effect"`, `"Unknown"` and fixed variables never change.
+2. Start from the observed point. Change one candidate at a time to its CF value (optionally rounded by resolution `round_to`), re-score through the model, and record the step in `sparse_path`.
+3. Stop at the first point whose predicted class differs from the target's. If no step crosses, every candidate has been changed.
+4. Set `solution_valid = TRUE` if the final point's predicted class flips
+5. Annotate `shapley_df` with `used_in_sparse` (`TRUE` for the variables on the greedy path) and `x_sparse_val`
+
+Re-scoring, rather than summing Shapley values, uses the model's actual prediction at each partial counterfactual (a Shapley value is an average over coalitions, not the effect when added first), at most `p` model calls. The selection follows the Shapley order, so it is not guaranteed minimal. New field `sparse_path`: `step`, `variable`, `shapley`, `pred`, `crosses`. See `documentation/sparse-counterfactual.md` §2.
 
 The `round_to` parameter is **resolution-based** (round to nearest multiple), not decimal places:
 - `round_to = 0.5` → rounds to nearest 0.5
 - `round_to = 1` → rounds to nearest integer
 - `round_to = NULL` (default) → no rounding
 
-`print.bl_sparse_result()` shows three predictions side-by-side — Observed, Full CF, Sparse CF — to allow verification of the classification change at each stage. `plot.bl_sparse_result()` renders the full local biplot with both CFs overlaid: grey cross = full CF, green = sparse CF valid, yellow = sparse CF invalid.
+Rounding acts on the stored model-unit values (z-scores for a standardised model), uses the nearest multiple, and does not re-check constraints. Its issues and possible changes are recorded, for future investigation, in `documentation/sparse-counterfactual.md` §3.
+
+`print.bl_sparse_result()` shows three predictions — Observed, Full CF, Sparse CF — to allow verification of the classification change at each stage, then a table in the same layout as `print.bl_local_result()` (shared builder `.cf_compare_table()`): one row per feature with `observed`, `counterfactual` (full CF), `sparse`, `change` (sparse minus observed), `constraint` and `used` (`used_in_sparse`), followed by the greedy path (`sparse_path`). `plot.bl_sparse_result()` renders the full local biplot with both CFs overlaid: grey cross = full CF, green = sparse CF valid, yellow = sparse CF invalid.
 
 ---
 
@@ -541,7 +550,7 @@ This is the most important constraint difference between the two search modes.
 
 ### 6.7 Actionability filters (Manual §3D, Architecture Q8)
 
-`set_filters()` exposes per-variable constraints that were deferred during initial architecture planning (Q8: "develop later"). These are Phase 3 only — they are not available in `bl_find_boundary()`. The `"fixed"` constraint allows a ±0.5 search window during boundary search (not strict equality) to avoid filtering out all contour points due to floating-point imprecision in the back-projection. In sparse CF generation, fixed variables always revert to the observed value regardless of their Shapley classification, because the intent of `"fixed"` is that the variable does not change in the final recommendation.
+`set_filters()` exposes per-variable constraints that were deferred during initial architecture planning (Q8: "develop later"). These are Phase 3 only — they are not available in `bl_find_boundary()`. The `"fixed"` constraint allows a ±0.5 search window during boundary search (not strict equality) to avoid filtering out all contour points due to floating-point imprecision in the back-projection. After the search, `bl_find_local_cf()` sets each fixed feature it moved back to its observed value and keeps that point when it still crosses the boundary (see the fixed-feature restore in Section 4.8). In sparse CF generation, fixed variables always revert to the observed value regardless of their Shapley classification, because the intent of `"fixed"` is that the variable does not change in the final recommendation.
 
 ### 6.8 Shapley computation (Manual §3G)
 

@@ -20,5 +20,6 @@ the call in \code{print()} to draw it.
 Returns a \pkg{ggplot2} bar chart showing each variable's Shapley
 contribution to the path from the observed point to the boundary.
 Variables are coloured by whether they \emph{support} or
-\emph{contradict} the prediction direction.
+\emph{contradict} the prediction direction, or have \emph{no effect}
+(dark blue, light grey and mid grey).
 }

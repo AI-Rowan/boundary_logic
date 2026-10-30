@@ -12,5 +12,15 @@
 \item{...}{Currently ignored.}
 }
 \description{
-Print method for bl_sparse_result
+Prints the predictions at the observed point, the full counterfactual and
+the sparse counterfactual, then a table in the same layout as
+\code{print()} of a \code{bl_local_result}: one row per feature with the
+observed, counterfactual and sparse values, the change the sparse
+counterfactual asks for (sparse minus observed), the
+\code{\link{set_filters}} constraint, and whether the sparse counterfactual
+uses the feature's counterfactual value. Values are in original (raw) units
+when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
+units. Last, it prints the path \code{\link{bl_find_sparse_cf}} took: the
+feature changed at each step, its Shapley value, the prediction after the
+step, and whether the predicted class has flipped.
 }

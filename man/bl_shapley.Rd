@@ -50,6 +50,12 @@ permutation approximation is applied.
 }
 \details{
 The \code{Contribute} column in the returned data frame classifies each
-variable as \code{"Supports"} (pushes the prediction toward the boundary)
-or \code{"Contradicts"} (pushes it away from the boundary).
+variable as \code{"Supports"} (pushes the prediction toward the boundary),
+\code{"Contradicts"} (pushes it away from the boundary), or
+\code{"No effect"} (Shapley value zero, up to \code{1e-8}). A zero value
+arises when the variable's change does not move the prediction in any
+coalition, for example a small change that crosses no split of a tree
+model. The PhD research script counted zero as \code{"Supports"} (for a
+class-0 target); \code{"No effect"} keeps such a variable out of the sparse
+counterfactual (\code{\link{bl_find_sparse_cf}}).
 }

@@ -1,8 +1,10 @@
-# Code Walkthrough: Step 7 of `03_loan_status_Boundary_Logic.R`
+# Code Walkthrough: Step 7 and variable pruning of `03_loan_status_Boundary_Logic.R`
 
 ## Context
 
-This document continues from `review_section4_to_6.md`. At this point `bl_results` is the fully assembled Phase 1 anchor object and `test_pts` is the projected test-set `bl_points` object. Step 7 forms Phase 2 (first pass): finding the global boundary counterfactuals and visualising distance to boundary in one combined block. Step 8 (surrogate model) is independent and not covered here.
+This document continues from `review_section4_to_6.md`. At this point `bl_results` is the fully assembled Phase 1 anchor object and `test_pts` is the projected test-set `bl_points` object. Step 7 forms Phase 2 (first pass): finding the global boundary counterfactuals and visualising distance to boundary in one combined block.
+
+The variable-pruning block that follows Step 7 uses its per-variable distances to choose the four features of the reduced model `bl_results_v2`, which `review_section9_to_15.md` uses throughout. Steps 8 and 8b (the surrogate models for the full and the reduced model) run together after Step 7b. They are not used directly in the workflow and are not covered here.
 
 ---
 
@@ -22,6 +24,15 @@ plot(bl_bnd, type = "boxplot")
 ```
 
 `print(bl_bnd)` is not called in Step 7; the reduced-model pass (Step 7b) prints it. In the harness run `bl_find_boundary()` also reports: "27 identified counterfactual(s) are outside the training feature ranges, but are retained."
+
+**Parameters (`bl_find_boundary()`):**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `data` | `NULL` | default | Rows to search; `NULL` uses `bl_results$test_data`, and `train_data` gives a training-data search. `bl_pick_point()` defaults to `train_data`, so it needs `data = bl_results$test_data` to show these counterfactuals |
+| `tdp` | `NULL` | default | Row indices of `data` to process; `NULL` processes every row |
+
+Full argument list: `?bl_find_boundary`.
 
 ### What `bl_find_boundary()` does
 
@@ -257,6 +268,15 @@ to the observation being inspected.
 
 Both calls render the same data in two different chart styles. The core computation is identical.
 
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `type` | `"jitter"` | `"jitter"`, then `"boxplot"` | Chart style; the computation below is the same for both |
+| `distance` | `"mahalanobis"` | default | Per-feature denominator: `sqrt(diag(W))` (within-class SD), or `X_sd` (total SD) under `"euclidean"`. `"mahalanobis"` also prints the cross-correlation diagnostic |
+
+Full argument list: `?plot.bl_boundary`.
+
 ---
 
 ### Core computation (shared by both plot types)
@@ -399,7 +419,96 @@ Returns a list invisibly:
 
 ---
 
-## Complete Object Flow: Step 7
+## Variable pruning — `bl_robustness()` → `feature_cols_v2`
+
+**File:** `R/boundary_plot.R` (`bl_robustness()`)
+
+The block after Step 7 uses the global counterfactuals in `bl_bnd` to choose the features of a smaller model. Its output, `feature_cols_v2`, drives the refit (Steps 4b–6b), and the refit's `bl_results_v2` is the anchor for every step in `review_section9_to_15.md`.
+
+**Call:**
+```r
+rob     <- bl_robustness(bl_bnd)
+var_imp <- sort(rob$sum_of_distance)     # ascending: weakest variable first
+print(round(var_imp, 2))
+
+cat(sprintf("Overall robustness (not used here): %.2f\n", rob$robustness))
+
+vars_to_drop <- c("person_gender", "person_emp_exp", "cb_person_cred_hist_length",
+                  "person_income", "person_age")
+feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
+cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
+```
+
+**Parameters:**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `distance` | `"mahalanobis"` | default | Per-feature denominator `sqrt(diag(W))`, the same as `plot(bl_bnd)`, so the totals match Step 7's console output |
+
+Full argument list: `?bl_robustness`.
+
+**What it does:** `bl_robustness()` repeats the per-variable part of the `plot(bl_bnd)` computation without drawing a plot (see "Core computation", Steps 1 and 2, above):
+1. Back-projects each observation's move to its boundary point, `Z_obs - B_z`, into X-space with `tVr`.
+2. Divides each feature by its within-class SD, `sqrt(diag(W))`.
+3. Sums the absolute values over the 4,429 test observations, giving one total per feature: `sum_of_distance`.
+4. Adds the per-feature totals into one overall score: `robustness`.
+
+`plot(bl_bnd)` prints the same totals and returns them invisibly; `bl_robustness()` returns them as a value without a plot.
+
+**Returned object — `rob` (plain list):**
+
+| Field | Type | Content | Used here |
+|---|---|---|---|
+| `sum_of_distance` | named numeric (length 9) | Per-variable totals: the components | Yes: ranks the features for pruning |
+| `robustness` | numeric scalar | Overall score, `sum(sum_of_distance)` | No: printed for reference only |
+| `distance` | character | `"mahalanobis"` | No |
+
+**Console output** (from the harness run):
+```
+             person_gender cb_person_cred_hist_length 
+                     47.44                     305.43 
+            person_emp_exp                 person_age 
+                    323.82                     390.67 
+              credit_score              person_income 
+                    556.14                     777.83 
+                 loan_amnt        loan_percent_income 
+                   1301.72                    1570.89 
+             loan_int_rate 
+                   3929.70 
+Overall robustness (not used here): 9203.63
+Retained features: loan_amnt, loan_int_rate, loan_percent_income, credit_score 
+```
+
+The overall score equals the "Robustness (total distance)" line that `plot(bl_bnd)` prints in Step 7. It is one number for the whole test population, so it cannot rank features, and this example does not use it.
+
+**How the variables are chosen.** The pruning uses the components, the per-variable totals extracted from `bl_bnd`. A larger total marks a feature that matters more for reaching the boundary ("Core computation", Step 2). The analyst reads `var_imp` and lists the features to drop in `vars_to_drop`:
+
+| Feature | Total | Decision |
+|---|---|---|
+| `person_gender` | 47.44 | Dropped: the weakest |
+| `cb_person_cred_hist_length` | 305.43 | Dropped |
+| `person_emp_exp` | 323.82 | Dropped |
+| `person_age` | 390.67 | Dropped |
+| `credit_score` | 556.14 | **Kept:** actionable |
+| `person_income` | 777.83 | **Dropped:** redundant, although it outranks `credit_score` |
+| `loan_amnt` | 1301.72 | Kept |
+| `loan_percent_income` | 1570.89 | Kept |
+| `loan_int_rate` | 3929.70 | Kept: the strongest |
+
+The ranking guides the choice, and two judgements override it:
+- **`person_income` is redundant.** `loan_percent_income` is `loan_amnt / person_income` rounded to two decimals (it matches in 44,992 of the 45,000 raw rows, and differs by at most 0.005). With both loan variables kept, income adds little.
+- **`credit_score` is actionable.** The applicant can act on it: Step 10 constrains it to `"increase"`, and the local counterfactual in `review_section9_to_15.md` raises it.
+
+**What it feeds.** `feature_cols_v2` keeps the `var_names` order: `loan_amnt`, `loan_int_rate`, `loan_percent_income`, `credit_score`. The refit, Steps 4b–6b, rebuilds the pipeline on these four features:
+- `bl_prepare_data()`, then z-scoring fitted on the training split and recorded with `bl_set_scaling()` (`review_section4_to_6.md`, "Optional: raw-unit biplot axes via `bl_set_scaling()`").
+- An XGBoost model wrapped through the direct `"XGB"` path.
+- `bl_build_result(method = "CVA", b_margin = 0.01)`, which returns `bl_results_v2`.
+
+In the harness run the reduced model's training accuracy is 0.8161 (Gini 0.7747), against 0.8280 (Gini 0.8093) for the full model. Step 7b repeats Step 7 on `bl_results_v2`, and Phase 3 (`review_section9_to_15.md`) works only with `bl_results_v2`.
+
+---
+
+## Complete Object Flow: Step 7 and variable pruning
 
 ```
 bl_results  [bl_result]           ← Phase 1 anchor (from Steps 4-6)
@@ -448,9 +557,25 @@ bl_bnd  [bl_boundary]
      │     └─→ console: metric, robustness scalar, per-variable totals,
      │                  Mahalanobis decomposition (+ note when |cross| >= 25%)
      │
-     └── plot(bl_bnd, type = "boxplot")   [type = "boxplot"]
-           ├── same vec_to_boundary_sd computation
-           └─→ box-and-whisker plot per variable × confusion group
+     ├── plot(bl_bnd, type = "boxplot")   [type = "boxplot"]
+     │     ├── same vec_to_boundary_sd computation
+     │     └─→ box-and-whisker plot per variable × confusion group
+     │
+     │  Variable pruning: bl_robustness(bl_bnd)   [same totals as plot(bl_bnd), no plot]
+     ▼
+rob  [list]
+  ├── sum_of_distance  (per-variable totals: used to rank features)
+  ├── robustness       (overall score 9203.63: printed, not used)
+  └── distance         "mahalanobis"
+     │
+     │  var_imp <- sort(rob$sum_of_distance)
+     │  vars_to_drop (analyst's choice) → setdiff(bl_dat$var_names, vars_to_drop)
+     ▼
+feature_cols_v2  (loan_amnt, loan_int_rate, loan_percent_income, credit_score)
+     │
+     │  Steps 4b–6b: bl_prepare_data() → z-score + bl_set_scaling() → XGB → bl_build_result()
+     ▼
+bl_results_v2  [bl_result]   → Step 7b, then Phase 3 (review_section9_to_15.md)
 ```
 
 ---
@@ -466,3 +591,5 @@ bl_bnd  [bl_boundary]
 4. **`sum_of_distance` is a variable importance proxy for the boundary.** Unlike model-level feature importance (e.g. XGBoost's `gain`), `sum_of_distance` tells you which features matter for reaching the boundary from where the population currently sits — a local, population-anchored importance measure.
 
 5. **`bl_result` stored inside `bl_bnd`.** Every downstream method (`plot.bl_boundary`, `bl_robustness`) re-extracts `V`, `tV`, `X_sd`, etc. from `bl_bnd$bl_result`. This means the boundary object is self-contained and fully reproducible without requiring `bl_results` to be in scope.
+
+6. **Pruning reads the components, not the overall score.** `rob$robustness` adds the per-variable totals into one number for the whole test population, so it cannot rank features; the pruning ranks them by `rob$sum_of_distance`. The ranking guides the choice, and domain knowledge settles it: `person_income` is dropped as redundant and `credit_score` is kept as actionable, against their ranks.

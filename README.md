@@ -203,7 +203,7 @@ that standardised scale, and read the `"fixed"` tolerance as ±0.5 of it.
 |---|---|
 | `"decrease"` | Counterfactual value must be ≤ observed |
 | `"increase"` | Counterfactual value must be ≥ observed |
-| `"fixed"` | Search allows ±0.5; always reverts to observed in sparse CF |
+| `"fixed"` | Search allows ±0.5, then restores the observed value when that point still crosses the boundary; always reverts to observed in sparse CF |
 | `c(min, max)` | Counterfactual must lie within this absolute range |
 
 ---
@@ -282,7 +282,7 @@ Models from `xgboost::xgboost()` are not supported by the `"XGB"` type; fit with
 | `set_filters()` | Encode actionability constraints | `bl_filters` |
 | `bl_find_local_cf()` | Nearest boundary via biplot rotation | `bl_local_result` |
 | `bl_shapley()` | Shapley attribution of the CF path | `bl_shapley` |
-| `bl_find_sparse_cf()` | Parsimonious counterfactual (Contradicts reverted) | `bl_sparse_result` |
+| `bl_find_sparse_cf()` | Parsimonious counterfactual (changes Supports features, largest Shapley first, until the boundary is crossed) | `bl_sparse_result` |
 
 ---
 

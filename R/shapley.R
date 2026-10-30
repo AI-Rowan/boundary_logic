@@ -138,8 +138,14 @@ utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p"))
 #' permutation approximation is applied.
 #'
 #' The \code{Contribute} column in the returned data frame classifies each
-#' variable as \code{"Supports"} (pushes the prediction toward the boundary)
-#' or \code{"Contradicts"} (pushes it away from the boundary).
+#' variable as \code{"Supports"} (pushes the prediction toward the boundary),
+#' \code{"Contradicts"} (pushes it away from the boundary), or
+#' \code{"No effect"} (Shapley value zero, up to \code{1e-8}). A zero value
+#' arises when the variable's change does not move the prediction in any
+#' coalition, for example a small change that crosses no split of a tree
+#' model. The PhD research script counted zero as \code{"Supports"} (for a
+#' class-0 target); \code{"No effect"} keeps such a variable out of the sparse
+#' counterfactual (\code{\link{bl_find_sparse_cf}}).
 #'
 #' @param bl_local_result A \code{"bl_local_result"} object produced by
 #'   \code{\link{bl_find_local_cf}}.
@@ -215,6 +221,7 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
     stringsAsFactors = FALSE
   )
   df$Contribute <- dplyr::case_when(
+    abs(df$shapley_cause) < 1e-8              ~ "No effect",
     df$pred_use == 0L & df$shapley_cause >= 0 ~ "Supports",
     df$pred_use == 0L & df$shapley_cause <  0 ~ "Contradicts",
     df$pred_use == 1L & df$shapley_cause >= 0 ~ "Contradicts",
@@ -249,7 +256,8 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 #' Returns a \pkg{ggplot2} bar chart showing each variable's Shapley
 #' contribution to the path from the observed point to the boundary.
 #' Variables are coloured by whether they \emph{support} or
-#' \emph{contradict} the prediction direction.
+#' \emph{contradict} the prediction direction, or have \emph{no effect}
+#' (dark blue, light grey and mid grey).
 #'
 #' @param x   A \code{"bl_shapley"} object from \code{\link{bl_shapley}}.
 #' @param ... Currently ignored.
@@ -289,12 +297,12 @@ plot.bl_shapley <- function(x, ...) {
     ggplot2::scale_fill_manual(
       name   = "Contribution",
       values = c("Supports" = "darkblue", "Contradicts" = "grey70",
-                 "Unknown"  = "lightgrey")
+                 "No effect" = "grey45", "Unknown"  = "lightgrey")
     ) +
     ggplot2::scale_color_manual(
       name   = "Contribution",
       values = c("Supports" = "darkblue", "Contradicts" = "grey70",
-                 "Unknown"  = "lightgrey")
+                 "No effect" = "grey45", "Unknown"  = "lightgrey")
     ) +
     ggplot2::geom_col() +
     ggplot2::theme_bw() +
@@ -317,6 +325,14 @@ plot.bl_shapley <- function(x, ...) {
 
 #' Print method for bl_shapley
 #'
+#' Prints the predictions at the observed point and the counterfactual, the sum
+#' of the Shapley values, then a table in the same layout as \code{print()} of
+#' a \code{bl_local_result}: one row per feature with the observed and
+#' counterfactual values, the change, the \code{\link{set_filters}} constraint,
+#' the Shapley value and its \code{Contribute} class. Feature values are in
+#' original (raw) units when a scaling was set via \code{\link{bl_set_scaling}},
+#' otherwise in model units; Shapley values are in prediction units.
+#'
 #' @param x A \code{"bl_shapley"} object.
 #' @param ... Currently ignored.
 #' @export
@@ -324,46 +340,55 @@ print.bl_shapley <- function(x, ...) {
   cat("-- bl_shapley --\n")
   rid <- if (is.na(x$row_id)) "external" else as.character(x$row_id)
   cat(sprintf("  Row ID         : %s\n",  rid))
-  cat(sprintf("  Pred prob      : %.4f\n", x$pred_prob))
-  cat(sprintf("  Pred class     : %d\n",   x$pred_class))
-  cat(sprintf("  Boundary pred  : %.4f\n", x$pred_boundary))
-  # Raw-unit conversion (display only): pred_data is a level, data_to_boundary
-  # is a delta. No-op when no scaling was recorded.
-  scaling <- x$bl_local_result$bl_result$scaling
-  unit_note <- if (!is.null(scaling)) " (raw units)" else ""
-  cat(sprintf("\n  Shapley table%s:\n", unit_note))
-  df_print <- x$shapley_df[, c("varnames", "pred_data", "data_to_boundary",
-                                "shapley_cause", "Contribute"),
-                            drop = FALSE]
-  vn <- as.character(df_print$varnames)
-  df_print$varnames         <- vn
-  df_print$pred_data        <- round(.scale_to_raw(df_print$pred_data,
-                                                   scaling, vn, "level"), 4L)
-  df_print$data_to_boundary <- round(.scale_to_raw(df_print$data_to_boundary,
-                                                   scaling, vn, "delta"), 4L)
-  df_print$shapley_cause    <- round(df_print$shapley_cause, 4L)
-  print(df_print, row.names = FALSE)
+  cat(sprintf("  Observed pred  : %.4f  (class %d)\n", x$pred_prob, x$pred_class))
+  cat(sprintf("  Full CF pred   : %.4f\n", x$pred_boundary))
+  cat(sprintf("  Shapley sum    : %.4f\n", sum(x$shapley_df$shapley_cause)))
+
+  df        <- x$shapley_df
+  bl_local  <- x$bl_local_result
+  var_names <- bl_local$bl_result$var_names
+  x_obs     <- as.numeric(unlist(bl_local$bl_target$x_obs[1L, var_names]))
+  B_x       <- as.numeric(unlist(bl_local$B_x[1L, var_names]))
+
+  cmp <- .cf_compare_table(x_obs, list(counterfactual = B_x), var_names,
+                           bl_local$bl_result$scaling,
+                           bl_local$set_filters$constraints)
+  idx <- match(var_names, as.character(df$varnames))
+  cmp$table$shapley    <- round(df$shapley_cause[idx], 4L)
+  cmp$table$contribute <- df$Contribute[idx]
+  cat(sprintf("\n  Observed vs counterfactual, with Shapley values (%s units):\n",
+              cmp$units))
+  print(cmp$table)
   invisible(x)
 }
 
 
 #' Create a sparse counterfactual by zeroing contradicting variables
 #'
-#' Builds a sparse version of the boundary counterfactual by retaining only
-#' the variables whose Shapley contribution \emph{supports} the prediction
-#' direction. Variables classified as \code{"Contradicts"} or \code{"Unknown"}
-#' revert to their observed values. Additionally, any variable constrained as
-#' \code{"fixed"} in \code{\link{set_filters}} always reverts to its observed
-#' value regardless of its Shapley classification, because the \code{"fixed"}
-#' constraint permits only a \eqn{\pm 0.5} search window and the observed value
-#' is the intended sparse target.
+#' Builds a sparse version of the counterfactual that changes as few variables
+#' as needed. Starting from the observed point, it changes the variables whose
+#' Shapley contribution \emph{supports} the prediction direction one at a time,
+#' largest absolute Shapley value first, and re-scores the model after each.
+#' It stops at the first point whose predicted class differs from the
+#' target's; the remaining variables stay at their observed values. Variables
+#' classified as \code{"Contradicts"}, \code{"No effect"} or \code{"Unknown"},
+#' and any variable constrained as \code{"fixed"} in \code{\link{set_filters}},
+#' are never changed. If no step crosses the boundary, every supporting
+#' variable has been changed and \code{solution_valid} is \code{FALSE}.
+#'
+#' The selection follows the Shapley order, so it is not guaranteed to be the
+#' smallest possible subset: a smaller set outside that order may also cross.
 #'
 #' @param bl_shapley_result A \code{"bl_shapley"} object from
 #'   \code{\link{bl_shapley}}.
 #' @param round_to Positive numeric or \code{NULL}. If not \code{NULL}, rounds
-#'   supporting variable values to the nearest multiple of this value (e.g.
+#'   each changed variable's value to the nearest multiple of this value (e.g.
 #'   \code{round_to = 0.5} rounds to the nearest 0.5; \code{round_to = 1}
-#'   rounds to the nearest integer). Default \code{NULL} (no rounding).
+#'   rounds to the nearest integer). Rounding acts on the stored model-unit
+#'   values, which are z-scores for a standardised model, and constraints are
+#'   not re-checked afterwards; see
+#'   \file{documentation/sparse-counterfactual.md}. Default \code{NULL} (no
+#'   rounding).
 #'
 #' @return A list of class \code{"bl_sparse_result"} with the following fields:
 #'   \describe{
@@ -373,7 +398,13 @@ print.bl_shapley <- function(x, ...) {
 #'     \item{solution_valid}{Logical; \code{TRUE} if the sparse CF flips the
 #'       predicted class.}
 #'     \item{shapley_df}{The annotated Shapley data frame with columns
-#'       \code{used_in_sparse} and \code{x_sparse_val}.}
+#'       \code{used_in_sparse} (\code{TRUE} when the sparse CF changes the
+#'       variable to its counterfactual value) and \code{x_sparse_val}.}
+#'     \item{sparse_path}{Data frame, one row per step: \code{step},
+#'       \code{variable} (the variable changed), \code{shapley} (its Shapley
+#'       value), \code{pred} (the model probability after the step) and
+#'       \code{crosses} (whether the predicted class has flipped). Zero rows
+#'       when no variable is a candidate.}
 #'     \item{bl_shapley}{The \code{"bl_shapley"} object passed in.}
 #'   }
 #'
@@ -394,55 +425,78 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   names(x_obs) <- var_names
   names(B_x)   <- var_names
 
-  # Build sparse CF: use CF value only for "Supports" variables;
-  # "Contradicts" and "Unknown" revert to observed value.
-  x_sparse <- x_obs
-  for (nm in var_names) {
-    row_nm <- df[as.character(df$varnames) == nm, , drop = FALSE]
-    if (nrow(row_nm) == 0L) next
-    if (row_nm$Contribute[1L] == "Supports") {
-      new_val <- B_x[[nm]]
-      if (!is.null(round_to)) new_val <- round(new_val / round_to) * round_to
-      x_sparse[[nm]] <- new_val
-    }
-  }
-
-  # "fixed"-constrained variables always revert to observed value in sparse CF,
-  # regardless of Shapley classification (set_filters stored in bl_local_result).
-  filters <- bl_local$set_filters
+  # "fixed"-constrained variables never change in the sparse CF, regardless
+  # of Shapley classification (set_filters stored in bl_local_result).
+  filters    <- bl_local$set_filters
+  fixed_vars <- character(0)
   if (!is.null(filters) && length(filters$constraints) > 0L) {
     for (nm in names(filters$constraints)) {
       v <- filters$constraints[[nm]]
-      if (is.character(v) && v == "fixed") {
-        x_sparse[[nm]] <- x_obs[[nm]]
-      }
+      if (is.character(v) && v == "fixed") fixed_vars <- c(fixed_vars, nm)
     }
+  }
+
+  # Candidates: "Supports" variables that are not fixed, largest |Shapley|
+  # first ("Contradicts", "No effect" and "Unknown" stay at observed).
+  vn_df  <- as.character(df$varnames)
+  is_sup <- df$Contribute == "Supports" & !(vn_df %in% fixed_vars)
+  sup    <- df[is_sup, , drop = FALSE]
+  sup    <- sup[order(abs(sup$shapley_cause), decreasing = TRUE), , drop = FALSE]
+
+  score <- function(x) {
+    x_df <- as.data.frame(t(x))
+    colnames(x_df) <- var_names
+    .pred_function(
+      model_use  = bl_result$model,
+      model_type = bl_result$model_type,
+      new_data   = x_df
+    )[[1L]]
+  }
+  pred_class_target <- bl_target$pred_class
+
+  # Greedy path: change one candidate at a time and re-score; stop at the
+  # first point whose predicted class differs from the target's.
+  x_sparse    <- x_obs
+  pred_sparse <- score(x_sparse)
+  path_rows   <- list()
+  for (k in seq_len(nrow(sup))) {
+    nm      <- as.character(sup$varnames[k])
+    new_val <- B_x[[nm]]
+    if (!is.null(round_to)) new_val <- round(new_val / round_to) * round_to
+    x_sparse[[nm]] <- new_val
+    pred_sparse    <- score(x_sparse)
+    crosses        <- as.integer(pred_sparse >= bl_result$cutoff) != pred_class_target
+    path_rows[[k]] <- data.frame(step = k, variable = nm,
+                                 shapley = sup$shapley_cause[k],
+                                 pred = pred_sparse, crosses = crosses,
+                                 stringsAsFactors = FALSE)
+    if (crosses) break
+  }
+  sparse_path <- if (length(path_rows) > 0L) {
+    do.call(rbind, path_rows)
+  } else {
+    data.frame(step = integer(0), variable = character(0), shapley = numeric(0),
+               pred = numeric(0), crosses = logical(0), stringsAsFactors = FALSE)
   }
 
   x_sparse_df <- as.data.frame(t(x_sparse))
   colnames(x_sparse_df) <- var_names
 
-  pred_sparse <- .pred_function(
-    model_use  = bl_result$model,
-    model_type = bl_result$model_type,
-    new_data   = x_sparse_df
-  )
-
-  pred_class_target <- bl_target$pred_class
-  pred_class_sparse <- as.integer(pred_sparse[[1L]] >= bl_result$cutoff)
+  pred_class_sparse <- as.integer(pred_sparse >= bl_result$cutoff)
   solution_valid    <- (pred_class_sparse != pred_class_target)
 
   # Annotate data frame
   df_out                <- df
-  df_out$used_in_sparse <- df_out$Contribute == "Supports"
-  df_out$x_sparse_val   <- x_sparse[as.character(df_out$varnames)]
+  df_out$used_in_sparse <- vn_df %in% sparse_path$variable
+  df_out$x_sparse_val   <- x_sparse[vn_df]
 
   structure(
     list(
       x_sparse       = x_sparse_df,
-      pred_sparse    = pred_sparse[[1L]],
+      pred_sparse    = pred_sparse,
       solution_valid = solution_valid,
       shapley_df     = df_out,
+      sparse_path    = sparse_path,
       bl_shapley     = bl_shapley_result
     ),
     class = "bl_sparse_result"
@@ -534,40 +588,54 @@ plot.bl_sparse_result <- function(x,
 
 #' Print method for bl_sparse_result
 #'
+#' Prints the predictions at the observed point, the full counterfactual and
+#' the sparse counterfactual, then a table in the same layout as
+#' \code{print()} of a \code{bl_local_result}: one row per feature with the
+#' observed, counterfactual and sparse values, the change the sparse
+#' counterfactual asks for (sparse minus observed), the
+#' \code{\link{set_filters}} constraint, and whether the sparse counterfactual
+#' uses the feature's counterfactual value. Values are in original (raw) units
+#' when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
+#' units. Last, it prints the path \code{\link{bl_find_sparse_cf}} took: the
+#' feature changed at each step, its Shapley value, the prediction after the
+#' step, and whether the predicted class has flipped.
+#'
 #' @param x A \code{"bl_sparse_result"} object.
 #' @param ... Currently ignored.
 #' @export
 print.bl_sparse_result <- function(x, ...) {
   cat("-- bl_sparse_result --\n")
   cat(sprintf("  Solution valid : %s\n", x$solution_valid))
-  cat("\n  Predictions:\n")
-  cat(sprintf("    Observed     : %.4f  (class %d)\n",
+  cat(sprintf("  Observed pred  : %.4f  (class %d)\n",
               x$bl_shapley$pred_prob, x$bl_shapley$pred_class))
-  cat(sprintf("    Full CF      : %.4f\n", x$bl_shapley$pred_boundary))
-  cat(sprintf("    Sparse CF    : %.4f\n", x$pred_sparse))
-  df <- x$shapley_df
+  cat(sprintf("  Full CF pred   : %.4f\n", x$bl_shapley$pred_boundary))
+  cat(sprintf("  Sparse CF pred : %.4f\n", x$pred_sparse))
+
+  df        <- x$shapley_df
   bl_local  <- x$bl_shapley$bl_local_result
-  bl_target <- bl_local$bl_target
   var_names <- bl_local$bl_result$var_names
+  x_obs     <- as.numeric(unlist(bl_local$bl_target$x_obs[1L, var_names]))
+  B_x       <- as.numeric(unlist(bl_local$B_x[1L, var_names]))
+  x_sparse  <- as.numeric(unlist(x$x_sparse[1L, var_names]))
 
-  # Raw-unit conversion (display only): x_obs / B_x / x_sparse are all levels.
-  scaling   <- bl_local$bl_result$scaling
-  unit_note <- if (!is.null(scaling)) " (raw units)" else ""
-  cat(sprintf("\n  Variable summary%s:\n", unit_note))
+  cmp <- .cf_compare_table(x_obs, list(counterfactual = B_x, sparse = x_sparse),
+                           var_names, bl_local$bl_result$scaling,
+                           bl_local$set_filters$constraints)
+  cmp$table$used <- df$used_in_sparse[match(var_names, as.character(df$varnames))]
+  cat(sprintf("\n  Observed vs sparse counterfactual (%s units):\n", cmp$units))
+  print(cmp$table)
+  cat("  (change = sparse - observed)\n")
 
-  x_obs_vec <- as.numeric(bl_target$x_obs[, var_names])
-  B_x_vec   <- as.numeric(bl_local$B_x[, var_names])
-  ord       <- match(as.character(df$varnames), var_names)
-  vn        <- as.character(df$varnames)
-
-  df_print <- data.frame(
-    variable      = vn,
-    x_obs         = round(.scale_to_raw(x_obs_vec[ord], scaling, vn, "level"), 4L),
-    B_x           = round(.scale_to_raw(B_x_vec[ord],   scaling, vn, "level"), 4L),
-    x_sparse      = round(.scale_to_raw(df$x_sparse_val, scaling, vn, "level"), 4L),
-    used_in_sparse = df$used_in_sparse,
-    stringsAsFactors = FALSE
-  )
-  print(df_print, row.names = FALSE)
+  path <- x$sparse_path
+  if (!is.null(path)) {
+    if (nrow(path) == 0L) {
+      cat("\n  Path: no \"Supports\" feature to change.\n")
+    } else {
+      cat("\n  Path (Supports features, largest Shapley value first):\n")
+      path$shapley <- round(path$shapley, 4L)
+      path$pred    <- round(path$pred, 4L)
+      print(path, row.names = FALSE)
+    }
+  }
   invisible(x)
 }

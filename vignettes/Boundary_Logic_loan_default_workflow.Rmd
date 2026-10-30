@@ -450,8 +450,9 @@ encodes the business constraints:
 
 -   **`"decrease"`** — counterfactual value must be ≤ observed.
 -   **`"increase"`** — counterfactual value must be ≥ observed.
--   **`"fixed"`** — not actionable; the search allows ±0.5 of observed and
-    the sparse counterfactual always reverts it.
+-   **`"fixed"`** — not actionable; the search allows ±0.5 of observed,
+    then restores the observed value when that point still crosses the
+    boundary, and the sparse counterfactual always reverts it.
 -   **`c(min, max)`** — counterfactual must lie within this absolute
     range.
 
@@ -514,8 +515,9 @@ plot(bl_local,
 
 `bl_shapley()` decomposes the path from the target to the counterfactual
 into per-variable contributions. Each variable is classified as
-**Supports** (helps cross the boundary) or **Contradicts** (works against
-it). Y-axis labels read `variable: observed_value -> required_change`.
+**Supports** (helps cross the boundary), **Contradicts** (works against
+it) or **No effect** (its change does not move the prediction). Y-axis
+labels read `variable: observed_value -> required_change`.
 
 ```{r step15-shapley}
 bl_shapley_values <- bl_shapley(bl_local)
@@ -527,10 +529,12 @@ plot(bl_shapley_values)
 
 ### Step 16 — Sparse counterfactual: `bl_find_sparse_cf()`
 
-`bl_find_sparse_cf()` reverts every **Contradicts** variable (and every
-`"fixed"` variable) to its observed value, so only the **Supports**
-variables change. `solution_valid = TRUE` confirms the sparse change
-still flips the prediction.
+`bl_find_sparse_cf()` keeps every **Contradicts** and **No effect**
+variable (and every `"fixed"` variable) at its observed value. It changes
+the **Supports** variables one at a time, largest Shapley value first, and
+stops as soon as the prediction crosses the boundary, so it changes only as
+many as it needs. `solution_valid = TRUE` confirms the sparse change still
+flips the prediction.
 
 ```{r step16-sparse}
 bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)

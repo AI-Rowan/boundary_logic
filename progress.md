@@ -16,14 +16,18 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **`main` was last merged and pushed on 2026-08-03.** `method_developments` is at `b7aee65`
   (pushed 2026-10-29). Merging `paper_nr1_changes` back, and the release tag the paper will pin,
   wait for the user's instruction after Gate 3.
+- **`paper_nr1_changes` state:** `f2a076b` (session 1) is committed but **not pushed**. All of
+  session 2's work (below) is **uncommitted** in the working tree. Commit only when the user
+  says so.
 - **`scripts/` is gitignored** — the user's personal scratch playground, never published. Task C
   will write `scripts/paper1-pima/` there (local only, by design).
 - **`.bl_rotate()` plane under-determination** — documented, deliberately not actioned.
   See `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §4.1 and §6
   (a proposal, not implemented), and CLAUDE.md §9. Do not "fix" without an explicit instruction.
 - **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
-- **Baseline test status: 176 PASS / 0 FAIL / 4 WARN** (the 4 WARN are pre-existing biplotEZ
-  CVA 2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-10-29).
+- **Baseline test status: 250 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are pre-existing
+  biplotEZ CVA 2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-10-29,
+  session 2).
 - **Verification:** run R as `.R` files via the PowerShell tool,
   `& "C:/Program Files/R/R-4.6.0/bin/Rscript.exe" <driver>.R`, with the driver calling
   `devtools::document(<pkg root>)` then `devtools::test(<pkg root>)`. The dev harness runs end to
@@ -33,83 +37,141 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
-## Session summary (2026-10-29, latest) — Paper 1: branch set-up, Tasks A and B, two follow-ups, documentation sweep
+## Session summary (2026-10-29, session 2, latest) — Walkthrough review completed; fixed restore, comparison tables, greedy sparse CF
 
-Goal: start the Paper 1 (JCGS) package work from `.claude/plans/boundary-logic-fix-prompt.md`
-on a new branch, through Gate 1, then clear every pre-existing and stale issue found on the way
-before Task C.
+Goal: the user's review of the three `development/reference/` walkthroughs. Each review comment
+was resolved in the harness, the walkthroughs and, where the method needed it, the package.
+**The review of `development/` is complete (user, 2026-10-29).**
 
 ### What was done
 
-1. **Commit, push, branch.** The 2026-09-10 documentation work was committed as `b7aee65` on
-   `method_developments` and pushed. `paper_nr1_changes` was created there and pushed. The fix
-   prompt moved from the repo root into `.claude/plans/` (it must not be published).
-2. **Task A — graphics device.** `.build_hull_polygon()` (`R/hull_utils.R`) and
-   `.bl_get_plot_bounds()` (`R/biplot_grid.R`) now close only their own temporary `png()` and
-   re-activate the caller's device. New `tests/testthat/test-graphics_device.R`.
-3. **Task B — target class.** `bl_select_target()` stores `class_obs`, read from the same row as
-   the features; `plot.bl_local_result()` colours the target from it, not from
-   `test_data[row_id]`. New `tests/testthat/test-local_cf.R`. Worked example bundle in
-   `documentation/select-target-class/`: on Pima, 36 of 79 compared rows had the wrong class
-   and 234 lost their confusion colour; the bug was confirmed on the unfixed code first.
-4. **Follow-up P1–P3.** `.make_label_line_vec()` / `.make_ticks_vec()` (`R/plot_biplot.R`) now
-   drop an unknown variable's value together with its name (values used to shift one axis
-   along) and warn on a length mismatch; new `tests/testthat/test-plot_helpers.R`. The harness's
-   reduced-model plot vectors were fixed (`person_age` was pruned). Stale line references in the
-   walkthroughs were replaced with code anchors.
-5. **Follow-up S1–S6, the stale-documentation sweep** (three audits found about 150 passages):
-   - `DESCRIPTION` imports `grDevices`, `graphics`, `stats`, `utils`.
-   - Roxygen corrected across `R/` (e.g. `bl_build_result(bl_model = NULL)` returns a
-     model-free `bl_result`; `dist_z` / `dist_mahalanobis` are the winning pair's; sparse cross is
-     green/yellow; XGB needs `xgb.train()`); `print`/`summary` of `bl_result` label the grid hull;
-     `plot.bl_boundary()` "25%%" printing bug fixed.
-   - `2 implementation_summary.txt`: all 31 findings (signatures, file tree, status, dependencies).
-   - Walkthroughs renumbered to the script's steps (`review_section4_to_6.md` 6.1–6.6;
-     `bl_select_target()` now in Step 10 of `review_section9_to_15.md`), every number and console
-     sample taken from a real harness run, written in present tense.
-   - README examples fixed (they errored: `rounding =`, `bl_filter_outliers()` after
-     `bl_prepare_data()`, a Pima example on iris objects); vignette prose, NEWS and CLAUDE.md §9
-     corrected; harness comments fixed.
-6. **CLAUDE.md** gained the branch (§10) and five working notes (walkthrough style, device
-   restore, running R and the harness, `bl_pick_point` data rows).
+1. **Parameters tables.** Every function the three walkthroughs introduce has a
+   `Parameter | Default | This call | Effect` table after its call. The table lists only the
+   arguments the script sets and the defaults that change the result. All 70 Default cells were
+   checked against `formals()`. The convention is in CLAUDE.md §2.
+2. **Harness, Phase 2.**
+   - Steps 8 and 8b (surrogates) now sit together after Step 7b, with a comment that nothing
+     downstream uses them.
+   - The pruning block prints the overall robustness score, labelled "not used here".
+   - A comment gives why `person_income` is dropped and `credit_score` kept.
+   - `review_section7_to_8.md` gained a "Variable pruning" section: `bl_robustness()` →
+     `feature_cols_v2` → refit → `bl_results_v2`.
+3. **Harness, Phase 3 (user edits).** The Step 10 constraints are now `loan_amnt = "fixed"`,
+   `loan_int_rate` / `credit_score` `"increase"`. Step 15 tick counts are `c(4, 10, 10, 10)`.
+   Step 15 prints `bl_sparse_free`. `round_to = NULL` was removed from the
+   `bl_find_sparse_cf()` calls.
+4. **Package: `"fixed"` restore** (`R/local_cf.R`).
+   - The search keeps the ±0.5 model-unit tolerance, now the constant `.fixed_tol`.
+   - After the search, `.restore_fixed()` sets each moved fixed feature back to its observed
+     value. It keeps that point when the point still crosses the boundary and is within
+     `train_ranges`.
+   - New field `bl_local$fixed_check`.
+   - Technical note `documentation/fixed-constraint-restore.md`.
+5. **Package: comparison tables.**
+   - `print(bl_local)` ends with an observed / counterfactual / change / constraint table, plus a
+     note explaining any moved fixed feature.
+   - `print(bl_shapley)` and `print(bl_sparse)` use the same layout.
+   - All three tables share one builder, `.cf_compare_table()`.
+6. **Package: sparse CF** (`R/shapley.R`).
+   - A Shapley value of 0 is now `"No effect"`. The PhD rule counted 0 as "Supports".
+   - `bl_find_sparse_cf()` is greedy: it changes the "Supports" features largest |Shapley| first,
+     re-scores the model after each, and stops at the first crossing. New field `sparse_path`,
+     printed.
+   - `used_in_sparse` is `FALSE` for fixed features (this closes that Gate 2 item).
+   - `round_to` is unchanged; its issues are recorded in `documentation/sparse-counterfactual.md`
+     §3.
+7. **Documents:**
+   - `2 implementation_summary.txt` §4.8–4.9; NEWS; `1 Foundation intro documents.txt`; README;
+     the loan vignette's prose;
+   - the three walkthroughs (every number from a harness run);
+   - plan archives in `.claude/reference/` (`fixed-constraint-restore-plan.md`,
+     `sparse-counterfactual-plan.md`);
+   - CLAUDE.md §2, §5, §6 and §9.
 
-### Key decisions
+### Modified files (all uncommitted)
 
-- Work on `paper_nr1_changes`, not `method_developments` (user's instruction; overrides the prompt).
-- `class_obs` prefers a `class` column, otherwise the first non-feature column (a refinement on
-  the prompt's rule, to avoid picking up an ID column).
-- Walkthroughs describe current code and methodology only; NEWS is the change log.
-- Code-behaviour bugs found during the sweep are **not** fixed yet; they go to Task C's Gate 2
-  issues table: `used_in_sparse` stays `TRUE` for a reverted "fixed" variable; the sparse-CF cross
-  ignores `rotate_deg`; `cutoff` is not passed to `bl_build_grid()`; `xgboost::xgboost()` models
-  fail in `.pred_function()`; no guard for an empty outcome group.
+- **Package:** `R/local_cf.R`, `R/shapley.R`, `tests/testthat/test-local_cf.R`, and
+  `man/` (`bl_find_local_cf`, `bl_find_sparse_cf`, `bl_shapley`, `plot.bl_shapley`,
+  `print.bl_local_result`, `print.bl_shapley`, `print.bl_sparse_result`, `set_filters`).
+- **Harness and walkthroughs:** `development/03_loan_status_Boundary_Logic.R`, and
+  `development/reference/review_section4_to_6.md`, `review_section7_to_8.md`,
+  `review_section9_to_15.md`.
+- **Documents:** `1 Foundation intro documents.txt`, `2 implementation_summary.txt`, `NEWS.md`,
+  `README.md`, `vignettes/Boundary_Logic_loan_default_workflow.Rmd`, `CLAUDE.md`, `progress.md`.
+- **New:** `documentation/fixed-constraint-restore.md`, `documentation/sparse-counterfactual.md`,
+  `.claude/reference/fixed-constraint-restore-plan.md`,
+  `.claude/reference/sparse-counterfactual-plan.md`.
+
+### Key decisions (all the user's)
+
+- **Parameters tables:** selective, in one four-column format.
+- **Pruning:**
+  - It reads the per-variable totals; the overall robustness score is printed but not used.
+  - `person_income` is dropped as redundant: `loan_percent_income` = `loan_amnt / person_income`
+    rounded to 2 d.p. in 44,992 of 45,000 rows.
+  - `credit_score` is kept as actionable.
+- **`"fixed"`:** the search tolerance stays at 0.5 model units, then the post-search restore.
+  `dist_*` and the per-pair tables stay the search's (they describe the pair choice).
+- **"No effect":** `abs(shapley) < 1e-8`, a departure from the PhD `>= 0` rule.
+- **Greedy sparse CF:** it re-scores the model rather than summing Shapley values (a Shapley value
+  is an average over coalitions). It is not guaranteed minimal.
+- **`round_to`:** unchanged (model units, nearest). Investigation is deferred (CLAUDE.md §9).
+- **Tables:** rows follow `var_names`. `print(bl_shapley)` wraps its `contribute` column at an
+  80-column console; this is cosmetic and left as is.
 
 ### Test status
 
-176 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0; every README chunk runs; the harness runs
-clean in about 1 minute. All of this is committed on `paper_nr1_changes` (not pushed).
+- 250 PASS / 0 FAIL / 4 WARN / 0 SKIP, up from 176 (48 + 26 new expectations in
+  `test-local_cf.R`).
+- `R CMD check`: 0 / 0 / 0.
+- The harness runs clean (about 1 minute). Target 13:
+  - the restored counterfactual keeps `loan_amnt` at 12,000 and predicts 0.547;
+  - the sparse path is `loan_int_rate` (0.360), then `loan_percent_income` (0.547, crosses);
+  - Step 15 (no constraints) gives 0.5554 / 0.542.
 
 ### Open points / blockers
 
-- **The user is reviewing the three `development/reference/review_section*.md` walkthroughs.**
-  Task C does not start until they approve.
-- The README's Pima constraint example finds no counterfactual for its first predicted-diabetic
-  patient (`solution_found = FALSE`, no error). Ask whether to change the target or constraints.
-- The harness plot title still says "Loan default (prior defaulters)"; the data are applicants
-  with no prior default. Left as is (a code string); ask.
+- **No blockers.**
+- **Gate 2 issues table (Task C) still holds four code issues:**
+  - the sparse-CF cross ignores `rotate_deg`;
+  - `cutoff` is not passed to `bl_build_grid()`;
+  - `xgboost::xgboost()` models fail in `.pred_function()`;
+  - no guard for an empty outcome group.
+- **Parked by the user (2026-10-29), not to be raised again unless the user brings them up.** They
+  go into Task D's known-issues note:
+  - The README's Pima constraint example finds no counterfactual for its first predicted-diabetic
+    patient (`solution_found = FALSE`, no error).
+  - The harness plot title still says "Loan default (prior defaulters)"; the data are applicants
+    with no prior default.
 - 32 pre-existing non-ASCII characters remain in `R/` comments (allowed by `R CMD check`, but
   against CLAUDE.md §4).
+- The pkgdown site (`docs/`) has not been rebuilt for this session's man-page and vignette
+  changes. Rebuild before a release (CLAUDE.md §5).
 
 ### Exact next step
 
-Wait for the user's review of the walkthroughs. Then, on the user's "approved", start **Task C**
-(the Pima example in `scripts/paper1-pima/`) from the plan file, ending at Gate 2.
+Start **Task C**: the Pima example in `scripts/paper1-pima/` (gitignored, local only).
+1. Read `.claude/plans/commit-and-push-the-mutable-hearth.md` (Task C section) and
+   `.claude/plans/boundary-logic-fix-prompt.md`.
+2. Plan in `.claude/plans/` and wait for approval.
+3. Build the example, ending at Gate 2 with the issues table above.
+
+Before starting, ask the user whether to commit session 2's work first (nothing is committed or
+pushed without an explicit instruction).
 
 ---
 
 ## History (one line per session, newest first)
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
+
+- **2026-10-29 (session 1)** — Paper 1 set-up:
+  - created `paper_nr1_changes` (from `b7aee65`);
+  - Task A (graphics-device restore) and Task B (`bl_select_target()` stores `class_obs`; Pima
+    worked example in `documentation/select-target-class/`);
+  - follow-ups P1–P3 (axis offset/tick pairing) and S1–S6 (stale-documentation sweep, about 150
+    passages, walkthroughs renumbered to the script's steps);
+  - Gate 1 reached. Committed as `f2a076b` (not pushed). 176 PASS / 0 FAIL / 4 WARN.
 
 - **2026-09-10** — integrated the `documentation/biplot-rotation/` note-and-script bundle (copied
   from the `Explain XAI code` project), checked that the deleted rotation-plane note's content was

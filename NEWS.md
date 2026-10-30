@@ -65,9 +65,38 @@
 * `bl_find_boundary()`'s out-of-range message reworded to clarify that
   identified counterfactuals outside the training feature ranges are
   *retained*, not discarded.
+* `bl_find_local_cf()` now restores `"fixed"` features after the search. The
+  search still lets a fixed feature move by up to 0.5 model units, because a
+  point on the 2D boundary rarely holds a feature at exactly its observed
+  value. Each fixed feature the search moved is then set back to its observed
+  value; if that point still crosses the boundary (and lies within
+  `train_ranges`), it becomes the counterfactual. A new `fixed_check` field
+  records the outcome and the search's own point. Results without a moved
+  fixed feature are unchanged. See `documentation/fixed-constraint-restore.md`.
+* `print()` of a `bl_local_result` now ends with an observed / counterfactual /
+  change / constraint table (raw units when a scaling is set), plus a note
+  explaining any `"fixed"` feature the search moved. `print()` of a
+  `bl_sparse_result` uses the same table layout, with `sparse` and `used`
+  columns.
+* `bl_shapley()` adds a `"No effect"` class for a Shapley value of 0 (the
+  feature's change never moves the prediction). Such a feature was previously
+  labelled `"Supports"` and changed in the sparse counterfactual.
+  `print()` of a `bl_shapley` uses the same comparison-table layout, with
+  `shapley` and `contribute` columns and the Shapley sum.
+* `bl_find_sparse_cf()` now selects features greedily: it changes the
+  `"Supports"` features one at a time, largest Shapley value first, re-scores
+  the model after each, and stops once the boundary is crossed. Features not
+  needed stay at their observed values. The new field `sparse_path` records
+  each step, and `print()` shows it. Previously every `"Supports"` feature
+  was changed. See `documentation/sparse-counterfactual.md`, which also
+  records open questions about `round_to`.
 
 ## Bug fixes and other improvements
 
+* `bl_find_sparse_cf()`: `used_in_sparse` is now `FALSE` for a `"fixed"`
+  feature, which the sparse counterfactual always reverts. It previously
+  followed the Shapley classification alone and could read `TRUE` for a
+  feature the sparse counterfactual did not change.
 * `bl_prepare_data()`, `bl_filter_outliers()`, `bl_build_grid()` and
   `bl_build_result()` no longer change the active graphics device when more
   than one device is open. The internal helpers `.build_hull_polygon()` and
