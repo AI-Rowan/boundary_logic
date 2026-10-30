@@ -1070,9 +1070,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #'   must match the length of \code{label_offset_var} and pairs with it
 #'   position by position. A name not in the model is dropped, with a warning,
 #'   together with its value. Useful range 1--3. Default \code{1.5}.
-#' @param rotate_deg      Numeric; additional clockwise rotation in degrees
-#'   applied on top of the SVD-derived local rotation. Default \code{0}.
-#' @param show_arrows     Logical; if \code{TRUE} (default) an arrow is drawn
+#' @param show_arrows    Logical; if \code{TRUE} (default) an arrow is drawn
 #'   from the target to its counterfactual.
 #' @param arrow_col       Character; colour for the CF cross and arrow. Default
 #'   \code{"grey30"}.
@@ -1088,7 +1086,11 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param new_title       Character; overrides the auto-generated local biplot
 #'   title (\code{"Local biplot -- target N [pair ...]"}). \code{NA} (default)
 #'   keeps the auto-generated title.
-#' @param ...             Additional arguments (currently ignored).
+#' @param ...             Additional arguments (currently ignored). There is no
+#'   \code{rotate_deg}: the local biplot's orientation is fixed by the optimal
+#'   rotation (\code{.bl_rotate()}), so passing \code{rotate_deg} is an error.
+#'   \code{rotate_deg} is only for viewing the global biplot
+#'   (\code{\link{plot_biplotEZ}}, \code{\link{plot.bl_surrogate}}).
 #'
 #' @importFrom graphics points lines arrows text
 #' @importFrom grDevices dev.cur dev.new
@@ -1109,7 +1111,6 @@ plot.bl_local_result <- function(x,
                                  X_names           = NULL,
                                  label_offset_var  = 0L,
                                  label_offset_dist = 1.5,
-                                 rotate_deg        = 0,
                                  show_arrows       = TRUE,
                                  arrow_col         = "grey30",
                                  contour_col       = "black",
@@ -1118,6 +1119,14 @@ plot.bl_local_result <- function(x,
                                  print_summary     = TRUE,
                                  new_title         = NA,
                                  ...) {
+  # rotate_deg is for viewing the global biplot only. Without this check it
+  # would fall into ... and be silently ignored.
+  if ("rotate_deg" %in% ...names())
+    stop("'rotate_deg' is not available for the local biplot: its orientation ",
+         "is fixed by the optimal rotation (.bl_rotate()). Use rotate_deg only ",
+         "to view the global biplot (plot_biplotEZ(), plot(<bl_surrogate>)).",
+         call. = FALSE)
+
   if (!x$solution_found) {
     message("No solution found -- nothing to plot.")
     return(invisible(x))
@@ -1212,27 +1221,13 @@ plot.bl_local_result <- function(x,
   )
   if (!is.na(new_title)) biplot_plot$Title <- new_title
 
-  # ---- Optional additional rotation ------------------------------------
-  rot         <- .apply_biplot_rotation(biplot_plot, rotate_deg, proj_dims)
-  biplot_plot <- rot$biplot_obj
-  R_mat       <- rot$R_mat
-  if (!is.null(R_mat)) {
-    Z_train_rot <- Z_train_rot %*% R_mat
-    Z_target    <- Z_target    %*% R_mat
-    B_z         <- B_z         %*% R_mat
-    x_grid      <- x$Zgrid     %*% R_mat
-    ct_local    <- lapply(x$ct_local, function(cl) {
-      pts  <- cbind(cl$x, cl$y) %*% R_mat
-      cl$x <- pts[, 1L]; cl$y <- pts[, 2L]; cl
-    })
-  } else {
-    x_grid   <- x$Zgrid
-    ct_local <- x$ct_local
-  }
+  x_grid   <- x$Zgrid
+  ct_local <- x$ct_local
 
   # ---- Optional raw-unit axis relabel (display only) -------------------
-  # means/sd are unaffected by the rotation above, so the affine relabel is
-  # applied to the rotated object directly. No-op when scaling is NULL.
+  # means/sd are unaffected by the local rotation above, so the affine
+  # relabel is applied to the rotated object directly. No-op when scaling is
+  # NULL.
   biplot_plot <- .bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)
 
   # ---- Step 1: biplotEZ base plot (axes canvas) ------------------------

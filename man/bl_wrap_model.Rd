@@ -50,10 +50,14 @@ object is a \code{"bl_model"} compatible with \code{bl_build_grid()} and
 }
 \note{
 For \code{"XGB"} models, \code{model} must be a list of the form
-\verb{list(model = <xgb.Booster>, features = <character vector>)}, where the
-booster is fitted externally with \code{xgboost::xgb.train()}. Models from
-\code{xgboost::xgboost()} (class \code{"xgboost"}) are not supported. XGB is not
-available through \code{bl_fit_model()}.
+\verb{list(model = <booster>, features = <character vector>)}. The booster
+can come from \code{xgboost::xgb.train()} (class \code{"xgb.Booster"}) or from
+\code{xgboost::xgboost()} (class \code{"xgboost"}). An \code{xgboost()} model must be
+fitted with a factor response on levels \code{"0"}/\code{"1"}, e.g.
+\code{y = factor(train_data$class)}, so that it is a \code{binary:logistic}
+classifier; with a numeric 0/1 response \code{xgboost()} fits a regression,
+and \code{bl_wrap_model()} stops. XGB is not available through
+\code{bl_fit_model()}.
 }
 \section{Supported model types}{
 

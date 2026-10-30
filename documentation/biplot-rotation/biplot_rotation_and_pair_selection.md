@@ -577,10 +577,12 @@ guarantee — are lost after rotation. This cost has no analogue in PCA-based ro
   per-feature attribution but costs $O(n\cdot 2^p)$ and is deliberately not implemented at that
   scale (it *is* implemented, tractably, for single-observation Phase 3 explanations via
   `bl_shapley()`, at $O(2^p)$).
-- `rotate_deg` (an argument on the local-biplot plotting function) is a purely **cosmetic**
-  post-hoc 2D rotation applied on top of the already-SVD-rotated plane, for display convenience
-  only. It has nothing to do with the Procrustes mechanism described here and should not be
-  confused with it.
+- `rotate_deg` is a purely **cosmetic** post-hoc 2D rotation of the *global* biplot
+  (`plot_biplotEZ()`, `plot.bl_surrogate()`), for display convenience only. It has nothing to do
+  with the Procrustes mechanism described here and should not be confused with it. The local
+  biplot plotting functions (`plot.bl_local_result()`, `plot.bl_sparse_result()`) have no
+  `rotate_deg` and stop if one is passed: whenever `.bl_rotate()` is used, the plane it produces
+  is shown as is, never turned further.
 
 ---
 

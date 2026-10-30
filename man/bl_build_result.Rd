@@ -82,6 +82,9 @@ without a prediction surface or decision boundary.
 other source is not supported here -- use \code{\link[=bl_build_projection]{bl_build_projection()}} directly
 if a non-standard data source is needed.
 
+The grid's decision boundary contours are extracted around
+\code{bl_model$cutoff}, the same threshold every downstream function uses.
+
 For advanced control over any individual step use \code{\link[=bl_build_projection]{bl_build_projection()}},
 \code{\link[=bl_build_grid]{bl_build_grid()}}, and \code{\link[=bl_assemble]{bl_assemble()}} directly.
 }

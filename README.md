@@ -227,12 +227,13 @@ and also accepted by `bl_wrap_model()` as externally fitted models:
 | `"GAM"` | Generalised additive model | an `mgcv::gam()` fit |
 | `"GBM"` | Gradient boosting | a `gbm::gbm()` fit |
 | `"LDA"` | Linear discriminant analysis | a `MASS::lda()` fit |
-| `"XGB"` | XGBoost | `list(model = <xgb.Booster from xgboost::xgb.train()>, features = <feature names>)` |
+| `"XGB"` | XGBoost | `list(model = <booster from xgboost::xgb.train() or xgboost::xgboost()>, features = <feature names>)` |
 | `"custom"` | Any model | the model plus a `predict_fn(model, new_data)` returning probabilities |
 
 The older spelling `"RForrest"` is still accepted, with a deprecation warning.
-Models from `xgboost::xgboost()` are not supported by the `"XGB"` type; fit with
-`xgboost::xgb.train()`, or use `"custom"` with your own `predict_fn`.
+An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
+`y = factor(class)`; with a numeric response `xgboost()` fits a regression, and
+`bl_wrap_model()` stops.
 
 ---
 

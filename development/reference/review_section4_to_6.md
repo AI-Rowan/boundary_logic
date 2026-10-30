@@ -325,7 +325,7 @@ Full argument list: `?bl_wrap_model`.
 >   train_data = bl_dat$train_data
 > )
 > ```
-> The `custom` + `predict_fn` approach is shown here because it makes the prediction contract explicit and generalises to any model type not natively supported. The script's reduced-model refit (Steps 4b–6b) uses this direct `"XGB"` path. The booster must come from `xgboost::xgb.train()`; models from `xgboost::xgboost()` are not supported by the XGB branch.
+> The `custom` + `predict_fn` approach is shown here because it makes the prediction contract explicit and generalises to any model type not natively supported. The script's reduced-model refit (Steps 4b–6b) uses this direct `"XGB"` path. The booster can come from `xgboost::xgb.train()` (scored through an `xgb.DMatrix`, as here) or from `xgboost::xgboost()` (scored from the data frame). An `xgboost()` model must be fitted with a factor 0/1 response, e.g. `y = factor(class)`; with a numeric response `xgboost()` fits a regression, and `bl_wrap_model()` stops.
 
 The script's Step 5b comments also document two ways to substitute a previously-saved booster instead of fitting `xgb_fit` fresh: **Option A** loads an XGBoost binary file via `xgboost::xgb.load()` (saved earlier with `xgboost::xgb.save()`), and **Option B** loads an R object via `readRDS()` (saved earlier with `saveRDS()`). Either option's result can replace the demo `xgb.train()` call; the rest of the `bl_wrap_model()` call (`predict_fn`, `var_names`, `train_data`) is unchanged.
 
@@ -371,7 +371,7 @@ bl_results <- bl_build_result(
 | `outlie` | `1` | default | Fraction of training points inside the grid hull; `1` encloses all of them |
 | `calc_hull` | `TRUE` | default | Trims the stored grid to the hull (6.2, item 10); visual only |
 
-`bl_build_result()` has no `cutoff` argument. The grid draws its contours around `bl_build_grid()`'s default cutoff, `0.5`, while `bl_results$cutoff` is copied from `bl_mod$cutoff`. The two agree here because `bl_mod` uses `0.5`.
+`bl_build_result()` has no `cutoff` argument: the threshold comes from the model. `bl_build_grid()` defaults to `cutoff = bl_model$cutoff`, so the grid's contours sit at `bl_mod$cutoff` (`0.5` here), the same value copied to `bl_results$cutoff`; `bl_assemble()` stops if the two ever differ.
 
 Full argument list: `?bl_build_result`.
 
@@ -391,6 +391,7 @@ This is the **Phase 1 anchor function**. It orchestrates three sub-steps and ret
 4. **Computes confusion labels** (because CVA needs class groupings):
    - Calls `.pred_function()` on training data with `bl_mod`
    - Labels each row: TP / TN / FP / FN as a 4-level factor
+   - If a group is empty (for example, no false positives on the training data), a message names it and the empty level is dropped, so CVA and `W` use only the groups that have rows. All four groups are non-empty here, so no message is printed.
 5. Builds the **biplotEZ object**:
    ```r
    biplotEZ::biplot(X, scaled = FALSE, Title = title) |>
@@ -460,7 +461,7 @@ This is the **Phase 1 anchor function**. It orchestrates three sub-steps and ret
 10. **Trims the stored grid to the hull** (`calc_hull = TRUE`): `Zgrid`, `Xgrid`, `grid_prob` and `col_value` keep only the points inside the hull, so the prediction surface is drawn in the region the training data covers. The contours above are extracted before this trim.
 
 **`bl_grid` fields (not returned to user directly, assembled into `bl_results`):**
-`Zgrid`, `Xgrid`, `grid_prob`, `col_value`, `min_val`, `max_val`, `polygon`, `hull_fraction`, `ct`, `ct_surrogate`, `xseq`, `yseq`, `b_margin`
+`Zgrid`, `Xgrid`, `grid_prob`, `col_value`, `min_val`, `max_val`, `polygon`, `hull_fraction`, `ct`, `ct_surrogate`, `xseq`, `yseq`, `b_margin`, `cutoff` (the threshold the contours were extracted around, `0.5` here)
 
 ---
 
@@ -532,7 +533,7 @@ plot(
 | `label_offset_dist` | `1.5` | `0.5` | Outward distance, in margin lines, for each listed variable; no effect here, as no variable is listed |
 | `ticks_v` | `1L` | default | Tick marks on each axis not listed in `ticks_var` |
 | `ticks_var`, `ticks_n` | `0L`, `5L` | default | Axes with their own tick count, and those counts; `0L` overrides none |
-| `rotate_deg` | `0` | default | Rotates the whole plot clockwise; grid, points, contours and axes turn together |
+| `rotate_deg` | `0` | default | Rotates the whole plot clockwise; grid, points, contours and axes turn together. For viewing this global biplot only; the local biplot (`plot(bl_local)`, `plot(bl_sparse)`, Steps 12 and 14 of `review_section9_to_15.md`) has no `rotate_deg` |
 | `new_title` | `NA` | default | Replaces the title stored by `bl_build_result()` |
 
 Full argument list: `?plot_biplotEZ`.

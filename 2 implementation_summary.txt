@@ -145,7 +145,7 @@ In the standard workflow, `bl_filter_outliers()` is called internally by `bl_pre
 | `bl_fit_model()` | `(train_data, var_names, model_type="GLM", cutoff=0.5, model_params=list())` | `bl_model` |
 | `bl_wrap_model()` | `(model, model_type, var_names, predict_fn=NULL, train_data=NULL, cutoff=0.5)` | `bl_model` |
 
-`bl_fit_model()` supports four parsnip/tidymodels types: GLM, SVM, NNET, RForest (the old spelling `"RForrest"` is still accepted with a deprecation warning). All are returned as `workflows::workflow` objects. `bl_wrap_model()` accepts any externally fitted model: GAM (mgcv), GBM (gbm), LDA (MASS), XGB (an `xgb.Booster` from `xgboost::xgb.train()`, wrapped as `list(model, features)`), or any user-defined classifier via `predict_fn`. Use `bl_wrap_model()` for types requiring custom training code, non-default hyperparameters, or not natively supported by `bl_fit_model()`. Both functions store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
+`bl_fit_model()` supports four parsnip/tidymodels types: GLM, SVM, NNET, RForest (the old spelling `"RForrest"` is still accepted with a deprecation warning). All are returned as `workflows::workflow` objects. `bl_wrap_model()` accepts any externally fitted model: GAM (mgcv), GBM (gbm), LDA (MASS), XGB (an `xgb.Booster` from `xgboost::xgb.train()`, or an `xgboost::xgboost()` model fitted on a factor 0/1 response, wrapped as `list(model, features)`; `bl_wrap_model()` stops if an `xgboost()` model is not `binary:logistic` on levels 0/1, since with a numeric response `xgboost()` fits a regression), or any user-defined classifier via `predict_fn`. Use `bl_wrap_model()` for types requiring custom training code, non-default hyperparameters, or not natively supported by `bl_fit_model()`. Both functions store `model_type`, `cutoff`, and `var_names` for consistent downstream use.
 
 **LDA and multi-class prediction (not yet implemented):** Linear Discriminant Analysis naturally extends to k > 2 classes -- its discriminant functions produce one axis per class boundary. The current package is restricted to binary 0/1 outcomes. A future enhancement could expose LDA via `bl_wrap_model()` or a dedicated `bl_fit_lda()` to support multi-class biplots where each class pair yields a separate boundary. See CLAUDE.md Section 9.
 
@@ -204,15 +204,16 @@ The helper that performs this computation is the private `.compute_metric_invers
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_build_grid()` | `(train_data, bl_projection, bl_model, m=200L, cutoff=0.5, b_margin=0.001, polygon=NULL, outlie=1, calc_hull=TRUE)` | `bl_grid` |
+| `bl_build_grid()` | `(train_data, bl_projection, bl_model, m=200L, cutoff=bl_model$cutoff, b_margin=0.001, polygon=NULL, outlie=1, calc_hull=TRUE)` | `bl_grid` |
 
-Builds an `m × m` regular grid over the Z-space, back-projects each grid point to X-space using `tV`, scores it through the model, and extracts contour lines at `cutoff ± b_margin` using `grDevices::contourLines`. Scores in chunks of 50,000 for memory safety. Stores:
+Builds an `m × m` regular grid over the Z-space, back-projects each grid point to X-space using `tV`, scores it through the model, and extracts contour lines at `cutoff ± b_margin` using `grDevices::contourLines`. `cutoff` defaults to `bl_model$cutoff` (0.5 unless the model was built with another value), so the grid's contours sit at the same threshold that `bl_find_boundary()`, `bl_surrogate()` and `bl_find_local_cf()` read from `bl_result$cutoff`. Scores in chunks of 50,000 for memory safety. Stores:
 
 - `ct` — full contour list (for plotting and global CF search)
 - `ct_surrogate` — hull-clipped contours (for surrogate model only)
 - `col_value` — per-grid-point colour vector (blue→white→red by probability)
 - `polygon` — the Z-space convex hull as a `SpatialPolygons` object
 - `hull_fraction` — the `outlie` value used
+- `cutoff` — the decision threshold the contours were extracted around
 
 Only the `calc_hull` trimming of the prediction surface is visual: with `calc_hull = TRUE` (the default) the stored `Zgrid`, `Xgrid`, `grid_prob` and `col_value` keep just the grid points inside the hull. The polygon itself is not visual-only: `bl_find_boundary()` clips contours to it, and `bl_surrogate()` uses it. The `bl_surrogate()` function reads `ct_surrogate` directly; user code never needs to distinguish the two.
 
@@ -229,7 +230,7 @@ Only the `calc_hull` trimming of the prediction surface is visual: with `calc_hu
 
 The central Phase 1 anchor object. Consolidates all metadata into a single reproducible object: training/test data, model, projection matrices (`V`, `tV`), centring/scaling (`X_center`, `X_sd`), grid and contours, polygon, `train_ranges`, `var_names`, `proj_dims`, `cutoff`, `b_margin`, and (when set via `bl_set_scaling()`) the display-only `scaling` list. The `biplot_obj` from `bl_projection` is carried forward for plotting.
 
-`bl_assemble()` accepts either a `bl_filter_result` (from `bl_prepare_data()` / `bl_filter_outliers()`) or a `bl_data` (from `bl_wrap_data()`) as `bl_data`; there is no separate filter argument.
+`bl_assemble()` accepts either a `bl_filter_result` (from `bl_prepare_data()` / `bl_filter_outliers()`) or a `bl_data` (from `bl_wrap_data()`) as `bl_data`; there is no separate filter argument. It stops if `bl_grid$cutoff` differs from `bl_model$cutoff`, so the grid's contours and every downstream function use one threshold; a `bl_grid` built before the `cutoff` field existed has none and skips the check.
 
 **`bl_build_result()` without a model:** When `bl_model = NULL`, the grid step is skipped and `bl_assemble()` returns a model-free `bl_result` (no grid or contours; `model`, `cutoff` and `biplot_grid` are `NULL`). `plot_biplotEZ()` then colours the points by true class. This allows projection-only exploration before a model is fitted.
 
@@ -251,7 +252,7 @@ Seven-step rendering pipeline using biplotEZ:
 
 `plot_biplotEZ()` draws no boundary arrows. Observation-to-counterfactual arrows are drawn per click by `bl_pick_point(bl_result, data = ..., bl_boundary = bl_bnd)` (§4.10).
 
-The `rotate_deg` parameter patches the biplotEZ object's `Z`, `Lmat`, and `ax.one.unit` fields to rotate all rendered elements without rerunning the projection pipeline. The optional `grid_col` parameter overrides the blue-white-red gradient with a hard binary two-colour scheme.
+The `rotate_deg` parameter patches the biplotEZ object's `Z`, `Lmat`, and `ax.one.unit` fields to rotate all rendered elements without rerunning the projection pipeline. **`rotate_deg` is only for viewing the global biplot** (`plot_biplotEZ()`, `plot.bl_surrogate()`). Whenever the rotation function `.bl_rotate()` is used -- the local biplot for an individual target, `plot.bl_local_result()` and `plot.bl_sparse_result()` -- the plot is not turned further: `rotate_deg` is in effect always 0 there. Those two functions have no `rotate_deg` argument and stop if one is passed, because the local biplot's orientation is fixed by the optimal rotation, which is part of the method. `rotate_deg` is never used to plot a rotated individual point. The optional `grid_col` parameter overrides the blue-white-red gradient with a hard binary two-colour scheme.
 
 #### 4.4.1 Raw-unit axis relabel (`.bl_rescale_biplot_axes()`)
 
@@ -422,7 +423,7 @@ biplot_plot$Lmat[, proj_dims] <- Vr_rot         # rotated loading matrix
 biplot_plot$ax.one.unit       <- (1 / diag(t(tVr_rot) %*% tVr_rot)) * t(tVr_rot)
 ```
 
-This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_biplotEZ()`. The target point is coloured by the confusion scheme (TP/TN/FP/FN) from `bl_target$class_obs` against `bl_target$pred_class`; when `class_obs` is `NA` (no class column) it is red (predicted 1) or blue (predicted 0). Parameters shared with `plot_biplotEZ()`: `no_grid`, `plot_points` (default `FALSE` here, `TRUE` there), `no_contour`, `cex_z`, `label_dir`, `label_cex`, `tick_label_cex`, `ticks_v`/`ticks_var`/`ticks_n`, `which`, `X_names`, `label_offset_var`/`label_offset_dist`, `rotate_deg` (applied on top of the SVD rotation), `contour_col`/`contour_lwd`/`contour_lty`, `new_title`. Local-only: `show_arrows`, `arrow_col`, `print_summary`. `plot_biplotEZ()`-only: `points`, `target_point`, `target_label`, `confusion_cols`, `grid_col`.
+This formula for `ax.one.unit` is identical to the `rotate_deg` path in `plot_biplotEZ()`. The target point is coloured by the confusion scheme (TP/TN/FP/FN) from `bl_target$class_obs` against `bl_target$pred_class`; when `class_obs` is `NA` (no class column) it is red (predicted 1) or blue (predicted 0). Parameters shared with `plot_biplotEZ()`: `no_grid`, `plot_points` (default `FALSE` here, `TRUE` there), `no_contour`, `cex_z`, `label_dir`, `label_cex`, `tick_label_cex`, `ticks_v`/`ticks_var`/`ticks_n`, `which`, `X_names`, `label_offset_var`/`label_offset_dist`, `contour_col`/`contour_lwd`/`contour_lty`, `new_title`. Local-only: `show_arrows`, `arrow_col`, `print_summary`. `plot_biplotEZ()`-only: `points`, `target_point`, `target_label`, `confusion_cols`, `grid_col`, `rotate_deg`. **`plot.bl_local_result()` has no `rotate_deg`:** the local biplot keeps the orientation set by the optimal rotation `.bl_rotate()`, and passing `rotate_deg` stops with an error before any device opens (without the check it would fall into `...` and be silently ignored). `plot.bl_sparse_result()` forwards `...` to it and so refuses `rotate_deg` the same way; its sparse-CF cross is projected with `Vr_rot`, the same frame as the rest of the local plot. `rotate_deg` is only for viewing the global biplot (§4.4).
 
 ---
 
@@ -509,7 +510,7 @@ Input validation functions used by all exported functions: `stop_if_not_data_fra
 `.fit_model()` dispatches to the appropriate parsnip/tidymodels fitting backend by `model_type`: GLM, SVM (kernlab), NNET, RForest (rpart). All return a fitted `workflows::workflow`. Types not supported here (GBM, GAM, LDA, XGB) must be fitted externally and registered via `bl_wrap_model()`.
 
 ### `R/predict_utils.R`
-`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict(type = "prob")` for `bl_fit_model()` workflows; the raw-model paths for `bl_wrap_model()` objects (GLM/GAM `predict(type = "response")`, GBM `predict.gbm()`, LDA posterior, `e1071` SVM probability extraction, NNET, RForest, XGB via `xgb.DMatrix`); or a user-supplied `predict_fn`. Returns a numeric probability vector, floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. It does not clamp; only `bl_build_grid()` clamps grid probabilities to [0, 1]. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.
+`.pred_function()` is the single unified prediction interface used by all boundary, surrogate, and Shapley functions. Dispatches to: tidymodels `predict(type = "prob")` for `bl_fit_model()` workflows; the raw-model paths for `bl_wrap_model()` objects (GLM/GAM `predict(type = "response")`, GBM `predict.gbm()`, LDA posterior, `e1071` SVM probability extraction, NNET, RForest, XGB via `xgb.DMatrix` for an `xgb.train()` booster or via the data frame for an `xgboost()` model, whose predict method refuses an `xgb.DMatrix`); or a user-supplied `predict_fn`. Returns a numeric probability vector, floor-rounded to 3 decimal places: `floor(x * 1000) / 1000`. It does not clamp; only `bl_build_grid()` clamps grid probabilities to [0, 1]. The `b_margin` parameter stored in `bl_result` controls the contour band half-width and is independent of the prediction precision applied here.
 
 ---
 
@@ -529,7 +530,7 @@ biplotEZ computes the PCA/CVA loading matrix (`V = bp$Lmat` from `biplotEZ::PCA(
 
 ### 6.3 CVA with two classes (Architecture Q9)
 
-CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. With a `bl_model`, CVA uses the four prediction-outcome groups (TP/TN/FP/FN) by default, as in the loan example in the vignette and the development harness. Two-group CVA arises only with `cva_classes = as.factor(class)` or a model-free `bl_build_result()`, and it warns. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
+CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. With a `bl_model`, CVA uses the four prediction-outcome groups (TP/TN/FP/FN) by default, as in the loan example in the vignette and the development harness. If a group is empty (for example, the model makes no false positives on the training data), `bl_build_projection()` names it in a message and CVA uses the remaining groups. Empty levels, derived or in a user-supplied `cva_classes`, are dropped before CVA and before `W`, so its denominator `n - g` counts only groups with rows. `point_col` uses the confusion palette for any subset of the four labels. Two-group CVA arises only with `cva_classes = as.factor(class)` or a model-free `bl_build_result()`, and it warns. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
 
 ### 6.4 Cutoff parameter (Architecture Q10)
 

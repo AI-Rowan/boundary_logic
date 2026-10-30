@@ -86,8 +86,11 @@
 #'   distinct class levels, but biplotEZ supports 2-class data (results may
 #'   be degenerate). When `bl_model` is supplied, the four confusion
 #'   categories (TP, TN, FP, FN) are used as the class labels, satisfying
-#'   the 3-class requirement. As a simpler alternative, pass
-#'   `cva_classes = as.factor(train_data$class)` directly (2 levels only).
+#'   the 3-class requirement. If one of the four groups is empty (for
+#'   example, the model makes no false positives on the training data), a
+#'   message names it and CVA uses the remaining groups. As a simpler
+#'   alternative, pass `cva_classes = as.factor(train_data$class)` directly
+#'   (2 levels only).
 #'
 #' @param train_data  Data frame with feature columns and a `"class"` column
 #'   (numeric 0/1). The class column is used to derive confusion labels for
@@ -105,7 +108,8 @@
 #' @param cva_classes Factor of class labels, one per row of `train_data`.
 #'   When supplied, takes precedence over `bl_model` for CVA. Use
 #'   `as.factor(train_data$class)` as a simple alternative when no model
-#'   has been fitted.
+#'   has been fitted. Levels with no rows are dropped before CVA and before
+#'   the metric `W` is computed.
 #' @param title       Character string for the biplot title. Default `""`.
 #'
 #' @return A list of class `"bl_projection"` with components:
@@ -243,7 +247,23 @@ bl_build_projection <- function(train_data,
           actual != pred_class & actual == 0L ~ "FP",
           TRUE                               ~ "FN"
         )
-        cva_classes <- as.factor(confusion_label)
+        # Alphabetical levels, as as.factor() gives: the level order feeds
+        # biplotEZ::CVA(), and a different order perturbs V numerically,
+        # enough to move the under-determined local rotation plane.
+        cva_classes <- factor(confusion_label,
+                              levels = c("FN", "FP", "TN", "TP"))
+
+        # Name any empty outcome group: CVA then has fewer groups (and
+        # g - 1 canonical dimensions), which the user should know about.
+        group_n <- table(cva_classes)
+        if (any(group_n == 0L))
+          message(sprintf(
+            "CVA groups: %s empty (%s); using %d groups.",
+            paste(names(group_n)[group_n == 0L], collapse = ", "),
+            paste(names(group_n)[group_n > 0L], group_n[group_n > 0L],
+                  collapse = ", "),
+            sum(group_n > 0L)
+          ))
 
       } else {
         stop(paste0(
@@ -255,6 +275,10 @@ bl_build_projection <- function(train_data,
         ), call. = FALSE)
       }
     }
+
+    # Drop empty groups (derived or user-supplied) so that CVA and the
+    # metric W count only groups that have rows.
+    cva_classes <- droplevels(as.factor(cva_classes))
 
     if (length(levels(cva_classes)) < 3L)
       warning(paste0(
@@ -287,7 +311,9 @@ bl_build_projection <- function(train_data,
   # graphics::points(), which accepts per-obs colours directly (unlike
   # biplotEZ::samples(col=...) which maps colours to class levels).
   point_col <- if (method == "CVA" && !is.null(cva_classes)) {
-    if (setequal(levels(cva_classes), c("FN", "FP", "TN", "TP"))) {
+    # Confusion palette for any subset of TP/TN/FP/FN (a group can be empty);
+    # otherwise the binary 0/1 rule.
+    if (all(levels(cva_classes) %in% c("TP", "TN", "FP", "FN"))) {
       col_map <- c(TP = "green3", TN = "steelblue", FP = "orange", FN = "red")
       unname(col_map[as.character(cva_classes)])
     } else {
@@ -343,7 +369,8 @@ bl_build_projection <- function(train_data,
 #'
 #' Renders the biplotEZ object stored in a `"bl_projection"` result.
 #' Default point colours are derived automatically:
-#' - CVA with TP/TN/FP/FN labels: green/steelblue/orange/red confusion colours.
+#' - CVA with TP/TN/FP/FN labels (all four, or any of them when a group is
+#'   empty): green/steelblue/orange/red confusion colours.
 #' - CVA with binary 0/1 labels: red (class 1) / blue (class 0).
 #' - PCA (or any other case): red (class 1) / blue (class 0) when a
 #'   `"class"` column was present in `train_data`; grey otherwise.

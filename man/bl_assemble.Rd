@@ -19,7 +19,8 @@ When \code{NULL}, model-derived fields (\code{model}, \code{model_type}, \code{c
 
 \item{bl_projection}{A \code{"bl_projection"} from \code{bl_build_projection()}.}
 
-\item{bl_grid}{A \code{"bl_grid"} from \code{bl_build_grid()}.}
+\item{bl_grid}{A \code{"bl_grid"} from \code{bl_build_grid()}. Its
+\code{cutoff} must equal \code{bl_model$cutoff}; otherwise the function stops.}
 }
 \value{
 A list of class \code{"bl_result"} containing all Phase 1 artifacts.

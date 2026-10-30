@@ -38,7 +38,8 @@ FN) which are passed as \code{cva_classes}. Ignored for PCA.}
 \item{cva_classes}{Factor of class labels, one per row of \code{train_data}.
 When supplied, takes precedence over \code{bl_model} for CVA. Use
 \code{as.factor(train_data$class)} as a simple alternative when no model
-has been fitted.}
+has been fitted. Levels with no rows are dropped before CVA and before
+the metric \code{W} is computed.}
 
 \item{title}{Character string for the biplot title. Default \code{""}.}
 }
@@ -102,8 +103,11 @@ relative to within-class spread. CVA technically requires at least 3
 distinct class levels, but biplotEZ supports 2-class data (results may
 be degenerate). When \code{bl_model} is supplied, the four confusion
 categories (TP, TN, FP, FN) are used as the class labels, satisfying
-the 3-class requirement. As a simpler alternative, pass
-\code{cva_classes = as.factor(train_data$class)} directly (2 levels only).
+the 3-class requirement. If one of the four groups is empty (for
+example, the model makes no false positives on the training data), a
+message names it and CVA uses the remaining groups. As a simpler
+alternative, pass \code{cva_classes = as.factor(train_data$class)} directly
+(2 levels only).
 }
 }
 

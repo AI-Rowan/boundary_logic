@@ -531,17 +531,18 @@ plot(bl_local,
 | `ticks_var` | `0L` | the four feature names | Axes with their own tick count |
 | `ticks_n` | `5L` | `c(4, 5, 5, 5)` | Paired by position: `loan_amnt` gets 4 ticks, the others 5 |
 | `no_grid`, `no_contour` | `FALSE` | default | `TRUE` hides the prediction grid or the contour lines |
-| `rotate_deg` | `0` | default | Extra clockwise rotation on top of the local rotation |
 | `show_arrows` | `TRUE` | default | Draws the arrow from the target to its counterfactual |
 | `print_summary` | `TRUE` | default | Prints the console summary (layer 8) |
 
 Full argument list: `?plot.bl_local_result`. The pairing rule is in `review_section4_to_6.md` Section 6.4.
 
+**No `rotate_deg` on the local plots.** `rotate_deg` is only for viewing the global biplot (`plot_biplotEZ()`, `plot(bl_surr)`). Whenever the rotation function `.bl_rotate()` is used -- here, the local biplot for an individual target, drawn by `plot(bl_local)` and `plot(bl_sparse)` -- the plot is not turned further: `rotate_deg` is in effect always 0. Those two plot methods have no `rotate_deg` argument and stop with an error, before any device opens, if one is passed. The local biplot's orientation is fixed by the optimal rotation, which is part of the method; `rotate_deg` is never used to plot a rotated individual point.
+
 `new_title` (default `NA`) overrides the auto-generated `"Local biplot -- target N [pair (i,j) | p=..., class ...]"` title; `NA` keeps the auto-generated title.
 
 **Raw-unit axis relabel:** if `bl_result$scaling` is set (via `bl_set_scaling()` — see
 `review_section4_to_6.md`), the rotated local biplot's axes are relabelled into original feature
-units. After the SVD rotation has patched `Z`/`Lmat`/`ax.one.unit` (and any extra `rotate_deg`),
+units. After the SVD rotation has patched `Z`/`Lmat`/`ax.one.unit`,
 `plot.bl_local_result()` calls `.bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)`.
 The relabel transforms only the biplotEZ `$means`/`$sd`, which are **rotation-invariant**, so it
 composes cleanly with the local rotation and leaves the plotted geometry untouched. The same
@@ -858,7 +859,7 @@ Here the two `"Supports"` features are tried in Shapley order. Raising the inter
 3. **Plots a second cross** at `z_sparse`:
    - Colour: `"green3"` if `solution_valid == TRUE` (flip succeeded), `"yellow2"` if not
    - `pch = 4L`, `cex = 1.4`, `lwd = 2` (slightly larger than the full CF cross)
-   - `z_sparse` is projected with `Vr_rot` only. An extra `rotate_deg` passed to the plot rotates the local biplot but not this cross, so with `rotate_deg != 0` the sparse cross is drawn in the unrotated local frame.
+   - `z_sparse` is projected with `Vr_rot`, the same frame as the rest of the local plot. `plot(bl_sparse)` accepts no `rotate_deg` (see the note after the `plot(bl_local)` Parameters table).
 
 4. **Adds a legend** (top-right corner):
    - `"Full CF"` (grey cross, from `plot.bl_local_result`)

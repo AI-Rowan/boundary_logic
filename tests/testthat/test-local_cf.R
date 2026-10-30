@@ -304,3 +304,31 @@ test_that("print(bl_shapley) uses the comparison-table layout", {
   expect_match(txt, sprintf("Shapley sum    : %.4f", sum(shp$shapley_df$shapley_cause)),
                fixed = TRUE)
 })
+
+
+# ---- rotate_deg is for the global biplot only ------------------------------------
+
+test_that("the local plots refuse rotate_deg before any device opens", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  loc <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(loc$solution_found))
+  sp  <- bl_find_sparse_cf(bl_shapley(loc))
+
+  dev_before <- grDevices::dev.cur()
+  expect_error(plot(loc, rotate_deg = 30), "rotate_deg", fixed = TRUE)
+  expect_error(plot(sp, rotate_deg = 30), "rotate_deg", fixed = TRUE)
+  expect_identical(grDevices::dev.cur(), dev_before)
+})
+
+test_that("the local plots still draw, and the global biplot keeps rotate_deg", {
+  on.exit(grDevices::graphics.off(), add = TRUE)
+  grDevices::pdf(NULL)
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  loc <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(loc$solution_found))
+  sp  <- bl_find_sparse_cf(bl_shapley(loc))
+
+  expect_no_error(plot(loc, print_summary = FALSE))
+  expect_no_error(capture.output(plot(sp)))
+  expect_no_error(plot_biplotEZ(lcf_bl_results, rotate_deg = 30))
+})

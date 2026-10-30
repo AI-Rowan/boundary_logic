@@ -59,6 +59,23 @@ test_that("supplied polygon is reused unchanged", {
   expect_identical(result2$polygon, poly)
 })
 
+test_that("the grid takes its cutoff from the model and stores it", {
+  result <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 30L)
+  expect_identical(result$cutoff, bl_mod$cutoff)
+  # The default and an explicit 0.5 give identical contours.
+  explicit <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 30L,
+                            cutoff = 0.5)
+  expect_identical(explicit$ct, result$ct)
+
+  mod_04       <- bl_mod
+  mod_04$cutoff <- 0.4
+  grid_04 <- bl_build_grid(bl_dat$train_data, bl_proj, mod_04, m = 30L)
+  expect_identical(grid_04$cutoff, 0.4)
+  lev <- vapply(grid_04$ct, function(cl) cl$level, numeric(1))
+  expect_gt(length(lev), 0L)
+  expect_true(all(abs(abs(lev - 0.4) - grid_04$b_margin) < 1e-9))
+})
+
 test_that("print.bl_grid runs without error", {
   result <- bl_build_grid(bl_dat$train_data, bl_proj, bl_mod, m = 30L)
   expect_output(print(result), "<bl_grid>")

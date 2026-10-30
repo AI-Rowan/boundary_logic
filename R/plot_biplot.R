@@ -208,8 +208,10 @@
 #' @param rotate_deg       Numeric; angle in degrees to rotate the entire plot
 #'   clockwise. Rotates all plotted elements -- grid, training points, contour
 #'   lines, variable axes, and the target point -- without rerunning the
-#'   pipeline. Default `0` (no rotation).
-#' @param grid_col         `NULL` (default) or a length-2 character vector
+#'   pipeline. Default `0` (no rotation). For viewing the global biplot only;
+#'   the local biplot ([plot.bl_local_result()], [plot.bl_sparse_result()])
+#'   keeps the orientation set by the optimal rotation and has no `rotate_deg`.
+#' @param grid_col        `NULL` (default) or a length-2 character vector
 #'   `c(class0_col, class1_col)`. When supplied, the prediction grid is
 #'   rendered as hard binary colours -- `grid_col[1]` for grid points with
 #'   predicted probability < 0.5 (class 0) and `grid_col[2]` for >= 0.5

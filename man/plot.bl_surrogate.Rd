@@ -68,7 +68,8 @@ position. A name not in the model is dropped, with a warning, together
 with its value. Useful range 1--3. Default \code{1.5}.}
 
 \item{rotate_deg}{Numeric; clockwise rotation in degrees for the entire
-plot. Default \code{0} (no rotation).}
+plot. Default \code{0} (no rotation). For viewing the global biplot only; the
+local biplot (\code{\link[=plot.bl_local_result]{plot.bl_local_result()}}) has no \code{rotate_deg}.}
 
 \item{new_title}{Character; overrides the biplot title inherited from
 the underlying \code{bl_result} biplot object. \code{NA} (default) keeps it.}

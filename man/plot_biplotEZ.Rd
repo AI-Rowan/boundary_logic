@@ -113,7 +113,9 @@ Default \code{1.5}.}
 \item{rotate_deg}{Numeric; angle in degrees to rotate the entire plot
 clockwise. Rotates all plotted elements -- grid, training points, contour
 lines, variable axes, and the target point -- without rerunning the
-pipeline. Default \code{0} (no rotation).}
+pipeline. Default \code{0} (no rotation). For viewing the global biplot only;
+the local biplot (\code{\link[=plot.bl_local_result]{plot.bl_local_result()}}, \code{\link[=plot.bl_sparse_result]{plot.bl_sparse_result()}})
+keeps the orientation set by the optimal rotation and has no \code{rotate_deg}.}
 
 \item{grid_col}{\code{NULL} (default) or a length-2 character vector
 \code{c(class0_col, class1_col)}. When supplied, the prediction grid is

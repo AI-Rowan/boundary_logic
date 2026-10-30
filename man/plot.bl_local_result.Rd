@@ -20,7 +20,6 @@
   X_names = NULL,
   label_offset_var = 0L,
   label_offset_dist = 1.5,
-  rotate_deg = 0,
   show_arrows = TRUE,
   arrow_col = "grey30",
   contour_col = "black",
@@ -89,9 +88,6 @@ must match the length of \code{label_offset_var} and pairs with it
 position by position. A name not in the model is dropped, with a warning,
 together with its value. Useful range 1--3. Default \code{1.5}.}
 
-\item{rotate_deg}{Numeric; additional clockwise rotation in degrees
-applied on top of the SVD-derived local rotation. Default \code{0}.}
-
 \item{show_arrows}{Logical; if \code{TRUE} (default) an arrow is drawn
 from the target to its counterfactual.}
 
@@ -115,7 +111,11 @@ Default \code{TRUE}. Set to \code{FALSE} when called from
 title (\code{"Local biplot -- target N [pair ...]"}). \code{NA} (default)
 keeps the auto-generated title.}
 
-\item{...}{Additional arguments (currently ignored).}
+\item{...}{Additional arguments (currently ignored). There is no
+\code{rotate_deg}: the local biplot's orientation is fixed by the optimal
+rotation (\code{.bl_rotate()}), so passing \code{rotate_deg} is an error.
+\code{rotate_deg} is only for viewing the global biplot
+(\code{\link{plot_biplotEZ}}, \code{\link{plot.bl_surrogate}}).}
 }
 \description{
 Renders the rotated biplot for the best eigenvector pair found by

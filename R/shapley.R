@@ -524,6 +524,8 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 #' @param ...       Additional arguments passed to
 #'   \code{\link{plot.bl_local_result}} (e.g. \code{no_grid},
 #'   \code{label_offset_var}, \code{which}, \code{new_title}).
+#'   \code{rotate_deg} is not accepted: like the local biplot, the sparse
+#'   counterfactual plot keeps the orientation set by the optimal rotation.
 #'
 #' @importFrom graphics points legend
 #' @export

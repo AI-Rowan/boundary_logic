@@ -122,9 +122,20 @@
       ),
 
       "XGB" = {
-        new_mat <- as.matrix(new_data[, model_use$features, drop = FALSE])
-        floor_round(predict(model_use$model,
-                            newdata = xgboost::xgb.DMatrix(new_mat)))
+        if (inherits(model_use$model, "xgboost")) {
+          # xgboost::xgboost() model: its predict method refuses an
+          # xgb.DMatrix and takes the data frame directly. bl_wrap_model()
+          # has checked it is binary:logistic on levels 0/1, so this is
+          # P(class = 1).
+          floor_round(predict(model_use$model,
+                              newdata = new_data[, model_use$features,
+                                                 drop = FALSE]))
+        } else {
+          # xgb.Booster from xgboost::xgb.train()
+          new_mat <- as.matrix(new_data[, model_use$features, drop = FALSE])
+          floor_round(predict(model_use$model,
+                              newdata = xgboost::xgb.DMatrix(new_mat)))
+        }
       },
 
       stop(sprintf(

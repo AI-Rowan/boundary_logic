@@ -18,7 +18,9 @@ to control the CF arrow. Default \code{TRUE}.}
 
 \item{...}{Additional arguments passed to
 \code{\link{plot.bl_local_result}} (e.g. \code{no_grid},
-\code{label_offset_var}, \code{which}, \code{new_title}).}
+\code{label_offset_var}, \code{which}, \code{new_title}).
+\code{rotate_deg} is not accepted: like the local biplot, the sparse
+counterfactual plot keeps the orientation set by the optimal rotation.}
 }
 \description{
 Renders the rotated local biplot via \code{\link{plot.bl_local_result}}

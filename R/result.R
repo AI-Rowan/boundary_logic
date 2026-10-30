@@ -43,7 +43,8 @@
 #'   When `NULL`, model-derived fields (`model`, `model_type`, `cutoff`,
 #'   `accuracy`, `gini`) will be `NULL` in the returned object.
 #' @param bl_projection     A `"bl_projection"` from `bl_build_projection()`.
-#' @param bl_grid           A `"bl_grid"` from `bl_build_grid()`.
+#' @param bl_grid           A `"bl_grid"` from `bl_build_grid()`. Its
+#'   `cutoff` must equal `bl_model$cutoff`; otherwise the function stops.
 #'
 #' @return A list of class `"bl_result"` containing all Phase 1 artifacts.
 #'   See **Value** section for the full field list.
@@ -115,6 +116,16 @@ bl_assemble <- function(bl_data,
   if (!is.null(bl_grid) && !inherits(bl_grid, "bl_grid"))
     stop("'bl_grid' must be a 'bl_grid' object from bl_build_grid().",
          call. = FALSE)
+
+  # The grid's contours and every downstream function must use one cutoff.
+  # A bl_grid built before the cutoff field existed has none; skip the check.
+  if (!is.null(bl_grid) && !is.null(bl_model) && !is.null(bl_grid$cutoff) &&
+      !isTRUE(all.equal(bl_grid$cutoff, bl_model$cutoff)))
+    stop(sprintf(paste0(
+      "The grid was built with cutoff = %g but the model's cutoff is %g. ",
+      "Rebuild the grid with bl_build_grid(cutoff = bl_model$cutoff) ",
+      "(the default)."), bl_grid$cutoff, bl_model$cutoff),
+      call. = FALSE)
 
   # ---- Resolve filtered vs unfiltered data ------------------------------
   # Accept either bl_data or bl_filter_result — both carry train_data / test_data
@@ -220,6 +231,9 @@ bl_assemble <- function(bl_data,
 #' `train_data` slot of the supplied object. Building V from test data or any
 #' other source is not supported here -- use [bl_build_projection()] directly
 #' if a non-standard data source is needed.
+#'
+#' The grid's decision boundary contours are extracted around
+#' `bl_model$cutoff`, the same threshold every downstream function uses.
 #'
 #' For advanced control over any individual step use [bl_build_projection()],
 #' [bl_build_grid()], and [bl_assemble()] directly.

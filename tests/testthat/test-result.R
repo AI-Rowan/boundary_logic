@@ -54,6 +54,27 @@ test_that("print.bl_result runs without error and returns invisibly", {
   returned <- expect_output(print(result), "<bl_result>")
 })
 
+test_that("bl_assemble stops when the grid and model cutoffs differ", {
+  mod_04        <- bl_mod
+  mod_04$cutoff <- 0.4
+  expect_error(bl_assemble(bl_dat, mod_04, bl_proj, bl_grid),
+               "cutoff = 0.5 but the model's cutoff is 0.4", fixed = TRUE)
+})
+
+test_that("a grid without a cutoff field (older object) still assembles", {
+  old_grid        <- bl_grid
+  old_grid$cutoff <- NULL
+  expect_s3_class(bl_assemble(bl_dat, bl_mod, bl_proj, old_grid), "bl_result")
+})
+
+test_that("bl_build_result builds the grid at the model's cutoff", {
+  mod_04        <- bl_mod
+  mod_04$cutoff <- 0.4
+  res <- bl_build_result(bl_dat, mod_04, method = "PCA", m = 30L)
+  expect_identical(res$biplot_grid$cutoff, 0.4)
+  expect_identical(res$cutoff, 0.4)
+})
+
 test_that("summary.bl_result runs without error", {
   result <- bl_assemble(bl_dat, bl_mod, bl_proj, bl_grid)
   expect_output(summary(result), "Confusion matrix")

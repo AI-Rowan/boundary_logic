@@ -9,7 +9,7 @@ bl_build_grid(
   bl_projection,
   bl_model,
   m = 200L,
-  cutoff = 0.5,
+  cutoff = bl_model$cutoff,
   b_margin = 0.001,
   polygon = NULL,
   outlie = 1,
@@ -30,7 +30,10 @@ polygon when \code{polygon} is \code{NULL}.}
 Default \code{200L}. Increase for finer boundary resolution at the cost of
 computation time.}
 
-\item{cutoff}{Numeric; the decision threshold. Default \code{0.5}.}
+\item{cutoff}{Numeric; the decision threshold. Defaults to
+\code{bl_model$cutoff} (\code{0.5} unless the model was built with another value),
+so the contours sit at the same threshold as every downstream function.
+\code{\link[=bl_assemble]{bl_assemble()}} stops if the grid's and the model's cutoffs differ.}
 
 \item{b_margin}{Numeric scalar; half-width of the band around
 \code{cutoff} used to extract contour lines. Default \code{0.001} (contours at
@@ -81,6 +84,8 @@ boundaries for \code{bl_surrogate()}. Outside-hull cells are set to
 \item{\code{xseq}}{Numeric vector (length m); x-axis grid sequence.}
 \item{\code{yseq}}{Numeric vector (length m); y-axis grid sequence.}
 \item{\code{b_margin}}{Numeric; the contour band half-width used.}
+\item{\code{cutoff}}{Numeric; the decision threshold the contours were
+extracted around.}
 }
 }
 \description{

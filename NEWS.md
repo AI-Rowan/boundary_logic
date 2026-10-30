@@ -2,6 +2,13 @@
 
 ## Breaking changes
 
+* `rotate_deg` is removed from `plot.bl_local_result()` and
+  `plot.bl_sparse_result()`; passing it stops with an error. `rotate_deg` is
+  only for viewing the global biplot (`plot_biplotEZ()`, `plot.bl_surrogate()`
+  keep it). The local biplot's orientation is fixed by the optimal rotation
+  (`.bl_rotate()`), which is part of the method, and is never turned further.
+  This also removes a display bug: with `rotate_deg != 0`, the sparse-CF cross
+  was drawn in the unrotated frame.
 * `rounding` parameter replaced by `b_margin` in `bl_build_grid()` and
   `bl_build_result()`; `bl_find_local_cf()` reads it from
   `bl_result$b_margin`. `b_margin` sets the decision
@@ -93,6 +100,26 @@
 
 ## Bug fixes and other improvements
 
+* `bl_build_grid()` now takes its `cutoff` from the model by default
+  (`cutoff = bl_model$cutoff`) and stores it as `bl_grid$cutoff`; `bl_assemble()`
+  stops if the grid's and the model's cutoffs differ. Previously the grid
+  always drew its contours at `0.5` (`bl_build_result()` passed no cutoff),
+  while `bl_find_boundary()`, `bl_surrogate()` and `bl_find_local_cf()` used
+  `bl_result$cutoff`, so a model built with another cutoff gave a global
+  boundary at one threshold and a local one at another, without warning.
+  Results at the default `0.5` are unchanged.
+* The `"XGB"` model type now accepts models from `xgboost::xgboost()` (class
+  `"xgboost"`), which are scored from the data frame because their predict
+  method refuses an `xgb.DMatrix`. `bl_wrap_model()` stops unless such a model
+  is a `binary:logistic` classifier on levels `"0"`/`"1"`: fitted with a
+  numeric response, `xgboost()` gives a regression. `xgb.train()` boosters are
+  scored as before.
+* `bl_build_projection()` with CVA: if a TP/TN/FP/FN group is empty, a message
+  names it and the empty level is dropped, as is any empty level of a
+  user-supplied `cva_classes`, so CVA and the metric `W` count only groups
+  with rows. `plot.bl_projection()` now uses the confusion colours for any
+  subset of the four groups; with an empty group it previously coloured every
+  point blue.
 * `bl_find_sparse_cf()`: `used_in_sparse` is now `FALSE` for a `"fixed"`
   feature, which the sparse counterfactual always reverts. It previously
   followed the Shapley classification alone and could read `TRUE` for a

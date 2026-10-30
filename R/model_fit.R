@@ -158,10 +158,14 @@ print.bl_model <- function(x, ...) {
 #' probabilities (one per row of `new_data`).
 #'
 #' @note For `"XGB"` models, `model` must be a list of the form
-#'   `list(model = <xgb.Booster>, features = <character vector>)`, where the
-#'   booster is fitted externally with `xgboost::xgb.train()`. Models from
-#'   `xgboost::xgboost()` (class `"xgboost"`) are not supported. XGB is not
-#'   available through `bl_fit_model()`.
+#'   `list(model = <booster>, features = <character vector>)`. The booster
+#'   can come from `xgboost::xgb.train()` (class `"xgb.Booster"`) or from
+#'   `xgboost::xgboost()` (class `"xgboost"`). An `xgboost()` model must be
+#'   fitted with a factor response on levels `"0"`/`"1"`, e.g.
+#'   `y = factor(train_data$class)`, so that it is a `binary:logistic`
+#'   classifier; with a numeric 0/1 response `xgboost()` fits a regression,
+#'   and `bl_wrap_model()` stops. XGB is not available through
+#'   `bl_fit_model()`.
 #'
 #' @param model        The fitted model object (or for `"XGB"`, the wrapper
 #'   list described above).
@@ -230,6 +234,24 @@ bl_wrap_model <- function(model,
 
   if (model_type == "custom" && !is.function(predict_fn))
     stop("'predict_fn' must be a function.", call. = FALSE)
+
+  # An xgboost::xgboost() model must be a binary classifier on levels 0/1;
+  # with a numeric response xgboost() fits a regression instead.
+  if (model_type == "XGB" && is.list(model) &&
+      inherits(model$model, "xgboost")) {
+    xgb_objective <- attr(model$model, "params")$objective
+    xgb_levels    <- attr(model$model, "metadata")$y_levels
+    if (!identical(xgb_objective, "binary:logistic") ||
+        !identical(as.character(xgb_levels), c("0", "1")))
+      stop(sprintf(paste0(
+        "The xgboost() model is not a binary classifier on levels 0/1 ",
+        "(objective '%s', levels %s). Refit it with a factor response, ",
+        "e.g. xgboost::xgboost(x, factor(train_data$class))."),
+        if (is.null(xgb_objective)) "unknown" else xgb_objective,
+        if (is.null(xgb_levels)) "none" else
+          paste(xgb_levels, collapse = "/")),
+        call. = FALSE)
+  }
 
   # For custom type, bundle model and predict_fn together so that
   # .pred_function() can locate both.

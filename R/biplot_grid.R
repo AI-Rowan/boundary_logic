@@ -99,7 +99,10 @@
 #' @param m             Integer; grid resolution (m x m points per side).
 #'   Default `200L`. Increase for finer boundary resolution at the cost of
 #'   computation time.
-#' @param cutoff        Numeric; the decision threshold. Default `0.5`.
+#' @param cutoff        Numeric; the decision threshold. Defaults to
+#'   `bl_model$cutoff` (`0.5` unless the model was built with another value),
+#'   so the contours sit at the same threshold as every downstream function.
+#'   [bl_assemble()] stops if the grid's and the model's cutoffs differ.
 #' @param b_margin      Numeric scalar; half-width of the band around
 #'   `cutoff` used to extract contour lines. Default `0.001` (contours at
 #'   `cutoff +/- 0.001`). Must satisfy `0 < b_margin < 0.5` so that both
@@ -145,6 +148,8 @@
 #'   \item{`xseq`}{Numeric vector (length m); x-axis grid sequence.}
 #'   \item{`yseq`}{Numeric vector (length m); y-axis grid sequence.}
 #'   \item{`b_margin`}{Numeric; the contour band half-width used.}
+#'   \item{`cutoff`}{Numeric; the decision threshold the contours were
+#'     extracted around.}
 #' }
 #'
 #' @importFrom grDevices contourLines colorRampPalette
@@ -165,7 +170,7 @@ bl_build_grid <- function(train_data,
                           bl_projection,
                           bl_model,
                           m        = 200L,
-                          cutoff   = 0.5,
+                          cutoff   = bl_model$cutoff,
                           b_margin = 0.001,
                           polygon  = NULL,
                           outlie   = 1,
@@ -313,7 +318,8 @@ bl_build_grid <- function(train_data,
       ct_surrogate  = ct_surrogate,
       xseq          = xseq,
       yseq          = yseq,
-      b_margin      = b_margin
+      b_margin      = b_margin,
+      cutoff        = cutoff
     ),
     class = "bl_grid"
   )

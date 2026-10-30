@@ -301,7 +301,8 @@ print.bl_surrogate <- function(x, ...) {
 #'   position. A name not in the model is dropped, with a warning, together
 #'   with its value. Useful range 1--3. Default `1.5`.
 #' @param rotate_deg       Numeric; clockwise rotation in degrees for the entire
-#'   plot. Default `0` (no rotation).
+#'   plot. Default `0` (no rotation). For viewing the global biplot only; the
+#'   local biplot ([plot.bl_local_result()]) has no `rotate_deg`.
 #' @param new_title        Character; overrides the biplot title inherited from
 #'   the underlying `bl_result` biplot object. `NA` (default) keeps it.
 #' @param ... Unused; for S3 compatibility.
