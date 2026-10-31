@@ -50,9 +50,11 @@
 #   p=4, r=2 (17_2)          4                  -1                   3
 #
 # This toy is the ONLY case in the family where the rotation is fully determined.
-# From p = 3 on there is leftover freedom, the Procrustes SVD resolves it
-# arbitrarily, and the resulting plane is not reproducible -- see 17_1 section 15c
-# and biplot_rotation_and_pair_selection.md section 4.1.
+# From p = 3 on there is leftover freedom and the Procrustes SVD resolves it
+# arbitrarily: identical inputs give the identical plane, but the plane is not
+# determined by the construction, and inputs that differ only in their last bits
+# can land on a different one -- see 17_1 section 15c and
+# biplot_rotation_and_pair_selection.md section 4.1.
 #
 # A residue of that freedom is visible even here: for points 1 and 4 the two
 # options give DIFFERENT A matrices, yet the same retained axis. At p = 2 the
@@ -60,7 +62,7 @@
 # of the DISCARDED axis -- which a 1D biplot never shows.
 #
 # CAVEAT ON THE THESIS NUMBERS. theta = 28.14 deg and rho = 1.134 reproduce the
-# thesis's "28 degree rotation, rho = 1/1.13" (note section 2.5) exactly. But the
+# thesis's "28 degree rotation, rho = 1/1.13" (note section 2.3) exactly. But the
 # thesis reports sample predictivity 0.72 -> 1 and RSS 0.28 -> 4 of 14, where this
 # data gives 0.7776 -> 1 and 4.307 -> 4.927 of 11.4. These five points are
 # therefore probably NOT the thesis's dataset; do not read the agreement in theta
@@ -220,7 +222,7 @@ dof <- data.frame(
   planes      = c(0L, 1L, 2L),
   rotations   = c(1L, 2L, 3L),
   consequence = c("plane unique -- both options coincide",
-                  "1 free plane direction; plane not reproducible",
+                  "1 free plane direction; plane not determined",
                   "2 free plane directions; 3-dim manifold of rotations")
 )
 print(dof, row.names = FALSE)

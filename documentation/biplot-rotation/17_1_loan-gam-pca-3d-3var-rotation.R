@@ -29,10 +29,10 @@
 # contour — the decision boundary the 2D biplot draws.
 #
 # Section 9 replicates the package's pair-selection rule and prints it beside the
-# package's own numbers; section 12 checks the rotation against boundarylogic.
+# package's own numbers; section 15 checks the rotation against boundarylogic.
 # Mirrors script 15 (same data, same GAM) plus the rotation.
 #
-# ONE RESULT WORTH KNOWING UP FRONT (section 12c). The rotated plane is NOT
+# ONE RESULT WORTH KNOWING UP FRONT (section 15c). The rotated plane is NOT
 # uniquely determined. .bl_rotate() solves an orthogonal Procrustes problem whose
 # matrix is RANK 1, because Y = rbind(-x, 0, x) has rank 1. So the rotation is
 # pinned on one direction only; the rest is an arbitrary orthonormal completion,
@@ -41,9 +41,9 @@
 # The practical consequence: bl_res$V differs from svd(Xstd)$v at ~1e-15, and
 # that is enough to land on a different plane -- it does for pair (1,2) and does
 # not for (1,3). Since the nearest boundary point depends on the plane, dist_z
-# and the squared Mahalanobis distance inherit the sensitivity. So section 12
+# and the squared Mahalanobis distance inherit the sensitivity. So section 15a
 # asserts the mirror against .bl_rotate() with IDENTICAL inputs (exact, diff 0),
-# and merely REPORTS the comparison against the package's live objects.
+# and 15c merely REPORTS the comparison against the package's live objects.
 #
 # ----------------------------------------------------------------------------
 # HOW TO READ THE ROTATED VIEWS: THEY ARE **RC BIPLOTS**, NOT "ROTATED PCs"
@@ -51,7 +51,7 @@
 # After the rotation the axes are RC1 / RC2 -- "rotated components", the thesis's
 # own term for a rotated component (RC) biplot. They are NOT "rotated PC1 / PC3",
 # and the named pair is NOT an axis identity. From the reference note
-# (biplot_rotation_and_pair_selection.md, section 2.7):
+# (biplot_rotation_and_pair_selection.md, section 3.1):
 #
 #   "the SVD construction guarantees the target's rotated information concentrates
 #    in columns 1-2 of Vrho REGARDLESS of which eigenvector pair was used to build
@@ -101,14 +101,15 @@ library(reshape2)
 #   2. the B and C PLANES are materially apart -- checked in section 11 by the angle
 #      between their normals, NOT by the pair label. Rows 90, 91, 102, 132 and 161
 #      all have ~45 deg tilts but their planes coincide EXACTLY (0.00 deg);
-#   3. best_pair is reproducible run to run (row 102 flips between (1,2) and (1,3)
-#      across identical runs -- see the note's section 4.1);
+#   3. best_pair is reproducible run to run -- guaranteed: the package's local
+#      search is deterministic (the note's Appendix A.2), so this no longer
+#      constrains the choice;
 #   4. the A-B / A-C planes sit near 45 deg, so the section-17 figures are readable.
 #
 # Criteria (1)-(3) are hard requirements; (4) trades off against how vividly section 18
 # can make its point, so two rows are worth keeping in view:
 #
-#   ROW 6 (set below). Pair (1,3), bit-stable. Its two planes are 90.00 deg apart --
+#   ROW 6 (set below). Pair (1,3). Its two planes are 90.00 deg apart --
 #   orthogonal, the largest separation possible -- so the two slices in section 18 are
 #   as different as they can be, separating by 57% of the data's extent. The cost is
 #   criterion (4): its A-C plane stands at 88.64 deg, so section 17's A-C figure is
@@ -129,7 +130,7 @@ feat_names <- c("loan_percent_income", "credit_score", "loan_int_rate")
 
 g         <- 60L    # boundary-cloud grid density per axis (g^3 GAM predictions, ONCE)
 m_sel     <- 200L   # grid resolution for the pair-selection replication (matches package)
-CHECK_PKG <- TRUE   # run the boundarylogic cross-check (sections 8, 9, 12)
+CHECK_PKG <- TRUE   # run the boundarylogic cross-check (sections 8, 9, 15)
 
 # --- 1) Load + filter loan data ---------------------------------------------
 loan_raw <- read.csv(
@@ -231,7 +232,7 @@ stopifnot(nrow(Xstd_cloud) > 50L)
 # Candidate pairs in the package's own order: .generate_pairs() emits
 # colexicographically -- for j in 2..p, for i in 1..j-1. For p = 3 that is
 # (1,2), (1,3), (2,3). The order matters: it is why max_pairs = 1L pins the
-# package to (1,2), which is how view B is cross-checked in section 12.
+# package to (1,2), which is how view B is cross-checked in section 15.
 gen_pairs <- function(p) {
   out <- list()
   for (j in 2L:p) for (ii in 1L:(j - 1L)) out[[length(out) + 1L]] <- c(ii, j)
@@ -278,7 +279,7 @@ if (CHECK_PKG) {
 # --- 9) How the OPTIMAL PAIR is determined ----------------------------------
 # Replicated from bl_find_local_cf(). The rule, in full:
 #
-#   1. CANDIDATES  .generate_pairs(p, max_pairs = 10L), colex order (section 7).
+#   1. CANDIDATES  .generate_pairs(p, max_pairs = 21L), colex order (section 7).
 #   2. ROTATE      .bl_rotate(x_target, V, pair) puts the target IN that pair's
 #                  plane and returns Vr_rot (p x 2), tVr_rot (2 x p). Because the
 #                  basis is orthonormal, tVr_rot == t(Vr_rot) (checked below).
@@ -290,7 +291,9 @@ if (CHECK_PKG) {
 #                  actionability filters and the train_ranges test are applied,
 #                  then survivors are RE-PREDICTED and kept only if they verify.
 #   5. NEAREST POINT WITHIN A PAIR -- plain EUCLIDEAN distance in the rotated 2D
-#                  plane (.nearest_idx_block, dx^2 + dy^2). This gives dist_z.
+#                  plane (.nearest_idx_block, dx^2 + dy^2): the exact minimum, the
+#                  first vertex on an exact tie, so it is deterministic. This
+#                  gives dist_z.
 #   6. DISTANCE FOR COMPARING PAIRS -- that point is mapped back to feature space
 #                  as B_x, and dist_mah = v' %*% metric_inv %*% v, v = B_x - x_obs,
 #                  where metric_inv is the inverse POOLED WITHIN-CLASS covariance.
@@ -298,6 +301,9 @@ if (CHECK_PKG) {
 #                  package's own summary prints sqrt() of it.
 #   7. SELECTION   argmin over pairs of dist_mah (distance = "mahalanobis", the
 #                  default), else of dist_z.
+#   8. RESTORE     after selection, a "fixed" feature the search moved is set back
+#                  to its observed value when that point still crosses the
+#                  boundary. No set_filters are used here, so it never applies.
 #
 # So TWO DIFFERENT METRICS act at TWO DIFFERENT STAGES: Euclidean-in-plane picks
 # the point, Mahalanobis-in-feature-space picks the pair. They can disagree --
@@ -321,11 +327,13 @@ if (CHECK_PKG) {
 #
 # Dropping up to 56% of the candidates changes which one is nearest, hence the
 # distances, hence the selected pair. That is why the comparison table in section
-# 15 usually DISAGREES with the package -- roughly 3 rows in 13 agree. Read that
-# table as a MEASUREMENT OF THIS OMISSION, not as a fidelity check. (Rotating from
-# bl_res$V rather than svd(Xstd)$v does not help: 2/13. The V source is not the
-# cause.) Nothing drawn depends on select_pair() any more -- views B and C come
-# from the package's own Vr_rot in section 11 -- so this stays an exhibit.
+# 15 often DISAGREES with the package: over all 221 rows, select_pair() agrees with
+# the package on 76 (34%). Read that table as a MEASUREMENT OF THIS OMISSION, not
+# as a fidelity check. (Rotating from bl_res$V rather than svd(Xstd)$v raises the
+# agreement only to 84 of 221: the V source is a minor part, the train_ranges
+# omission the main one. Measured 2026-10-30.) Nothing drawn depends on
+# select_pair() any more -- views B and C come from the package's own Vr_rot in
+# section 11 -- so this stays an exhibit.
 x_t <- as.numeric(Xstd[i, ])
 
 select_pair <- function() {
@@ -732,7 +740,7 @@ cat("\n--- 13) The cost of the rotation (J = diag(1,1,0): the 2D biplot) ---")
 dg_A <- rc_diagnostics(V_A, "A. Unrotated PCA")
 dg_B <- rc_diagnostics(V_B, "B. RC biplot, rotated from (1,2)")
 dg_C <- rc_diagnostics(V_C, sprintf("C. RC biplot, rotated from (%d,%d) [optimal]",
-                                    best_pair[1], best_pair[2]))
+                                    pkg_pair[1], pkg_pair[2]))
 
 # NOTE: `adequacy` indexes the ROWS of V, so it is PER VARIABLE (per feature), not
 # per axis. An earlier version of this line read "the third axis stops meaning PC3",
@@ -819,10 +827,11 @@ if (CHECK_PKG) {
   print(cmp)
   cat("(d_mah2 is the SQUARED Mahalanobis distance -- the package stores it unrooted.)
 ")
-  # Rows agree to ~0.3% where the plane happens to coincide, and diverge where it
-  # does not -- pair (1,2) here. That divergence is the section 15c effect, not a
-  # replication error. The residual gap on the matching rows is the two filters
-  # this script deliberately omits (actionability, train_ranges).
+  # Rows agree closely where this script's plane coincides with the package's --
+  # pair (1,3) here, d_z 1.0528 vs 1.0510 -- and diverge where it does not -- pair
+  # (1,2), whose two planes are 86 deg apart (15c). That divergence is the section
+  # 15c effect, not a replication error. The residual gap on the matching rows is
+  # the train_ranges filter this script deliberately omits.
   if (!identical(as.integer(loc_op$best_pair), best_pair)) {
     warning(sprintf(
       "Script chose (%d,%d) but the package chose (%d,%d).",
@@ -879,9 +888,11 @@ if (CHECK_PKG) {
   # RANK 1 (singular values below): A = svd$v %*% t(svd$u) is therefore pinned on
   # only ONE direction, and the remaining p-1 are an arbitrary orthonormal
   # completion. Consequence: any plane containing the target is a valid answer.
-  # The completion is deterministic for identical inputs (12a) but NOT stable to
-  # perturbation -- and bl_res$V differs from svd(Xstd)$v at ~1e-15, which is
-  # enough to land on a different plane. It did for (1,2) and did not for (1,3).
+  # The completion is deterministic for identical inputs (15a) but NOT stable to
+  # perturbation. This script rotates from svd(Xstd)$v (~1e-15 from bl_res$V) and
+  # its own x_t (a row of scale(); the package standardises the target itself),
+  # so its planes are a perturbed version of the package's. The comparison below
+  # measures how far that moves each plane.
   #
   # This matters beyond aesthetics: the nearest boundary point depends on the
   # plane, so dist_z and the squared Mahalanobis distance -- and hence pair
@@ -895,11 +906,18 @@ if (CHECK_PKG) {
   cat("  numerical rank:", sum(svd(Mq)$d > 1e-10 * max(svd(Mq)$d)), "of", p,
       "-> the plane is free to rotate about the target direction.
 ")
-  cat(sprintf("  plane vs package  B (1,2): %.3e   C (%d,%d): %.3e
+  x_pkg <- (as.numeric(tgt$x_obs[, bl_res$var_names]) - bl_res$X_center) / bl_res$X_sd
+  cat(sprintf("  inputs: max|x_t - package target| %.2e | max|svd(Xstd)$v - bl_res$V| %.2e
 ",
-              max(abs(P(V_B[, 1:2, drop = FALSE]) - P(loc_12$Vr_rot))),
-              best_pair[1], best_pair[2],
-              max(abs(P(V_C[, 1:2, drop = FALSE]) - P(loc_op$Vr_rot)))))
+              max(abs(x_t - x_pkg)), max(abs(abs(V_full) - abs(bl_res$V)))))
+  for (nm in c("B", "C")) {
+    pr <- if (nm == "B") c(1L, 2L) else pkg_pair
+    vk <- if (nm == "B") loc_12$Vr_rot else loc_op$Vr_rot
+    mi <- .bl_rotate_full(x_t, V_full, pr)[, 1:2, drop = FALSE]
+    cat(sprintf("  script's plane vs package, %s (%d,%d): plane diff %.3e | 2nd angle %6.2f deg
+",
+                nm, pr[1], pr[2], max(abs(P(mi) - P(vk))), prin_ang(mi, vk)[2]))
+  }
   cat("  (Not asserted: a nonzero value here is the free completion, not an error.)
 ")
   cat("  tVr_rot == t(Vr_rot)?",
@@ -913,9 +931,9 @@ if (CHECK_PKG) {
 # degenerate one, and that contrast is why the pair label is worth more in one case
 # than the other.
 rot_panel_B <- rotation_panel(c(1L, 2L), "Rotation onto the (1,2) plane")
-rot_panel_C <- rotation_panel(best_pair,
+rot_panel_C <- rotation_panel(pkg_pair,
                  sprintf("Rotation onto the (%d,%d) plane [optimal]",
-                         best_pair[1], best_pair[2]))
+                         pkg_pair[1], pkg_pair[2]))
 rot_panel_B; rot_panel_C
 
 # Script's own views (run these one at a time in RStudio). For each rotated view,
@@ -1101,11 +1119,11 @@ fig_AB_plane <- add_boundary_in_plane(ab$fig, view_B$cls, ab$e1, ab$e2) |>
   layout(title = "A-B plane - view A carrying B's biplot plane (rotated from (1,2)); tilt it horizontal to see B")
 
 ac <- add_other_plane(V_C, sprintf("A-C plane (optimal pair (%d,%d))",
-                                   best_pair[1], best_pair[2]))
+                                   pkg_pair[1], pkg_pair[2]))
 fig_AC_plane <- add_boundary_in_plane(ac$fig, view_C$cls, ac$e1, ac$e2) |>
   layout(title = sprintf(paste0("A-C plane - view A carrying C's biplot plane ",
                                 "(rotated from (%d,%d), optimal); tilt it horizontal to see C"),
-                         best_pair[1], best_pair[2]))
+                         pkg_pair[1], pkg_pair[2]))
 
 # Run these in RStudio. In each, the violet plane should pass through the magenta
 # target; rotate until the violet dotted normal points at you and the plane is
@@ -1287,6 +1305,8 @@ if (CHECK_PKG) {
   #     the legend shows its square root, which is the distance itself.
   # The legend therefore carries the Mahalanobis value, because that is what "optimal"
   # means here. Section 18e prints both metrics side by side; they need not agree.
+  # (That is a PCA property. Under CVA the two are proportional for every pair --
+  # d2_M = (n - g) * dist_z^2 -- and pick the same pair; the note's section 3.4.)
   cf_lab <- function(lo, nm) {
     if (is.null(lo$B_x)) return(NA_character_)
     if (is.na(lo$dist_mahalanobis))

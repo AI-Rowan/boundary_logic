@@ -1,89 +1,108 @@
-# Local Biplot Rotation and Optimal Pair Selection
+# Local Biplot Rotation and Selection of the Plane
 
-This note explains, in full technical depth, the two mechanisms `boundarylogic` uses to make a
-2D biplot locally consistent with a model's prediction for one specific observation: (Part A) the
-Procrustes-based rotation that forces a target point onto the biplot plane, and (Part B) the
-search across candidate 2D projections that decides *which* plane to rotate. It reproduces the
-governing mathematics from the original PhD thesis, maps every step onto the exact production
-code, and closes with a dedicated section of known limitations that any user of the method should
-understand before treating its output as more precise than it is.
+`boundarylogic` explains one observation by drawing a 2D biplot that passes through it, then reading off the
+nearest decision boundary on that biplot as the counterfactual. Two mechanisms make this work:
 
-Source material: PhD thesis, "Optimal rotation of the biplot" (§3.5–3.5.2); package source
-`R/local_cf.R`; the internal technical note `documentation/mahalanobis_technical_note.md`; package
-design documents
-`1 Foundation intro documents.txt` and `2 implementation_summary.txt`. Full reference list at the
-end. (The PhD thesis excerpt itself was a `.docx` in `documentation/`, read in full while writing
-this note and since removed from the repo once its content was consolidated here.)
+- a **rotation** that forces the target onto the biplot plane;
+- a **search** that chooses *which* plane to rotate, so that the counterfactual is as near as the framework allows.
 
-**Files in this folder.** Every measurement quoted in §5 and §6 is reproducible from the R scripts
-sitting beside this note. `README.md` has the details; in brief:
+This note covers both, in five parts:
+
+- §2: the original PhD method, from the thesis and from the research code;
+- §3: the method as the package implements it, mapped line by line onto the code;
+- §4: the current problems;
+- §5: the proposed solution;
+- §6: future developments.
+
+Appendix A holds the measurements behind §3–§5, and Appendix B the practical notes for reproducing the package's
+objects.
+
+**Companion note.** [`../boundary-distance-and-robustness.md`](../boundary-distance-and-robustness.md) covers the
+rest of the distance machinery:
+
+- the metric $\mathbf{W}$ (the pooled within-class covariance), its definition and its Cholesky inverse;
+- Phase 2's distance to the boundary;
+- the per-variable robustness measures.
+
+This note uses $\mathbf{W}$ only to choose the plane (§3.4).
+
+**Sources:**
+
+- **The thesis:** `../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`, cited by section and printed page.
+- **The research code:** branch `origin/original_PhD_code`, cited as `scripts/<file>:<line>`.
+- **Package source:** `R/local_cf.R` and `R/projection.R`.
+- **Package design documents:** `1 Foundation intro documents.txt` and `2 implementation_summary.txt`.
+
+**Files in this folder.** Every measurement in this note is reproduced by the R scripts beside it; `README.md` has
+the details. In brief:
 
 | script | setting | backs |
 |---|---|---|
-| `17_1a_toy-2d-to-1d-rotation.R` | 5 points, 2 variables → 1D biplot | §2.5, §5.1, §5.8 |
-| `17_1_loan-gam-pca-3d-3var-rotation.R` | 221 loans, 3 features, GAM — lossless | §5.1–§5.7 |
-| `17_2_loan-gam-pca-4var-slices.R` | 221 loans, 4 features, GAM — lossy | §5.1, §5.4, §5.9, §6.1 |
-| `17_3_minimal-rotation-verification.R` | both, console output only | §6 throughout |
+| `17_1a_toy-2d-to-1d-rotation.R` | 5 points, 2 variables → 1D biplot | §2.3, A.4, A.8 |
+| `17_1_loan-gam-pca-3d-3var-rotation.R` | 221 loans, 3 features, GAM — lossless | §3.4 (PCA), §4.2, A.2–A.7, Appendix B |
+| `17_2_loan-gam-pca-4var-slices.R` | 221 loans, 4 features, GAM — lossy | §4.1, §5.1, A.1, A.4, A.5 |
+| `17_3_minimal-rotation-verification.R` | both of the above, plus iris; console output only | §3.4 (CVA), §5, §6.1, A.2, A.9, A.10 |
 
-Run `17_3` first: it asserts the geometry §6 depends on and reports the rest. Paths *inside* the
-scripts point at each other and at this note; paths of the form `R/local_cf.R`,
-`development/…` and `documentation/…` refer to the `boundarylogic` package repository.
+**Run `17_3` first.**
 
-**Section 5 (added 2026-09) collects measurements** taken while building the loan-data
-worked examples. It quantifies the §4.1 caveat, records where §4.1's wording does not
-generalise below $p=4$, and adds the interpretive point the published figures most need:
-a 2D biplot is a **slice** of the decision surface, not a view of it. **§5.9 (added
-2026-09-10) is the one to read first if you are about to quote a counterfactual:** the
-reported distance depends on the session's call history, so "repeat the call and check
-it is stable" is not sufficient advice.
-
-**Section 6 (added 2026-09) is the recommendation** the §4 limitations point towards: a closed-form
-deterministic replacement for the Procrustes rotation, and a reproducible search over the family of
-planes that contain the target, with the measurements §4.1 asks for carried out.
+- **What it checks:** it asserts the geometry §5 depends on, the package's determinism (A.2), and the CVA identity
+  of §3.4. It reports the rest.
+- **Paths:** paths *inside* the scripts point at each other and at this note. Paths of the form `R/local_cf.R`,
+  `development/…` and `documentation/…` refer to the package repository.
+- **When measured:** all numbers were measured on 2026-10-30, and the iris and loan figures in §3.4 on 2026-10-31,
+  against the package on branch `paper_nr1_changes` (R 4.6.0).
 
 ---
 
 ## 1. Purpose and motivation
 
-A 2D (or low-rank) biplot is built once, from the whole training set, using either PCA or CVA. It
-is a *global* approximation: every point is projected onto the same fixed plane, and the decision
-boundary drawn on that plane is the model's boundary as seen through that one projection.
+A 2D biplot is built once, from the whole training set, using either PCA or CVA. It is a *global* approximation:
 
-For any individual observation, projection and prediction are, in general, **not the same
-operation**. Projecting a point onto the biplot plane and reading off its position relative to the
-drawn boundary can disagree with what the actual classifier `f(X)` says about the *original,
-full-dimensional* point — because the plane is an approximation that only captures the two
-directions of greatest global variance (PCA) or greatest class separation (CVA); it does not
-generally contain any particular observation's exact location relative to the true, possibly
-curved, decision surface in the full feature space.
+- every point is projected onto the same fixed plane;
+- the decision boundary drawn on that plane is the model's boundary as seen through that one projection.
 
-This is not a hypothetical failure mode. The thesis illustrates it with the iris dataset: a
-three-dimensional PCA biplot (three flower features, no dimensionality loss) correctly places a
-target point in the "class 1" region, matching the true model prediction. Reducing to the
-standard two-dimensional biplot (dropping the third, lowest-variance component) projects the same
-point orthogonally onto the plane — and it lands in the "class 0" region. The model is right; its
-2D visual approximation is wrong for this specific point, because the decision surface is
-oriented obliquely relative to the biplot plane near that point.
+For any individual observation, projection and prediction are, in general, **not the same operation**. Projecting a
+point onto the biplot plane and reading off its position relative to the drawn boundary can disagree with what the
+classifier `f(X)` says about the *original, full-dimensional* point. The reason is that the plane is an
+approximation:
 
-For an explanation method whose whole purpose is to visualise *why* a specific observation was
-classified the way it was, this is a serious problem: the picture can visibly contradict the
-number. The rotation described in Part A exists to fix exactly this — for the one point you are
-trying to explain.
+- it captures only the two directions of greatest global variance (PCA) or greatest class separation (CVA);
+- it does not generally contain any particular observation's exact location relative to the true, possibly curved,
+  decision surface in the full feature space.
+
+The thesis illustrates the failure with the iris dataset.
+
+- **In 3D:** a three-variable PCA biplot (no dimensionality loss) correctly places a target point in the "class 1"
+  region, matching the true model prediction.
+- **In 2D:** reducing to the standard two-dimensional biplot (dropping the third, lowest-variance component)
+  projects the same point orthogonally onto the plane, and it lands in the "class 0" region.
+
+The model is right; its 2D visual approximation is wrong for this point, because near it the decision surface is
+oblique to the biplot plane.
+
+For an explanation method whose purpose is to visualise *why* a specific observation was classified the way it was,
+the picture can then visibly contradict the number. The rotation (§2.1) fixes exactly this, for the one point being
+explained. The search (§2.4) then chooses among the planes the rotation can produce.
 
 ---
 
-## 2. Part A — Procrustes rotation of a given plane
+## 2. The original PhD method
 
-### 2.1 The idea and the three-point construction
+The thesis defines the method in three places:
 
-The rotation is deliberately framed as a **Procrustes problem**: the optimal one-to-one
-transformation that maps points in one configuration onto points in another (Cox & Cox, 2008).
-Ordinarily Procrustes analysis aligns two whole point clouds. Here it is specialised to a single
-point: the target observation $x_{1\times p}$ (already centred, and — for a PCA biplot —
-potentially scaled).
+- **the rotation:** §3.4–3.4.2 (pp.70–79);
+- **the choice of projection and distance:** §3.7.3–3.9 (pp.102–114);
+- **the search over component pairs:** §4.2.1 (pp.136–140).
 
-To pose the alignment as a Procrustes problem, the single point is embedded as **three points**,
-symmetric about the origin:
+The research code that produced the thesis's results is on the branch `origin/original_PhD_code` (§2.6).
+
+### 2.1 The rotated component biplot (thesis §3.4)
+
+**The three-point construction.** The rotation is framed as a **Procrustes problem**: the optimal one-to-one
+transformation that maps points in one configuration onto points in another (Cox & Cox, 2008). Ordinarily
+Procrustes analysis aligns two whole point clouds. Here it is specialised to a single point, the target observation
+$x_{1\times p}$, which is centred and, for a PCA biplot, possibly scaled. The single point is embedded as **three
+points**, symmetric about the origin:
 
 $$
 \ddot{\mathbf{X}}_{3\times p} =
@@ -94,41 +113,36 @@ x_1  & \cdots & x_p
 \end{bmatrix}
 $$
 
-The middle row is the origin (a fixed point under any rotation) and the two outer rows are $-x$
-and $x$. Aligning this three-point configuration in the full $p$-dimensional space with its
-counterpart in the reduced space is mathematically equivalent to aligning the single vector $x$
-itself — the origin contributes nothing and $-x$ is redundant with $x$ — but casting it as three
-points lets the rotation be solved with the standard Procrustes machinery.
+- The middle row is the origin, a fixed point under any rotation.
+- The two outer rows are $-x$ and $x$.
 
-### 2.2 Two projections of the same three points
+Aligning this configuration is equivalent to aligning the vector $x$ itself, because the origin contributes nothing
+and $-x$ is redundant with $x$. Casting it as three points lets the standard Procrustes machinery solve it.
 
-$\ddot{\mathbf{X}}$ is projected two ways, using the same loading matrix $\mathbf{V}$ (the p×p
-matrix from the SVD of the centred, and possibly scaled, training data $\mathbf{X}_{n\times p}$,
-already used to build the ordinary biplot):
+**Two projections of the same three points.** $\ddot{\mathbf{X}}$ is projected two ways, using the loading matrix
+$\mathbf{V}$ (the $p\times p$ matrix from the SVD of the centred, possibly scaled, training data):
 
 $$
 \mathbf{Y} = \ddot{\mathbf{X}}\mathbf{V}
-\qquad\text{(stays in the full $p$-dimensional PCA space)}
+\qquad\text{(the full $p$-dimensional space)}
 $$
 
 $$
 \mathbf{Z} = \ddot{\mathbf{X}}\mathbf{V}\mathbf{J}^{*} = \ddot{\mathbf{X}}\mathbf{V}_r
-\qquad\text{(reduced to the $r$-dimensional biplot space, $\mathbf{V}_r$ = the columns of $\mathbf{V}$ used for the biplot)}
+\qquad\text{(the $r$-dimensional biplot space, $\mathbf{V}_r$ = the columns of $\mathbf{V}$ used for the biplot)}
 $$
 
-If $r < p$, $\mathbf{Z}$ is zero-padded back out to $p$ columns so the two matrices are the same
-shape. The thesis illustrates this for $r=1,\,p=2$:
+If $r < p$, $\mathbf{Z}$ is zero-padded to $p$ columns. For $r=1,\,p=2$:
 
 $$
 \mathbf{Z}_{3\times p} = \begin{bmatrix} -z_1 & 0 \\ 0 & 0 \\ z_1 & 0 \end{bmatrix}, \qquad
 \mathbf{Y}_{3\times p} = \begin{bmatrix} -y_1 & -y_2 \\ 0 & 0 \\ y_1 & y_2 \end{bmatrix}
 $$
 
-$\mathbf{Y}$ is "where the target really sits" (full information); $\mathbf{Z}$ is "where the
-biplot currently puts it" (reduced, lossy). The rotation's job is to find an orthogonal
-transformation of $\mathbf{V}$ that makes these agree exactly for the target.
+$\mathbf{Y}$ is where the target really sits; $\mathbf{Z}$ is where the biplot currently puts it. The rotation finds
+an orthogonal transformation of $\mathbf{V}$ that makes the two agree for the target.
 
-### 2.3 The Procrustes solution
+**The Procrustes solution.**
 
 $$
 \mathbf{C} = \mathbf{Y}'\mathbf{Z}, \qquad
@@ -136,85 +150,206 @@ $$
 \mathbf{A} = \mathbf{V}^{*}\mathbf{U}'
 $$
 
-($\mathbf{V}^{*}$ here is the SVD's right-singular-vector matrix — an artifact of the SVD
-notation, unrelated to the loading matrix $\mathbf{V}$.) $\mathbf{A}$ is the optimal $p\times p$
-orthogonal rotation matrix. The optimal dilation is
+Here $\mathbf{V}^{*}$ is the SVD's right-singular-vector matrix, unrelated to the loading matrix $\mathbf{V}$.
+$\mathbf{A}$ is the optimal $p\times p$ orthogonal rotation. The optimal dilation is
 
 $$
 \rho = \frac{\operatorname{tr}(\mathbf{Z}\mathbf{A}\mathbf{Y}')}{\operatorname{tr}(\mathbf{Z}'\mathbf{Z})}
 $$
 
-**The dilation is computed but deliberately not applied.** Using it would uniformly rescale
-*every* point on the biplot plane in an attempt to recover magnitude information that dimension
-reduction genuinely lost — a correction that has nothing to do with the target point and would
-distort the axes for no benefit. Only the rotation $\mathbf{A}$ is used.
+and the thesis states that it "is not required": it would uniformly rescale every point on the plane, to recover
+magnitude that dimension reduction genuinely lost. Only $\mathbf{A}$ is used.
 
-### 2.4 The new projection
+**The new projection.**
 
 $$
 \mathbf{V}^{new} = \mathbf{V}\mathbf{A}'
 $$
 
-Biplots built from $\mathbf{V}^{new}$ are called **rotated component biplots (RC biplots)**. The
-defining property — the reason for doing any of this — is that the target point now lies exactly
-on the plane:
+The thesis calls biplots built from $\mathbf{V}^{new}$ **rotated component biplots (RC biplots)**. Their defining
+property is that the target lies exactly on the plane,
 
 $$
 \hat{\mathbf{x}}_i' = \mathbf{x}_i'\mathbf{V}_r^{new}(\mathbf{V}_r^{new})' = \mathbf{x}_i'
 $$
 
-and consequently the model's classification and the biplot-implied classification agree:
+so the model's classification and the biplot's agree: $f(\hat{\mathbf{x}}_i) = f(\mathbf{x}_i)$.
 
-$$
-f(\hat{\mathbf{x}}_i) = f(\mathbf{x}_i)
-$$
+- **The prediction (back-projection) matrix** is $(\mathbf{V}^{new})' = \mathbf{A}\mathbf{V}'$.
+- **A point $z$ in rotated Z-space** maps back to X-space as
+  $\hat{\mathbf{x}}' = \mathbf{z}'\mathbf{A}\mathbf{V}'\mathbf{J}'$.
 
-The corresponding prediction (back-projection) matrix becomes $(\mathbf{V}^{new})' = \mathbf{A}\mathbf{V}'$,
-and a point $z$ in rotated Z-space is mapped back to X-space via
-$\hat{\mathbf{x}}' = \mathbf{z}'\mathbf{A}\mathbf{V}'\mathbf{J}'$.
+### 2.2 The CVA variant (thesis §3.4.2, p.79)
 
-### 2.5 Worked examples from the thesis
-
-**5-point, 2D→1D toy example.** Five points in two dimensions are reduced to a one-dimensional
-PCA biplot. Point 5 is the target. Before rotation its sample predictivity — how well the biplot
-represents it — is 0.72; a 28° rotation with dilation $\rho = 1/1.13$ brings it to exactly 1
-(perfect representation). The cost: the sum of squared residuals **for the dataset as a whole**
-rises from 0.28 to 4 (out of a total sum of squares of 14) — every other point's approximation
-gets slightly worse so that the target's becomes exact. Variable 2's axis, which happens to be
-nearly parallel to the rotated plane, gains axis predictivity at the direct expense of variable 1,
-which becomes nearly perpendicular to it.
-
-**Iris 3D→2D example.** A three-variable PCA biplot, first shown at full rank (3D, no
-approximation error at all) and then reduced to the usual 2D biplot. As described in §1, the
-reduction misclassifies a specific target relative to the model's actual (correct) prediction,
-because the point sits obliquely above the 2D plane. After rotating so the plane passes through
-that point, the projected position moves into the correct (matching) coloured region, and the
-projected/interpolated value becomes numerically identical to the true value — this is the
-$\hat{\mathbf{x}}_i' = \mathbf{x}_i'$ identity from §2.4, demonstrated rather than just asserted.
-
-### 2.6 The CVA variant (§3.5.2)
-
-The same rotation machinery applies to a CVA transformation matrix. For CVA, the "loading matrix"
-role is played by $\mathbf{M}$ (or the two-group optimised transform $\mathbf{M}^{opt}$), and the
-rotated version is
+The same machinery applies to the CVA transformation matrix $\mathbf{M}$, or to the two-group optimised
+$\mathbf{M}^{opt}$:
 
 $$
 \mathbf{M}^{new} = \mathbf{M}^{opt}\mathbf{A}', \qquad
 (\mathbf{M}^{new})^{-} = \mathbf{A}(\mathbf{M}^{opt})^{-1}
 $$
 
-This guarantees the target lands on the CVA biplot plane exactly as before, but it has a cost that
-is specific to CVA and does not arise with PCA: **the class mean points are pulled off the
-canonical plane by the rotation**, so their $(k-1)$-dimensional predictions — which CVA is
-specifically constructed to represent exactly — stop being exact after rotation. PCA rotation has
-no analogous "special point" that gets sacrificed; CVA rotation trades away class-mean fidelity to
-buy target-point fidelity.
+**The general rule.** "The only change required between using either the CVA and PCA biplots is replacing the
+matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$" (§3.9, p.113).
 
-### 2.7 Code mapping — `.bl_rotate()`
+**The cost specific to CVA.**
 
-`R/local_cf.R:45-66` is a direct, line-for-line port of the derivation above (originally adapted
-from the research script `scripts/1.3 Optimal Rotation.R`, which itself calls this function
-`Biplot_rotation()`):
+- Rotation pulls the **class mean points** off the canonical plane.
+- Their $(k-1)$-dimensional predictions, which CVA is built to represent exactly, stop being exact.
+
+PCA has no analogous special point. CVA rotation trades class-mean fidelity for target-point fidelity.
+
+### 2.3 Worked examples (thesis §3.4–3.4.1)
+
+**5-point, 2D→1D toy.**
+
+- **The set-up:** five points in two dimensions are reduced to a one-dimensional PCA biplot, with point 5 as the
+  target.
+- **The rotation:** before rotation the target's sample predictivity is 0.72. A 28° rotation with dilation
+  $\rho = 1/1.13$ brings it to exactly 1.
+- **The cost:** the sum of squared residuals for the dataset rises from 0.28 to 4, out of a total of 14. Variable
+  2's axis gains axis predictivity at the expense of variable 1.
+
+`17_1a` reproduces the angle and the dilation exactly, but not the predictivity or residual figures (A.8). The
+thesis's numbers and the script's should not be quoted together.
+
+**Iris 3D→2D.**
+
+- A three-variable PCA biplot is shown first at full rank, then reduced to 2D.
+- The reduction misclassifies a target relative to the model's prediction.
+- After the rotation, the projected point moves into the matching region, and its interpolated value equals the
+  true value: the identity of §2.1, demonstrated.
+
+### 2.4 Searching all component pairs (thesis §3.9 p.114, §4.2.1 pp.136–140)
+
+The rotation turns *a given* plane. The thesis's local explanation tries every plane that two of the components
+can span:
+
+- **Every pair is tried.** "the projection matrix is recalculated for all possible two-dimensional biplots formed
+  from pairs of components". That is $p!/\bigl(2!(p-2)!\bigr)$ combinations, each selected by a $p\times 2$ matrix
+  $\mathbf{J}_i$ of zeros with ones in the rows of the chosen components (p.139).
+- **Each is rotated** so its plane passes through the target. "The new rotated component biplot is created using
+  the first two components of $\mathbf{M}^{new}$" (p.137).
+- **Constraints** (p.113, p.139):
+  - **actionability:** for the Pima data, Pregnancies and Age cannot decrease;
+  - **feasibility:** each feature stays within its training range;
+  - **plausibility:** the counterfactual "must be selected from a local decision boundary that is within the
+    convex hull of the training data", and boundary areas that contain no data points are discarded.
+- **Within a plane**, the nearest boundary point to the target is found on the biplot plane (p.106).
+- **Across planes**, "the nearest counterfactual is then selected as the counterfactual that corresponds to the
+  shortest change vector measured as the Mahalanobis distance of the change in the original $p$-dimensional space"
+  (pp.139–140):
+
+$$
+\mathbf{d}_i = (\mathbf{z}_{i,cf} - \mathbf{z}_i)(\mathbf{M}_i^{new})^{-}, \qquad
+\hat{\mathbf{x}}_{cf}:\ \min_i\ \mathbf{d}_i'\mathbf{W}^{-1}\mathbf{d}_i,
+$$
+
+  with $\mathbf{W}$ "the total within groups sums-of-squares-and-products (SSP)".
+- **If no plane yields a constrained counterfactual,** "it is assumed that no constraint counterfactual exists for
+  this data point" (p.140).
+
+**The Pima example** (p.140, Figure 4-11):
+
+- seven variables give 21 biplots;
+- 11 of them yield constrained counterfactuals;
+- the nearest comes from components 1 and 7.
+
+The thesis's conclusion lists the search as a contribution: it "systematically constructs biplots using all pairs
+of components, thereby approximating different slices of the decision surface" (§4.3, p.148).
+
+### 2.5 The distance criterion in the thesis
+
+The thesis fixes the cross-plane criterion **by projection**:
+
+- **p.106 (§3.8.1):** "the nearest counterfactual … is selected as the counterfactual that corresponds to the
+  shortest change vector $\mathbf{d}_i$ measured in the full dimensional space using either **Euclidean distance
+  for PCA biplots and Mahalanobis distance for CVA biplots**", with
+  $\mathbf{d}_i = (\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{V}_2'$ or
+  $(\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{M}_2^{-}$.
+- **p.103 (§3.7.3) and p.111 (§3.8.3):** "In the CVA biplot … the Euclidean distances on the biplot plane
+  correspond to Mahalanobis distances in the original feature space." By contrast, a standardised PCA biplot
+  "ignores the correlation" between features.
+- **p.113 (§3.9):** PCA is for the initial data investigation. "The CVA biplot is then used to generate local and
+  global interpretations, since it ensures that the estimated counterfactual reflects the shortest Mahalanobis
+  distance in the original feature space", with the groups defined by the model's four outcomes
+  (TP, TN, FP, FN).
+- **p.148 (§4.3):** the conclusion describes "a dual approach": Mahalanobis distance in the feature space for
+  selection, and the $L_2$ distance on the plane for consistency with the picture.
+
+**The two halves of the "dual approach" are one quantity under CVA.** The thesis's own p.111 statement says so, and
+§3.4 proves it for every rotated plane. The in-plane $L_2$ step therefore already finds the Mahalanobis-nearest
+point, and the cross-plane comparison ranks planes by the same measure. **Under PCA** the thesis's rule is
+Euclidean throughout.
+
+### 2.6 The research code (`origin/original_PhD_code`)
+
+**`Biplot_rotation()`** (`scripts/1.3 Optimal Rotation.R:32-81`):
+
+- **Target vector:** centred; scaled only for PCA with `standardise = TRUE`. CVA forces no scaling (42–47).
+- **Y:** `Y <- rbind(-X.st[tdp,], rep(0, num_vars), X.st[tdp,])` (50–52).
+- **Rotation:** `YVr` is the pair's two columns, zero-padded. Then `A <- svd(t(YV) %*% YVr)` with
+  `A = v %*% t(u)` (59–66).
+- **ρ:** computed as a "Rho diagnostic" (68–69), never applied, and not returned.
+- **Output:** the full `Vrho <- V %*% t(A)` and `tVrho <- solve(Vrho)`. Callers then use columns 1–2
+  (`4.3:91`, `4.3:215`).
+
+**The pair search** (`scripts/4.3 Different Eigenvalues.R`). No other script loops over pairs. In order:
+
+1. **Enumerate:** `n_contrib <- t(combn(num_vars, 2))`, i.e. all $\binom{p}{2}$ pairs with no cap (49–50).
+2. **Data:** the target followed by the **test** data, `rbind(biplot_dataT[tdp, ], biplot_dataT)` (27).
+3. **Rotate:** each pair is rotated (77–95).
+4. **Grid and hull:** a new grid is built in the rotated plane. The **convex hull is rebuilt in that plane** from
+   the rotated target and test data, and contours are clipped to it (`1.1:131-142`, `1.4:121-150`).
+5. **Contour rule:** closed contours are kept only if they enclose the target (`1.4:130-141`).
+6. **Filters:** contour points are back-projected, then two filters run:
+   - `set_filters` (range expressions only; there are no fixed or direction constraints);
+   - `train_ranges` (`1.4:159-169`).
+7. **Re-score:** each contour keeps only the points whose prediction is on its side (`1.4:174-184`).
+8. **Nearest point per contour:** by 2D squared Euclidean distance with `max.col(-d2)`, whose default
+   `ties.method = "random"` breaks ties at random (`1.4:40-45`). Then the nearest opposite-class contour is taken
+   (`1.4:237-266`).
+9. **Distance per pair** (162–166):
+
+   ```r
+   vec_to_boundary_Z <- as.matrix(biplot_search_ev$B_boundary_z_value - biplot_grid_rotate$Z.st[1, , drop = FALSE])
+   vec_to_boundary   <- vec_to_boundary_Z %*% tVr
+   pc.distz[i] <- (as.matrix(vec_to_boundary, nrow = 1)) %*% Wmat_inv %*% t(as.matrix(vec_to_boundary, nrow = 1))
+   ```
+
+   The in-plane difference is back-projected by the rotated prediction matrix, and $\mathbf{W}^{-1}$ is applied in
+   X-space. A Euclidean alternative is commented out (167).
+10. **Select:** the argmin of `pc.distz` after dropping zeros (178–186). The winning pair is then rotated and
+    searched again.
+
+**`Wmat`.** It is biplotEZ's `bp$Wmat` (`scripts/3.1 Biplot search - Train data.r:183-189`):
+
+- the within-class SSP with **no divisor**;
+- on the four-outcome factor (TP/TN/FP/FN, `pred_col`);
+- from the same `CVA()` call that gives `Vmat = Lmat`.
+
+The search runs under **CVA only**. A PCA biplotEZ object has no `Wmat`, so `solve(Wmat)` errors. Since biplotEZ's
+CVA loadings satisfy $\mathbf{M}'\mathbf{W}\mathbf{M}=\mathbf{I}$, `pc.distz` is exactly $\lVert\Delta z\rVert^2$
+(§3.4). The research code's Mahalanobis selection was always the in-plane distance selection.
+
+**Defects in the research code**, recorded so that the package's behaviour is not mistaken for a change of
+method:
+
+- **The B = 0 fallback.** When no contour survives a pair, `Biplot_boundary_search()` returns
+  `B_boundary_z_value = 0` (`1.4:100-113`). The pair's "distance" is then the target's distance from the origin,
+  and the pair is not excluded.
+- **Inconsistent plot data.** The in-loop plot coordinates come from uncentred data (`4.3:99`); the final step's
+  come from `bp$X` (`4.3:225`).
+- **The default flow does not rotate.** `3.2` sets `Rotate <- F` (`3.2:90`). The Shapley script `4.4` uses that
+  unrotated result by default; the pair-search result is only a commented-out alternative (`4.4:25-29`).
+
+---
+
+## 3. The current implementation
+
+### 3.1 The rotation — `.bl_rotate()`
+
+`R/local_cf.R:45-66` is a line-for-line port of §2.1 (from the research code's `Biplot_rotation()`):
 
 ```r
 .bl_rotate <- function(x_target_st, V, proj_pair) {
@@ -241,8 +376,6 @@ from the research script `scripts/1.3 Optimal Rotation.R`, which itself calls th
 }
 ```
 
-Term-by-term correspondence with §2.1–2.4:
-
 | Thesis | Code |
 |---|---|
 | $\ddot{\mathbf{X}}$ | `Y <- rbind(-x_target_st, rep(0, p), x_target_st)` |
@@ -254,49 +387,24 @@ Term-by-term correspondence with §2.1–2.4:
 | $\mathbf{V}^{new} = \mathbf{V}\mathbf{A}'$ | `Vrho <- V %*% t(A)` |
 | $(\mathbf{V}^{new})^{-1}$ / prediction matrix | `tVrho <- solve(Vrho)` |
 
-Two points where the code makes an implementation choice not spelled out verbatim in the thesis
-prose, both intentional and both consistent with it:
+Three implementation choices, all consistent with the thesis:
 
-1. **No dilation step.** §2.3 above; the thesis explicitly says $\rho$ "is not required," and the
-   code never computes or applies it.
-2. **`solve(Vrho)`, not a transpose.** The thesis states the prediction matrix as
-   $(\mathbf{V}^{new})' = \mathbf{A}\mathbf{V}'$ — a transpose, not a general inverse. That
-   identity holds only when $\mathbf{V}^{new}$ is orthogonal, which is true in the PCA case
-   because $\mathbf{V}$ itself is Euclidean-orthonormal and $\mathbf{A}$ is orthogonal, so their
-   product is too. For a **CVA** projection, $\mathbf{V}$ is not Euclidean-orthonormal — it is
-   $\mathbf{W}$-orthonormal ($\mathbf{V}'\mathbf{W}\mathbf{V} = \mathbf{I}$ for the within-class
-   covariance $\mathbf{W}$; see `mahalanobis_technical_note.md` §2.2) — so $\mathbf{V}^{new}$ is
-   not orthogonal in the ordinary sense and a transpose would not equal its inverse. The code uses
-   the general matrix inverse `solve()` so both projection types are handled correctly by the same
-   function.
+1. **No dilation.** ρ is never computed (§2.1).
+2. **`solve(Vrho)`, not a transpose.**
+   - **The thesis's form:** the prediction matrix $(\mathbf{V}^{new})' = \mathbf{A}\mathbf{V}'$ is a transpose.
+   - **When that is valid:** only when $\mathbf{V}^{new}$ is orthogonal. That is true under PCA, where $\mathbf{V}$
+     is Euclidean-orthonormal.
+   - **Under CVA:** $\mathbf{V}$ is $\mathbf{W}$-orthonormal ($\mathbf{V}'\mathbf{W}\mathbf{V} =
+     \mathbf{I}/(n-g)$; §3.4), so a transpose would not be its inverse.
+   - The general inverse handles both projections.
+3. **Columns 1–2 are returned directly.**
+   - **Why columns 1–2:** the package's biplot is always two-dimensional. `YVr_padded` is non-zero only in its
+     first two columns, so the target's rotated coordinates land in columns 1–2 of `Vrho` whichever pair built
+     `Vr`.
+   - **Equivalent to the original:** the research code returns the full matrix and its callers take columns 1–2
+     (§2.6).
 
-One further departure from the thesis's general $r$: the package's biplot is **always
-two-dimensional** ($r=2$ fixed, unlike the thesis's illustrative $r=1$ example). Because
-`YVr_padded` therefore has non-zero entries only in its first two columns, the SVD construction
-guarantees the target's rotated information concentrates in columns 1–2 of `Vrho` *regardless of
-which eigenvector pair was used to build* `Vr` — which is why the function can simply always
-return columns 1–2 (`Vrho[, c(1L, 2L)]`) rather than tracking where the pair's original indices
-ended up.
-
----
-
-## 3. Part B — Selecting which plane to rotate: the eigenvector-pair search
-
-Part A rotates *whatever* 2D plane you hand it (via `proj_pair`, the two eigenvector/loading
-columns chosen as $\mathbf{V}_r$). With $p$ features there are $\binom{p}{2}$ possible planes to
-choose from before rotating. The thesis chapter given for this note describes the rotation of a
-single, already-decided plane (its worked examples fix a specific PCA/CVA reduction and rotate
-that one); it does not narrate a search over multiple candidate planes as part of this chapter's
-prose.
-
-That search is nonetheless a genuine part of the original PhD method, just documented in code
-rather than in this chapter: `mahalanobis_technical_note.md` records that the original research
-script `scripts/1.3 Optimal Rotation.R` already computed a per-pair distance
-`pc.distz[i] <- (v) %*% Wmat_inv %*% t(v)` across candidate pairs, using the within-class scatter
-matrix `Wmat` built in a companion script. The package's `bl_find_local_cf()` is a direct
-generalisation and packaging of that mechanism into a documented, parameterised search.
-
-### 3.1 Pair enumeration
+### 3.2 Pair enumeration
 
 `R/local_cf.R:18-32`:
 
@@ -318,74 +426,53 @@ generalisation and packaging of that mechanism into a documented, parameterised 
 }
 ```
 
-This produces pairs in canonical order $(1,2), (1,3), (2,3), (1,4), (2,4), (3,4), \ldots$, capped
-at `max_pairs` (default `10L` in `bl_find_local_cf()`). The package design notes
-(`1 Foundation intro documents.txt` §10.7) fix this as a hard constraint: never test more pairs
-than $\binom{p}{2}$ actually exist.
+**Order and cap:**
 
-### 3.2 The per-pair pipeline
+- Pairs come in colexicographic order, $(1,2), (1,3), (2,3), (1,4), (2,4), (3,4), \ldots$.
+- They are capped at `max_pairs`, default `21L` in `bl_find_local_cf()` (10 until 2026-10-31).
+- The design notes (`1 Foundation intro documents.txt` §10.7) also cap the count at the $\binom{p}{2}$ pairs that
+  exist.
 
-Inside `bl_find_local_cf()` (`R/local_cf.R:432-622`), each candidate pair goes through the same
-five-stage pipeline:
+**The cap is not in the thesis or the research code**, which try every pair. The default covers every pair up to
+$p=7$ ($\binom{7}{2}=21$), so the Pima example's search matches the thesis's. It first leaves pairs out at $p=8$
+($\binom{8}{2}=28$) (§4.7).
 
-1. **Rotate** — call `.bl_rotate(x_target_st, V, pair)` (Part A above) to get `Vr_rot`/`tVr_rot`
-   for this pair.
-2. **Project** — the target and all training observations are projected into this pair's rotated
-   Z-space (`Z_target`, `Z_train_rot`).
-3. **Grid and score** — an $m\times m$ grid ($m=200$ by default) is built over the training data's
-   rotated range (+10% padding), back-projected to X-space, and scored through the model in
-   chunks of 50,000 rows.
-4. **Extract and filter the boundary contour** — `grDevices::contourLines()` at levels
-   $cutoff \pm b_{margin}$, then a four-stage filter cascade on the resulting vertices
-   (`R/local_cf.R:490-541`):
-   - (a) keep only contour segments on the class *opposite* the target's predicted class;
-   - (b) **actionability** — `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`,
-     `c(min,max)`), applied first because they are typically the most selective, letting the loop
-     short-circuit early (`if (!any(keep)) next`);
-   - (c) **feasibility** — `train_ranges` (per-feature min/max observed in training data), applied
-     only to the survivors of (b);
-   - (d) **model-consistency re-score** — every surviving vertex is back-projected and re-scored
-     through the actual model, and dropped if the model disagrees with which side of `cutoff` the
-     contour level implied. This is the most expensive stage, which is exactly why (b) and (c) run
-     first, to minimise how many vertices reach it.
+### 3.3 The per-pair pipeline
 
-   Note what is deliberately *not* applied here: the Z-space training-hull polygon used elsewhere
-   in the package. Rotation invalidates that polygon's coordinates (it was built for the
-   unrotated plane), so only `train_ranges` and `set_filters` constrain the local search
-   (`1 Foundation intro documents.txt` §10.4).
-5. **Within-pair nearest vertex** — among the vertices that survive all four filters, the nearest
-   one to the target is found by plain 2D Euclidean distance in the rotated Z-space
-   (`.nearest_idx_block()`). This distance metric is deliberately **basis-local**: within one
-   fixed rotated plane, ordinary Euclidean distance is the natural and correct way to find "the
-   nearest point on this plane."
+Inside `bl_find_local_cf()` (`R/local_cf.R:440`; the pair loop is lines 500–690), each pair goes through five
+stages:
 
-### 3.3 Why a different metric is needed *across* pairs
+1. **Rotate.** `.bl_rotate(x_target_st, V, pair)` (§3.1) gives `Vr_rot` / `tVr_rot`.
+2. **Project.** The target and all training observations go into the pair's rotated Z-space (`Z_target`,
+   `Z_train_rot`).
+3. **Grid and score.**
+   - An $m\times m$ grid ($m=200$ by default) spans the training data's rotated range, plus 10% padding.
+   - It is back-projected to X-space and scored through the model in chunks of 50,000 rows.
+4. **Extract and filter the boundary contour.** `grDevices::contourLines()` at $cutoff \pm b_{margin}$, then four
+   filters on the vertices (`R/local_cf.R:558-609`):
+   - (a) **opposing class:** only contour segments on the class *opposite* the target's prediction;
+   - (b) **actionability:** the `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`, `c(min,max)`).
+     They run first because they are typically the most selective, so the loop can stop early
+     (`if (!any(keep)) next`);
+   - (c) **feasibility:** `train_ranges` (per-feature training min/max), applied to the survivors of (b);
+   - (d) **model re-score:** every surviving vertex is back-projected and re-scored, and dropped if the model
+     disagrees with the contour's side of `cutoff`. This is the most expensive filter, which is why (b) and (c)
+     run first.
 
-Comparing the within-pair "nearest vertex" distances directly across different pairs by their raw
-2D Z-space Euclidean value is not mathematically sound, for a reason specific to this package's
-loading matrices (`mahalanobis_technical_note.md` §2.2):
+   **No hull polygon.** The search applies no convex-hull polygon. The global biplot's polygon was built for the
+   unrotated plane, so rotation invalidates its coordinates. Only `train_ranges` and `set_filters` constrain the
+   search (`1 Foundation intro documents.txt` §10.4; CLAUDE.md §4).
+5. **Within-pair nearest vertex.** Among the survivors, the nearest to the target is found by 2D Euclidean distance
+   in the rotated plane (`.nearest_idx_block()`). It is the exact minimum, taking the first vertex on an exact tie,
+   so the step is deterministic (`../nearest-vertex-tie-break.md`).
 
-- Each pair captures a different amount of the total variance/separation in its particular 2D
-  slice.
-- The loading matrix $\mathbf{V}$ is **$\mathbf{W}$-orthonormal**
-  ($\mathbf{V}'\mathbf{W}\mathbf{V} = \mathbf{I}$ for the within-class covariance $\mathbf{W}$),
-  not Euclidean-orthonormal. A one-unit step in rotated Z-space therefore corresponds to a
-  *different* displacement in the original feature space depending on which pair produced that
-  Z-space.
-- The rotation $\mathbf{A}$ from Part A is orthogonal in the full $p$-dimensional space, but the
-  2D slice it produces (`Vrho[, c(1,2)]`) does not preserve Euclidean distances uniformly across
-  different pair choices.
+### 3.4 The selector and its metric
 
-So a metric is needed that lives entirely in X-space and does not care which 2D rotation produced
-a given candidate. The chosen metric is the **squared Mahalanobis distance** using the pooled
-within-class covariance $\mathbf{W}$ — the same matrix $\mathbf{V}$ is orthonormal under, and the
-same one CVA itself optimises against:
+The winning pair is the one with the smallest **squared Mahalanobis distance** in X-space (`R/local_cf.R:633-638`):
 
 $$
 d_M^2(v) = v^{\mathsf T}\mathbf{W}^{-1}v, \qquad v = B_x - x_{obs}
 $$
-
-`R/local_cf.R:563-570`:
 
 ```r
 dist_mah <- if (!is.null(metric_inv)) {
@@ -396,24 +483,117 @@ dist_mah <- if (!is.null(metric_inv)) {
 }
 ```
 
-`metric_inv` ($\mathbf{W}^{-1}$) is computed once in `bl_build_projection()` via
-`chol2inv(chol(W))` (with a ridge-regularised fallback `chol2inv(chol(W + \lambda I))`,
-$\lambda = 10^{-6}\cdot\text{mean}(\text{diag}(\mathbf{W}))$, when $\mathbf{W}$ is singular — see
-`mahalanobis_technical_note.md` §3.2 for why Cholesky rather than `solve()`), then stored on
-`bl_result$metric_inv` and reused unchanged for every pair and every target.
+**The metric.** `metric_inv` is $\mathbf{W}^{-1}$, computed once in `bl_build_projection()` and reused for every
+pair and every target.
 
-This is not a novel addition on top of the original method — it is the **same criterion the
-original PhD script already used** (`pc.distz <- v %*% Wmat_inv %*% t(v)`). The package's
-`distance = "euclidean"` option (plain 2D Z-distance, used for cross-pair comparison) exists only
-to reproduce a since-superseded intermediate state of the port — during the migration described in
-`mahalanobis_technical_note.md`, the package had briefly regressed to Euclidean because
-`biplotEZ::CVA()` does not expose the `Wmat` its own computation depends on internally, so the
-package could not access the correct metric until it was reconstructed independently. Mahalanobis
-is the default and the methodologically intended behaviour, matching the PhD original.
+- **What $\mathbf{W}$ is:** the pooled within-class covariance, divisor $n-g$, on the unstandardised features.
+- **Which class factor:** the CVA groups (`metric_type = "W_cva"`), else the binary class (`"W_binary"`, the PCA
+  case).
+- **How it is inverted:** by Cholesky, with a ridge fallback.
 
-### 3.4 Winner selection
+The companion note has the definition and the inversion. `distance = "euclidean"` selects by the in-plane distance
+`dist_z` instead. Both distances are stored for every pair (`all_distances`, `all_distances_mahalanobis`).
 
-`R/local_cf.R:584-621` — a running-minimum loop over all tested pairs:
+#### Under CVA the in-plane distance *is* the Mahalanobis distance, for every pair
+
+**What differs between pairs.** Each pair has its own rotation $\mathbf{A}_i$, so its own prediction matrix
+$(\mathbf{M}\mathbf{A}_i')^{-1} = \mathbf{A}_i\mathbf{M}^{-1}$. The same in-plane step $\Delta z$ therefore maps to
+a different X-space step $\Delta x$ in every pair, and the Euclidean length of $\Delta x$ differs too. What does
+*not* differ is its Mahalanobis length.
+
+**The algebra.**
+
+1. **biplotEZ's construction.** biplotEZ (2.2) builds the CVA loadings as
+   $\mathbf{M} = \mathbf{W}_{SSP}^{-1/2}\mathbf{V}_{svd}$, with $\mathbf{W}_{SSP}$ the within-class SSP (it is
+   returned as `bp$Wmat`). So $\mathbf{M}'\mathbf{W}_{SSP}\mathbf{M} = \mathbf{I}$, and
+   $\mathbf{M}^{-1} = \mathbf{M}'\mathbf{W}_{SSP}$.
+2. **The step in X-space.** Let $\mathbf{J}$ select columns 1–2. In pair $i$, an in-plane step maps to
+   $\Delta x = \Delta z\,\mathbf{J}'\mathbf{A}_i\mathbf{M}'\mathbf{W}_{SSP}$.
+3. **Its Mahalanobis length:**
+
+$$
+\Delta x\,\mathbf{W}_{SSP}^{-1}\,\Delta x'
+= \Delta z\,\mathbf{J}'\mathbf{A}_i(\mathbf{M}'\mathbf{W}_{SSP}\mathbf{M})\mathbf{A}_i'\mathbf{J}\,\Delta z'
+= \Delta z\,\mathbf{J}'\mathbf{A}_i\mathbf{A}_i'\mathbf{J}\,\Delta z'
+= \lVert\Delta z\rVert^2 .
+$$
+
+$\mathbf{A}_i$ enters only as $\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$ and cancels, whatever the pair. The package's
+metric is $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$, so for the package
+
+$$
+d_M^2 = (n-g)\cdot \texttt{dist\_z}^2 \quad\text{for every pair.}
+$$
+
+**The geometric picture.**
+
+- $\mathbf{M}$ whitens the within-class scatter: in canonical coordinates $u = x\mathbf{M}$, Mahalanobis distance
+  in X is ordinary Euclidean distance.
+- $\mathbf{A}_i$ is a rotation *inside* that space, and each pair's plane is a differently tilted flat slice of it.
+- Distance measured within a flat slice equals distance in the whole space, for every slice.
+
+Different pairs give different slices and so different boundary points and different $\Delta z$, but each $\Delta z$
+is measured in the same metric. **The two selectors therefore rank the pairs identically.** The within-pair
+Euclidean step (§3.3, stage 5) already finds the Mahalanobis-nearest vertex.
+
+**Conditions.** The identity needs three things:
+
+1. **CVA:** under PCA, $\mathbf{V}'\mathbf{V}=\mathbf{I}$ instead (below).
+2. **The CVA's own $\mathbf{W}$:** the package builds `metric` from the same class factor it passes to `CVA()`.
+3. **A displacement in the drawn plane:** true for the search's point, because the rotation puts the target in the
+   plane and the boundary vertex is on it. False for a restored "fixed" counterfactual (§3.5, §4.6).
+
+**It also holds for 2-group CVA.** biplotEZ then adds the second axis by `CVAlowdim(low.dim = "sample.opt")`,
+which builds `cbind(M[, 1], M[, -1] %*% <orthogonal matrix>)` and so keeps $\mathbf{M}'\mathbf{W}\mathbf{M} =
+\mathbf{I}$. The other option, `"Bhattacharyya.dist"`, would not; the package does not use it.
+
+**Measured.**
+
+| case | $\max\lvert\mathbf{V}'\mathbf{W}\mathbf{V}(n-g)-\mathbf{I}\rvert$ | $d_M^2/\texttt{dist\_z}^2$, every pair | source |
+|---|---|---|---|
+| iris, CVA on TP/TN/FP/FN ($n-g = 146$) | 1.29e-14 | 146 (6 of 6 pairs) | `17_3` §11 |
+| iris, 2-group CVA ($n-2 = 148$) | 6.13e-15 | 148 (6 of 6) | `17_3` §11 |
+| loan harness, `bl_results_v2` ($n = 15{,}996$, $g = 4$) | 1.01e-13 | 15,992 in the constrained, free and external searches (6 of 6 each) | harness driver |
+| loan harness, 2-group CVA | 8.81e-14 | 15,994 | harness driver |
+
+The same in-plane step $\Delta z = (0.7, -0.4)$, sent through each pair's prediction matrix (iris, target 1;
+`17_3` §11):
+
+| pair | prediction matrix − pair (1,2)'s (max abs) | $\lVert\Delta x\rVert^2$ (Euclidean) | $\Delta x\,\mathbf{W}^{-1}\Delta x'$ | ratio to $\lVert\Delta z\rVert^2$ |
+|---|---|---|---|---|
+| (1,2) | 0 | 12.7235 | 94.9 | 146 |
+| (1,3) | 5.434 | 15.3715 | 94.9 | 146 |
+| (2,3) | 9.878 | 85.0205 | 94.9 | 146 |
+| (1,4) | 16.561 | 200.3843 | 94.9 | 146 |
+| (2,4) | 20.649 | 202.9754 | 94.9 | 146 |
+| (3,4) | 13.099 | 239.3651 | 94.9 | 146 |
+
+In the package's own search on that target, both `distance` options pick pair (3,4); on the loan harness's free
+search, both pick (3,4). The thesis states the identity in prose (p.111, §2.5).
+
+#### Under PCA they are different metrics
+
+- **The in-plane distance:** $\mathbf{V}$ is orthonormal in the (standardised) feature space, and so is every
+  rotated basis. For in-plane points, `dist_z` is the Euclidean distance between the standardised feature
+  vectors. That is comparable across pairs; it is the thesis's PCA criterion (§2.5).
+- **The default selector:** the package's default uses $\mathbf{W}$ = `W_binary`, the within-class covariance by
+  the 0/1 class on unstandardised features. That is a different metric, and the ratio varies by pair: 1.30 to 1.58
+  on iris (`17_3` §11).
+- **How often they disagree:**
+  - over the 221 rows of `17_1`'s PCA set-up, the two selectors pick different pairs on 51 (23%);
+  - in the standardised-iris fixture of `tests/testthat/test-boundary.R` (PCA, target 1), Z-distance would pick
+    (1,4) and Mahalanobis (3,4).
+
+**So, by projection:**
+
+| `distance` | CVA | PCA |
+|---|---|---|
+| `"mahalanobis"` (default) | the thesis's criterion; identical to `"euclidean"` | `W_binary` Mahalanobis — a package choice; not the thesis's rule |
+| `"euclidean"` | identical to `"mahalanobis"` | standardised Euclidean — the thesis's rule (p.106) |
+
+### 3.5 Winner selection and the "fixed" restore
+
+`R/local_cf.R:652-689` is a running minimum over the tested pairs:
 
 ```r
 selector <- if (distance == "mahalanobis") dist_mah else dist_z
@@ -432,451 +612,235 @@ if (is.finite(selector) && selector < best_selector) {
 }
 ```
 
-Every pair's `dist_z` and `dist_mahalanobis` are retained (`all_distances`,
-`all_distances_mahalanobis`) even for pairs that don't win, so a user can inspect how close the
-alternatives were. The winning pair's rotated loading matrices, grid, contour, and boundary point
-are what get plotted and reported as the local counterfactual (`bl_local_result$best_pair`,
-`$B_x`, `$B_z`, etc.).
+**What is reported:**
+
+- **Every pair's distances** are kept, winners or not: `dist_z` and `dist_mahalanobis` (`all_distances`,
+  `all_distances_mahalanobis`).
+- **The winning pair's objects** are what the result reports and plots: its rotated loading matrices, grid,
+  contour and boundary point (`best_pair`, `B_x`, `B_z`, …).
+- **No pair can be a winner by accident.** A pair with no surviving vertex is skipped (`next`); the research
+  code's B = 0 defect (§2.6) has no counterpart.
+
+**After the search: the "fixed" restore** (`R/local_cf.R:727-752`, `.restore_fixed()` at 838).
+
+- **During the search:** a `"fixed"` constraint is a tolerance of 0.5 model units, because a vertex of the 2D
+  contour rarely holds a feature at exactly its observed value.
+- **After the winner is chosen:** each fixed feature the search moved is set back to its observed value. If that
+  point still crosses the boundary and is within `train_ranges`, it becomes the counterfactual (`B_x`, `B_pred`).
+  `fixed_check` records the outcome.
+- **The restored point is generally not on the plane:**
+  - `B_z` is its projection, which is what the local plot draws;
+  - `dist_z`, `dist_mahalanobis` and the per-pair tables still describe the search's point.
+- Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md).
+
+### 3.6 How the implementation differs from the original
+
+| aspect | thesis / research code | package |
+|---|---|---|
+| projection for the local search | CVA (TP/TN/FP/FN); the research code cannot run it under PCA | PCA or CVA |
+| rotation | Procrustes, no dilation, columns 1–2 | the same (§3.1) |
+| pairs tried | all $\binom{p}{2}$ | up to `max_pairs = 21L`: all pairs for $p \le 7$ (§3.2) |
+| grid built over | the target and the test data (research code) | the training data's rotated range |
+| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | no hull in the local search (§3.3); no enclosure rule |
+| actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)` |
+| feasibility | `train_ranges` | `train_ranges`, filter (c) |
+| nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
+| cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ by default, for both projections (§3.4) |
+| a pair with no boundary point | B = 0, kept with a spurious distance | skipped |
+| the explanation used downstream | the research code's default flow is unrotated (§2.6) | always the rotated winner |
+
+The divisor $n-g$ scales every distance by the same constant, so it never changes the winner. Under CVA the package
+selects exactly as the thesis does; under PCA the default does not (§4.4).
 
 ---
 
-## 4. Known issues and limitations
+## 4. Current problems
 
-### 4.1 The rotation plane is under-determined (the core caveat)
+Ranked by consequence. Each states the problem and why it happens, with a headline number; Appendix A has the
+evidence.
 
-This is the most significant limitation, and it is subtle enough to be easy to miss entirely.
+### 4.1 The plane is under-determined, and cross-platform reproducibility is untested
 
-**Why it happens.** $\ddot{\mathbf{X}} = [-x;\,0;\,x]$ has **rank 1** — all three rows are
-multiples of the single vector $x$. Writing $a = (-1, 0, 1)'$ and $u = \mathbf{V}'x$, the
-Procrustes cross-product becomes
+**Why it happens.**
 
-$$
-\mathbf{C} = \mathbf{Y}'\mathbf{Z}_{padded} = 2\,u\,w', \qquad w = (u_{[\text{pair}_1]}, u_{[\text{pair}_2]}, 0, \ldots, 0)
-$$
+- $\ddot{\mathbf{X}} = [-x;\,0;\,x]$ has **rank 1**: all three rows are multiples of $x$.
+- Write $\ddot{\mathbf{X}} = a\,x'$ with $a = (-1, 0, 1)'$, and $u = \mathbf{V}'x$. The Procrustes cross-product
+  is then $\mathbf{C} = 2\,u\,w'$, with $w = (u_{[\text{pair}_1]}, u_{[\text{pair}_2]}, 0, \ldots, 0)$. That is
+  also rank 1.
+- So the Procrustes optimum is **a single vector constraint**, $\mathbf{A}'u \propto w$, on a $p\times p$
+  orthogonal matrix.
+- At $p=4$ the optimal rotations form a 3-dimensional family, and the planes they produce a 2-dimensional one
+  (§5.1).
+- The SVD of $\mathbf{C}$ has $p-1$ **exactly degenerate** zero singular values. The plane's second direction is
+  whatever LAPACK emits for that degenerate subspace.
 
-— also rank 1. Minimising the Procrustes objective over orthogonal matrices then reduces to a
-**single vector constraint**, $\mathbf{A}'u \propto w$, on a $p\times p$ orthogonal matrix. For
-$p=4$ this pins down only 1 of 3 rotational degrees of freedom; the solution set is a
-3-dimensional manifold of rotations that all achieve the identical Procrustes optimum. The SVD of
-the rank-1 $\mathbf{C}$ has $p-1$ **exactly degenerate** zero singular values, and the
-corresponding singular vectors — hence $\mathbf{A}$, hence the plane's second direction — are
-whatever a particular LAPACK bidiagonalisation implementation happens to emit for a degenerate
-subspace.
+**Consequences.**
 
-**Measured consequences** (loan-default GAM model, $p=4$, target row 49, `proj_pair = (2,3)` — the
-pair the search actually selects for this target):
+- **Inputs that differ only in their last bits give different planes.** Rotating from `svd(X_std)$v` instead of
+  `bl_result$V`, a difference of 4.65e-15, gives planes **65.91°** apart. The counterfactual moves with the plane
+  (A.1).
+- **An instance in the package itself.**
+  - **What happened:** reordering the CVA group levels (TP/TN/FP/FN), a change with no mathematical effect,
+    perturbed `V` enough to change every Phase 3 result in the loan harness. Target 13's constrained
+    counterfactual moved from 0.547 to 0.509.
+  - **What the package does now:** it pins the level order (CLAUDE.md §6).
+- **Within one platform the search is deterministic** (A.2):
+  - `.bl_rotate()` is bit-identical for identical inputs;
+  - the nearest vertex is the exact minimum.
+- **Across platforms it is untested.** A different BLAS/LAPACK, OS or R version may legitimately return a different
+  plane, and so a different counterfactual, from identical data and code. For a method meant to support auditable,
+  published explanations, this is a material risk to disclose.
 
-- Singular values of $\mathbf{C}$: `1.6274e+00, 6.7123e-17, 0.0000e+00, 0.0000e+00` — confirming
-  rank 1 of 4, a 3-dimensional null space.
-- Perturbing the input basis $\mathbf{V}$ by amounts at or below ordinary floating-point noise
-  produces wildly different planes (first principal angle is always 0° — the target's own
-  direction is always shared and stable; the *second* angle is the arbitrary part):
+**What is *not* affected**, to keep this in proportion:
 
-  | Perturbation to V | max abs change | 2nd principal angle |
-  |---|---|---|
-  | re-orthonormalise only | 4.44e-16 | 56.79° |
-  | random, scale 1e-16 | 4.44e-16 | 12.16° |
-  | random, scale 1e-15 | 1.44e-15 | 0.00° |
-  | random, scale 1e-12 | 1.11e-12 | 35.26° |
-  | random, scale 1e-08 | 2.24e-08 | 11.49° |
-  | `svd(X_std)$v` vs biplotEZ's own `Lmat` (numerically the same matrix, an incidental real-world difference) | **4.65e-15** | **65.91°** |
+- the target's position is exact whichever plane is drawn;
+- the counterfactual is a genuine boundary point, re-scored through the model (filter (d)), just not a canonical
+  one;
+- the cross-pair distance is measured in X-space, which the rotation cannot distort;
+- Phases 1 and 2 never call `.bl_rotate()`: `bl_build_projection()`, `bl_build_grid()`, `bl_find_boundary()`,
+  `bl_robustness()` and `bl_surrogate()`;
+- `bl_set_scaling()` is display-only and cannot reach `V`, the grid or the plane.
 
-- Only **46%** of the resulting plane's second direction actually lies inside
-  $\text{span}(\mathbf{V}_{[,2]}, \mathbf{V}_{[,3]})$ — the eigenplane the pair label `(2,3)`
-  claims to represent.
-- The target's own coordinates are essentially identical in both planes regardless
-  (`(0.764192, 1.346277, ...)` to 6 decimal places) — which is exactly why the discrepancy is easy
-  to miss: the one thing you'd naturally check (does the target land correctly?) looks fine either
-  way.
+The research code has the same construction (§2.6): this is inherited from the original method, not a porting
+error.
 
-**Practical consequences:**
+### 4.2 The pair labels are weak
 
-1. **Reproducibility risk.** The returned counterfactual depends on a LAPACK tie-break over an
-   exactly degenerate subspace. A different BLAS/LAPACK implementation, platform, or R version may
-   legitimately return a different plane — and therefore a different counterfactual — from
-   identical data and identical code. For a method meant to support auditable, published
-   explanations, this is a material risk to disclose.
-2. **`proj_pair` is a weaker label than it appears.** The pair search (Part B) enumerates six
-   named eigenvector pairs, but each candidate plane is only loosely tied to the pair that names
-   it (46% overlap, in the measured case). It is more accurate to describe the search as *sampling
-   six arbitrary planes through the target* than as *enumerating six eigenplanes*.
-3. **The counterfactual is a local, not global, optimum within its own plane.** It is the nearest
-   boundary point within one arbitrary plane through the target — not necessarily the nearest
-   point within the *named* pair's actual eigenplane, and not the nearest boundary point in the
-   full feature space (see §4.4).
-4. Downstream artefacts built on `bl_local_result` — Shapley attribution and sparse
-   counterfactuals — inherit whichever plane happened to be drawn.
+- **The naming problem.** The search enumerates named eigenvector pairs, but each rotated plane is only loosely tied
+  to the pair that names it. At $p=4$, only **21%** of the selected (2,3) plane's second direction lies in the
+  (2,3) eigenplane (`17_2` §9).
+- **The same axes from different labels.** At $p=3$, all three labels give rotated axes closest to the same
+  principal components (A.3).
+- **No cheap screen exists.** The rotation angle $\theta$ does not predict the overlap: among 74 cases with
+  $\theta<5°$, the overlap spans 0% to 100% (A.3).
 
-**What is *not* affected**, stated explicitly so the finding stays in proportion: the target's
-position is exact and stable regardless of the tie-break; the returned counterfactual is still a
-genuine boundary point (every candidate is re-scored through the actual model in filter stage (d),
-§3.2), just not a canonical or perfectly reproducible one; the cross-pair Mahalanobis selector
-(§3.3) is unaffected because it is computed in X-space, a frame the rotation cannot distort; Phases
-1 and 2 are untouched — `bl_build_projection()`, `bl_build_grid()`, `bl_find_boundary()`,
-`bl_robustness()` and `bl_surrogate()` never call `.bl_rotate()`; and `bl_set_scaling()` is
-display-only and provably cannot reach `V`, the grid, or the plane.
+So "Best pair: (3,4)" in the output, and the wording in any paper, imply an eigenplane that is not what is drawn. It
+is more accurate to describe the search as *sampling $\binom{p}{2}$ planes through the target* than as
+*enumerating eigenplanes*.
 
-An explicit, deterministic alternative was considered and **deliberately not implemented**:
-replace the rank-deficient Procrustes construction with a minimal (Givens-style) rotation acting
-only in the plane spanned by the target $x$ and its shadow $x_P = PP'x$ ($P$ = the named pair's
-eigenvectors), which would make `proj_pair` mean exactly what it says and be fully reproducible. It
-was not actioned because it would change every Phase 3 counterfactual the package has ever
-produced, and the original PhD method's validated behaviour is the current, under-determined
-construction — a change of this kind needs its own prototyping and measurement (reproducibility,
-variance retained, and effect on Mahalanobis distances) before being adopted, not a unilateral
-substitution.
+### 4.3 The local plot's orientation is arbitrary
 
-**§6.2 works this alternative out** — the rotation in closed form, its four properties with proofs,
-and the measurements this paragraph asks for. Measured headline: under the minimal rotation the
-plane's first principal angle to the eigenplane its label names is **0 exactly** for every pair,
-where the current construction is up to 55.62° off.
+- **Where the frame comes from.** The plane does not fix an ordered orthonormal frame within it. The local plot
+  uses columns 1–2 of `Vrho`, which is LAPACK's completion.
+- **The scale of it.** Two bases can span the same plane to 2.2e-16 and still differ entry-wise by 1.61 (Appendix
+  B). The picture's orientation and axis layout are therefore incidental.
+- **No user correction is possible.** `rotate_deg` has been removed from the local plots, since the orientation
+  belongs to the method. §5.2 proposes a frame convention that fixes it.
 
-### 4.2 Within-pair vs. cross-pair metric mismatch
+### 4.4 The metric: one selector under CVA, a departure from the thesis under PCA
 
-Within one rotated plane, the nearest boundary vertex is chosen by plain 2D Euclidean distance
-(§3.2, stage 5). Across planes, the winner is chosen by X-space Mahalanobis distance (§3.3). These
-are not necessarily wrong *together* — they operate at different scopes, and within a single fixed
-plane Euclidean is the natural local metric — but it is an inconsistency worth naming for anyone
-auditing the method end to end: the thing that decides "which point is nearest" is not the same
-thing that decides "which plane is best." This is recorded as an open question, not yet resolved,
-in the package's own documentation. **§6.3 recommends resolving it** by using squared Mahalanobis
-for the within-plane step as well, which costs no additional model evaluations.
+- **Under CVA there is one selector, presented as two.**
+  - The documentation and the `distance` argument suggest two selectors. They are one: the in-plane distance
+    already measures the Mahalanobis distance, so the option cannot change the result (§3.4).
+  - This is a documentation and API-clarity problem, not a methodological error.
+  - Before 2026-10-31 the package's documentation claimed the opposite (that Z-distances are not comparable across
+    pairs).
+- **Under PCA the default departs from the thesis.**
+  - The thesis's rule is standardised Euclidean (p.106). The default is `W_binary` Mahalanobis, which selects a
+    different pair on 23% of `17_1`'s rows (§3.4).
+  - The package also mixes metrics: within a plane the nearest vertex is chosen by standardised Euclidean distance,
+    across planes by `W_binary` Mahalanobis. The point judged "nearest" is not nearest in the measure that judges
+    the "best" plane.
 
-### 4.3 Global fidelity is traded for local accuracy
+**Decision (2026-10-31): the PCA default is deferred.**
 
-Directly from the thesis's own worked example (§2.5): rotating the biplot to fit one target
-increases the total sum-of-squares residual for **every other point** on the biplot (0.28 → 4
-against a total of 14, in the toy example), and improves one variable's axis predictivity strictly
-at the expense of others. This is not a defect — it is the explicit, acknowledged mechanism of the
-method — but it means a rotated (RC) biplot must never be read as a global summary of the model or
-the data. It is only valid as a *local* picture, centred on the one target it was rotated for.
+- **Paper 1 compares counterfactuals by Mahalanobis distance only**, under CVA, where it equals the in-plane
+  distance (§3.4). The PCA departure does not touch its results.
+- **The PCA default (`W_binary`) stays as it is** until the rotation problem (§4.1) is fully addressed (§5). The
+  choice of metric under PCA (§5.4) is taken then, not before.
 
-### 4.4 A rotated plane does not guarantee the globally nearest boundary
+### 4.5 Constraints are applied after contouring
 
-The thesis is explicit about the scope of what rotation fixes: it resolves the *classification
-consistency* problem (does the model and the picture agree about this one point?), not the
-*nearest-boundary-in-the-full-feature-space* problem. There is no guarantee that the nearest
-decision boundary to the target, in the full $p$-dimensional space, lies anywhere near the rotated
-2D plane. If multiple decision-boundary surfaces exist in the full space, this method can only
-report on the one visible within whichever plane it happened to draw.
+`train_ranges` and `set_filters` filter contour vertices *after* the contour is extracted (filters (b)–(c)).
 
-**This limitation is retained.** §6 improves the choice of plane *within* the biplot framework and
-deliberately does not address the full-space problem — see §6.6.
+- **The bias.** The reported point is "nearest among the survivors", and no nearer feasible point is ever sought.
+- **The scale.** `train_ranges` alone removes 18–56% of boundary candidates per pair (Appendix B).
+- **It changes the winner.** A replication of the pair search without that filter agrees with the package on only
+  76 of 221 rows.
 
-### 4.5 CVA-specific consequence
+### 4.6 Off-plane counterfactuals
 
-Specific to §2.6: rotating a CVA transformation pulls the group mean points off the canonical
-plane, so their exact $(k-1)$-dimensional predictions — a property CVA is otherwise built to
-guarantee — are lost after rotation. This cost has no analogue in PCA-based rotation.
+Two counterfactuals leave the drawn plane:
 
-### 4.6 Adjacent mechanisms not to confuse with this one
+- **The restored "fixed" counterfactual** (§3.5), which resets coordinates to the target's.
+- **The sparse counterfactual** (`bl_find_sparse_cf()`), which mixes coordinates of the target and the
+  counterfactual.
 
-- The diagonal-only Mahalanobis approximation used elsewhere in the package (Phase 2's
-  `bl_robustness()`/`plot.bl_boundary()`) is a related but separate simplification — full
-  Shapley-based decomposition of the Mahalanobis distance would be the theoretically exact
-  per-feature attribution but costs $O(n\cdot 2^p)$ and is deliberately not implemented at that
-  scale (it *is* implemented, tractably, for single-observation Phase 3 explanations via
-  `bl_shapley()`, at $O(2^p)$).
-- `rotate_deg` is a purely **cosmetic** post-hoc 2D rotation of the *global* biplot
-  (`plot_biplotEZ()`, `plot.bl_surrogate()`), for display convenience only. It has nothing to do
-  with the Procrustes mechanism described here and should not be confused with it. The local
-  biplot plotting functions (`plot.bl_local_result()`, `plot.bl_sparse_result()`) have no
-  `rotate_deg` and stop if one is passed: whenever `.bl_rotate()` is used, the plane it produces
-  is shown as is, never turned further.
+**What follows:**
+
+- **On the plot:** both are drawn at their projections, which need not lie on the drawn boundary.
+- **In the output:** for a restored counterfactual, `dist_z` and `dist_mahalanobis` describe the search's point,
+  not the reported one.
+- **For the identity:** the §3.4 identity does not apply to them.
+
+### 4.7 Only pair (1,2) can be forced, and `max_pairs` caps the search
+
+- **Forcing a pair.** `max_pairs = 1L` pins the search to (1,2), because pairs are emitted colexicographically.
+  There is no way to force any other pair.
+- **Capping the search.**
+  - The default `max_pairs = 21L` tries every pair up to $p=7$. At the Pima example's $p=7$ it tries all 21 pairs,
+    including the thesis's winning pair (1,7), which is 16th in the package's order.
+  - From $p=8$ ($\binom{8}{2}=28$) it tries fewer pairs than the thesis: every pair involving the highest components
+    is left out.
+  - Until 2026-10-31 the default was `10L`, which left pairs out from $p=6$ and never reached (1,7).
+
+### 4.8 A target at the centroid
+
+**What inspection suggests** (not measured):
+
+- if $x_t = 0$, the Procrustes matrix is zero;
+- every pair label then returns the same, unrotated-looking plane;
+- no warning is given.
+
+The guard needs verifying, then a warning (§5.2's edge cases give the convention).
+
+### 4.9 Inherent limitations — documented, not to be "fixed"
+
+- **Global fidelity is traded for local accuracy.** Rotating to fit one target worsens every other point's
+  representation. In the thesis's toy, the residual rises from 0.28 to 4 of 14 (§2.3).
+  - The trade is a **redistribution** across variables, and which variable is sacrificed depends on where the plane
+    lands (A.7).
+  - A rotated biplot is a local picture only.
+- **It is not the nearest boundary in the full space.**
+  - Rotation resolves *classification consistency* for the target. It does not find the nearest boundary in
+    $p$-dimensional space.
+  - The search finds the nearest boundary *within the planes it draws*.
+- **CVA class means leave the plane** (§2.2).
+- **A 2D biplot is a slice of the decision surface, not a view of it.**
+  - Two planes through the same target cut one surface along two different curves. For `17_1`'s row 6 those curves
+    are 57% of the data's extent apart, with counterfactuals 0.345 apart (A.5).
+  - Neither plot is wrong; they are different cross-sections.
+- **Tilt is not a criterion.**
+  - "Optimal" and "best" refer only to the smallest distance from target to counterfactual.
+  - A shallower plane is easier to read, not a better answer (A.6).
+- **Adjacent mechanisms are not this one.**
+  - `rotate_deg` turns the *global* biplot for display only (`plot_biplotEZ()`, `plot.bl_surrogate()`). The local
+    plots have no `rotate_deg` and stop if one is passed.
+  - Phase 2's per-feature distances are a separate measure; see the companion note.
 
 ---
 
-## 5. Measured findings from the loan-data worked examples (2026-09)
+## 5. Proposed solution
 
-Everything in this section is a **measurement**, not theory, taken from the scripts in this folder,
-built against `boundarylogic` 0.1.0 under R 4.6.0:
+**This is a proposal; nothing in the shipped package works this way.** It changes every Phase 3 counterfactual, so
+it needs an explicit decision (CLAUDE.md §9) and the adoption path of §5.6.
 
-| script | setting | role |
-|---|---|---|
-| `17_1a_toy-2d-to-1d-rotation.R` | 5 points, 2 variables → **1D** biplot (the thesis's toy) | the rotation at minimum scale |
-| `17_1_loan-gam-pca-3d-3var-rotation.R` | 221 loans, **3** features → 3 PCs, GAM | the rotation with **no** dimension loss |
-| `17_2_loan-gam-pca-4var-slices.R` | 221 loans, **4** features → 3 PCs, GAM | rotation **plus** truncation; two planes on one surface |
-| `17_3_minimal-rotation-verification.R` | both settings above | the acceptance harness for §6's recommendation |
+**What it does:**
 
-The 3-variable script is the workhorse: because a 3×3 PCA basis is a lossless rotation, anything
-that changes between its views is attributable to the rotation alone. Unless stated otherwise the
-numbers below are from it, with target row 6 and the planes taken from the package's own
-`Vr_rot`.
+- replaces the rank-deficient Procrustes construction with a closed-form minimal rotation;
+- replaces the $\binom{p}{2}$-label sample with a reproducible search over every plane that contains the target;
+- uses one metric end to end;
+- treats feasibility as a constraint.
 
-### 5.1 The dimensional ladder — how much freedom the rotation actually has
+**Scope.** Everything stays inside the 2D biplot framework.
 
-§4.1 establishes that the Procrustes matrix is rank 1 and the plane therefore under-determined.
-Counting the degrees of freedom makes the severity explicit and shows where it starts:
+- **The rotation's job:** put the target *on* the drawn plane, so the local reading is exact.
+- **The search's job:** find the nearest boundary *available within that framework*.
+- **Out of scope:** searching the full $p$-dimensional space (§4.9, §6.3).
 
-| setting | subspace DOF | minus "contains the target" | free |
-|---|---|---|---|
-| $p=2,\ r=1$ (the thesis's toy) | 1 | −1 | **0 — unique** |
-| $p=3,\ r=2$ | 2 | −1 | 1 |
-| $p=4,\ r=2$ | $2(4-2)=4$ | −1 | 3 (matches §4.1's "3-dimensional manifold") |
+### 5.1 Exactness requires only that the plane contains the target
 
-**Correction — see §6.1.** The $p=4$ row counts free *rotations*, not free *planes*. Containing a
-fixed line is two conditions on $\operatorname{Gr}(2,4)$, not one, so the family of admissible
-planes has dimension **2** — measured numerically in `17_2` §8a. The two counts differ by the
-in-plane spin, the same free rotation §5.7 records as an entry-wise difference of 1.61 at a plane
-difference of 2.2e-16. The $p=2$ and $p=3$ rows are correct as written.
-
-**The toy example in §2.5 is the only case in the family where the rotation is determined.** That
-is exactly why it teaches well — and exactly why the intuition it builds is wrong from $p=3$
-onwards. Any exposition that introduces the method through the 2D→1D picture should say so.
-
-Confirmed in the toy: rotating onto **PC1** and rotating onto **PC2** produce the *identical*
-rotation matrix $\mathbf{A}$, the identical retained axis, and identical adequacy / RSS / sample
-predictivity. Only $\rho$ differs (1.134058 vs 2.120244), and $\rho$ is deliberately discarded
-(§2.3). The reason is geometric: with $r=1$ the retained axis is forced to be the target's own
-direction — verified $|\cos| = 1.000000000000$ for all five points — and in 2D only one line
-through the origin contains the target. There is nothing to choose.
-
-**Caution on a §4.1 sentence.** "The first principal angle is always 0° — the target's own
-direction is always shared and stable" is a $p=4$ statement and does **not** transfer to $p=3$.
-In 3-space *any* two 2-planes intersect in a line, so a first principal angle of 0° is forced by
-dimension and carries no information; three random plane pairs give `0.00, 83.34` / `0.00, 47.79`
-/ `0.00, 87.81`. Nor is the shared line the target's direction there: for row 6 only 0.4435 of
-that direction lies in the PC1–PC2 plane (which is exactly its unrotated sample predictivity).
-
-### 5.2 The pair label is weak — now quantified
-
-For row 6, rotating onto each named pair:
-
-| named pair | $\theta$ | 2nd principal angle vs `span(V[,pair])` | 2nd direction inside the named eigenplane |
-|---|---|---|---|
-| (1,2) | 48.25° | 86.26° | **56.08%** |
-| (1,3) | 3.03° | 3.32° | 99.94% |
-| (2,3) | 41.59° | 86.97° | **44.35%** |
-
-Worse, per column: **for all three pairs alike, rotated column 1 comes out closest to PC3 and
-column 2 closest to PC1.** Three different labels, the same resulting axes — a blunter
-demonstration of §2.7 than the algebra alone.
-
-**And $\theta$ does not predict the overlap.** Across all 663 (row, pair) combinations on this
-data: Pearson $r = +0.33$, Spearman $+0.14$, and among the 74 cases with $\theta < 5°$ the overlap
-spans the **full range 0% to 100%**. Row 6's tidy pairing of $\theta = 3.03°$ with 99.94% is a
-coincidence; row 137 has $\theta = 1.49°$ with **0.1%**. So there is no cheap screen for §4.1's
-problem — the overlap has to be computed, and it cannot be inferred from how far the plane had to
-move.
-
-§6.2 removes the problem rather than screening for it: under the minimal rotation the plane shares a
-direction with its named eigenplane exactly, and its only departure is $\theta$ itself.
-
-### 5.3 Reproducibility is worse than §4.1 records
-
-§4.1 anticipates that a different BLAS/LAPACK, platform or R version may return a different plane.
-Measured here: **`best_pair` can vary between identical runs in a single session.** Row 102 flipped
-between (1,2) and (1,3) across five consecutive calls with the same objects, its (1,3) distance
-moving between 0.232776 and 0.228868. Rows 161 and 140 kept a stable winner with wobbling
-distances; rows 6 and 104 were bit-identical every run.
-
-*Practical consequence for the posts:* if a figure or a quoted counterfactual must be reproducible,
-choose a target whose `best_pair` is bit-stable and say that you checked, by repeating the call.
-
-§6.2 removes the cause: with one determinate plane per label there is nothing left to tie-break, and
-the returned basis was measured bit-identical across five identical calls.
-
-**And this is not the whole of it — see §5.9.** The advice above (repeat the call and check) turns
-out to be necessary but not sufficient, because the reported distance also depends on *what was
-called before it* in the session, and repeating a call is one of the things that changes it.
-
-### 5.4 The 2D biplot is a **slice** of the decision surface, not a view of it
-
-This is the most load-bearing interpretive point found, and the one most likely to mislead a reader
-of the published figures.
-
-- A **3D** figure of a 3-variable model shows the whole $p\approx0.5$ surface. Because the basis is
-  a lossless rotation, every rotated view holds the same surface, the same cloud and the same
-  points, re-expressed — rotating only moves the camera.
-- A **2D biplot** shows where the model crosses 0.5 **within the drawn plane**, with the off-plane
-  coordinate pinned at 0. Two planes through the same target cut one surface along two genuinely
-  different curves.
-
-So `plot(bl_local)` for two different pairs can look completely different while the 3D picture
-looks unchanged. Neither plot is wrong; they are different cross-sections.
-
-Measured for row 6 (pinned (1,2) versus the selected (1,3)):
-
-| | points | model $p$ along the curve | $\max|p-0.5|$ |
-|---|---|---|---|
-| pinned (1,2) | 700 | [0.49816, 0.50202] | 2.02e-03 |
-| selected (1,3) | 498 | [0.49812, 0.50198] | 1.98e-03 |
-
-Both are genuine boundary curves, yet nearest-neighbour distance between them is median **2.30**,
-max **3.85** against a data span of **6.71** — they separate by **57% of the data's extent**. The
-two planes are **90.00°** apart here.
-
-**They nonetheless share exactly one point, and this is forced.** Both planes contain the origin (a
-rotation has no translation) and the target; two distinct planes meet in exactly one line;
-therefore their intersection is $\operatorname{span}(x_t)$, the target's own ray. Verified
-$|\cos(n_B \times n_C,\ x_t)| = 1.000000000000$. The surface crosses that ray once for row 6, at
-$t=0.41223$, and **both curves pass within 0.0036 and 0.0010 of it** against a contour grid step of
-0.0363.
-
-*Why it is not cosmetic:* the counterfactuals differ — $B_x = (+0.759, +0.062, +0.165)$ versus
-$(+0.861, +0.381, +0.084)$, **0.345 apart**, with $\sqrt{\text{Mahalanobis}}$ 1.2527 versus 1.1455.
-Different slice → different nearest boundary point → different advice. This is the concrete case
-for why the pair search exists, and why §4.1's under-determination has consequences rather than
-being a curiosity.
-
-### 5.5 A plane's tilt needs two angles, and tilt is not a selection criterion
-
-Relative to the unrotated PC1–PC2 plane, a rotated plane's orientation needs **two** numbers, not
-one: writing it as $s_3 = s_1 s_{1\text{ax}} + s_2 s_{2\text{ax}}$, the component tilts are
-$\arctan s_1$ along PC1 and $\arctan s_2$ along PC2, and the dihedral angle is their resultant,
-$\tan^2\theta = s_1^2 + s_2^2$ (verified to 6 dp). The single dihedral hides the direction of lean:
-for row 6 the pinned (1,2) plane is $(-48.26°, +2.04°)$ — almost a pure PC1 tilt — while the
-selected (1,3) plane is $(+65.85°, +88.64°)$, leaning substantially both ways.
-
-"Contains the target" is again one equation, $s_1 a_1 + s_2 a_2 = a_3$, so the admissible tilts
-form a **line** in the $(s_1,s_2)$ plane — a 1-parameter family. For row 6 that family admits
-dihedrals from **48.25° to 89.05°**; the pinned (1,2) plane came out at 48.28° (the shallow end)
-and the selected (1,3) plane at 88.64° (the steep end).
-
-**Terminology discipline, worth carrying into the posts:** "optimal" and "best" should refer only
-to what `bl_find_local_cf()` measures — the smallest (squared) Mahalanobis distance from target to
-counterfactual. How steeply a plane is tilted is *not* a criterion the package optimises, and here
-the two run in opposite directions. A shallower plane is easier to read; it is not a better answer.
-
-### 5.6 What the rotation costs, per variable
-
-`adequacy` and `axis predictivity` index the **rows** of $\mathbf{V}$ — they are per *variable*, not
-per axis. §4.3 records that global fidelity is traded for local accuracy; the per-variable view
-shows the trade is a **redistribution**, and that *which* variable is sacrificed depends on where
-the rotated plane lands. Row 6, $\mathbf{J} = \operatorname{diag}(1,1,0)$:
-
-| | adequacy (income / score / rate) | RSS (of 660) | target sample predictivity | mean of the other 220 |
-|---|---|---|---|---|
-| unrotated | 0.5023 / 0.4978 / 0.9999 | **168.656** | 0.4435 | 0.7161 |
-| rotated → (1,2) | 0.9988 / **0.0442** / 0.9570 | 229.465 | **1.000000** | 0.6710 |
-| rotated → (1,3) | 0.9671 / 0.9609 / **0.0720** | 213.624 | **1.000000** | 0.6758 |
-
-The two rotations sacrifice **different** variables — `credit_score` in one, `loan_int_rate` in the
-other. The target reaches sample predictivity exactly 1 in both (the §2.4 identity
-$\hat{x}_i = x_i$, measured at 2.2e-15), and the unrotated RSS equals the dropped component's
-variance $d_3^2$ exactly, which is a useful arithmetic check on any reimplementation.
-
-### 5.7 Practical notes for reproducing the package's objects
-
-- **Use the package's own objects rather than re-deriving them.** `bl_local$Vr_rot` is the rotated
-  basis the local biplot actually uses; `bl_local$ct_local` and `bl_result$biplot_grid$ct` are its
-  boundary contours, already in the plane's 2D coordinates, and plot verbatim.
-- **Rotating from `svd(X)$v` instead of `bl_result$V` lands on a different plane.** The two matrices
-  agree to ~1.4e-15, and that is enough — the completion is degenerate (§4.1). Rotating from
-  `bl_result$V` reproduces the package's plane to 2.2e-16.
-- Comparing planes: compare **projection matrices** $\mathbf{P} = \mathbf{V}_r\mathbf{V}_r'$, never
-  entry-wise. Even with the plane matching exactly, the in-plane basis can differ by a large
-  rotation (measured 1.61 entry-wise at 2.2e-16 plane difference).
-- **`max_pairs = 1L` pins the search to pair (1,2)**, because `.generate_pairs()` emits
-  colexicographically. This is the only supported way to force a specific plane, and it makes a
-  pinned-versus-selected comparison possible.
-- **Any replication of the pair search must include the `train_ranges` filter** (§3.2 stage (c)).
-  It is not a formality: measured removal of boundary candidates was 31% / 18% / 56% by pair for
-  row 6 and 56% / 51% / 49% for row 199. Omitting it changes which candidate is nearest and hence
-  which pair wins — a replication without it agreed with the package on only about 3 rows in 13.
-- `all_distances_mahalanobis` stores the **squared** distance (§3.3 states the metric; the field is
-  easy to misread). The package's own summary prints its square root.
-
-### 5.8 Caveat on the §2.5 worked-example numbers
-
-`17_1a_toy-2d-to-1d-rotation.R` reproduces the thesis's rotation angle (**28.14°** — measured
-28.1411°) and dilation ($\rho = 1.134 \approx 1/1.13$) exactly, but **not** its predictivity or
-residual figures: the thesis reports sample predictivity 0.72 → 1 and RSS 0.28 → 4 of 14, where its
-five points give **0.7776 → 1** and **4.307 → 4.927 of 11.4**. The data behind §2.5 is therefore
-probably not the data in that script, and the two sets of numbers should not be quoted together.
-
-(On the residual figure: RSS here is the **trace** of $\mathbf{X}'\mathbf{X}$, not the sum of its
-entries. The distinction matters — summing every entry is not a sum of squares and makes the
-rotation appear to *improve* global fit, which is the opposite of the trade-off the method actually
-makes. With the trace, the unrotated RSS equals $d_2^2$ exactly and the rotated RSS is correctly
-larger, as §4.3 requires. `17_1a` and `17_1` both compute it that way.)
-
-### 5.9 The full search depends on what was called before it (2026-09-10)
-
-Found while building `17_3` and not previously recorded. It is a stronger reproducibility problem
-than §5.3's, because it identifies a **trigger** rather than an intermittent flip.
-
-For one fixed target ($p=4$, row 49), `bl_find_local_cf()`'s reported distance depends on the
-session's call history. Measured, in a single R session, on the same `bl_result` and the same
-target object (`17_3` §8b):
-
-| call | | `dist_mahalanobis` |
-|---|---|---|
-| 1 | full search (first call in the session) | **1.147879** |
-| 2 | `max_pairs = 1L` | 1.208670 |
-| 3 | full search | **1.153789** |
-| 4 | full search | 1.153789 |
-| 5 | `max_pairs = 1L` | 1.202898 |
-| 6 | full search | 1.153789 |
-| 7 | full search | 1.147879 |
-
-The selected pair is **(2,3) throughout** — this is not §5.3's pair flip. What varies is the
-distance, across two values for the full search (1.147879 / 1.153789) and two for the pinned search
-(1.208670 / 1.202898). The exact sequence is not itself stable run to run; the *set* of values is.
-
-**What it is not.** 200 unrelated `svd()` calls interleaved between two full searches leave the
-result unchanged, and so does building a second `bl_result` in between. So this is not ambient
-floating-point state and not §4.1's input-perturbation sensitivity.
-
-**Not only earlier `bl_find_local_cf()` calls (added 2026-10-17, measured 2026-10-06).** The first
-version of this section said the effect was specific to earlier `bl_find_local_cf()` calls on the
-same objects. That is too narrow. In the *Understanding Boundaries* project's slide script for a
-4-variable GAM (row 49, `k = 8`, `max_pairs = 1L`, `distance = "euclidean"`), three Phase 1–2
-calls on the same `bl_result` before the first `bl_find_local_cf()` also moved the answer. The
-calls were `plot(bl_result)`, `bl_find_boundary()` and `bl_surrogate()`:
-
-| order | distance | `loan_amnt` change at the counterfactual |
-|---|---|---|
-| `bl_find_local_cf()` first on a fresh `bl_result` | 0.6567 | +2,101 |
-| after `plot()`, `bl_find_boundary()`, `bl_surrogate()` | 0.6567 | +2,146 |
-
-Two things differ from the table above. The **distance is unchanged** to four decimals and the
-**point moves**, so this looks like a choice between near-tied boundary points rather than a
-different plane. And **the plane is pinned** (`max_pairs = 1L`), so pair selection cannot be
-involved. The three calls were not separated, so which of them is the trigger is not known. §4.1
-notes that Phases 1 and 2 never call `.bl_rotate()`, and that still holds, so any shared state
-lies outside the rotation itself. The question for the package is therefore wider: does *any*
-exported function modify the `bl_result` it is given, or cache something on it, that
-`bl_find_local_cf()` later reads?
-
-**Mechanism not established.** The installed package ships as a lazy-load database, so the source
-was not available to inspect from this project. This is a measurement and a bug report, not a
-diagnosis; it is recorded here so the package project can look at whether `bl_find_local_cf()`
-mutates the `bl_result` or `bl_target` it is passed, or caches anything across calls. Since
-2026-10-06, the same question applies to `plot.bl_result()`, `bl_find_boundary()` and
-`bl_surrogate()`.
-
-**Practical consequence.** §5.3's advice — repeat the call and check stability — is necessary but
-not sufficient, because *repeating* a call is one of the things that changes the answer. Take a
-quoted counterfactual from a **first** call on a freshly built `bl_result`, with no other function
-called on that object beforehand, not even `plot()`, and record that this is what you did. For a published figure, rebuild the result object rather than reusing one that has
-already been searched.
-
----
-
-## 6. Recommendation: a deterministic rotation and a reproducible plane search
-
-Sections 4 and 5 diagnose two faults and stop there. §4.1 sketches the fix in one paragraph —
-replace the rank-deficient Procrustes construction with "a minimal (Givens-style) rotation acting
-only in the plane spanned by the target $x$ and its shadow $x_P = PP'x$" — and declines it pending
-"prototyping and measurement (reproducibility, variance retained, and effect on Mahalanobis
-distances)."
-
-This section works that proposal out: the construction in closed form, a convention for the
-in-plane frame, a replacement for the six-label sample, and the measurements §4.1 asks for. Every
-number below is reproduced by **`17_3_minimal-rotation-verification.R`** in this folder, on the loan
-data at $p=3$ target row 6 and $p=4$ target row 49 — the same objects scripts `17_1` and `17_2` use.
-That script asserts the geometry and reports the timings, so a drift fails loudly rather than
-quietly changing a quoted figure. Run it before relying on anything here.
-
-**Scope.** Everything here stays inside the 2D biplot framework. The rotation's job is to put the
-target *on* the drawn plane so the local reading is exact; the search's job is to find the nearest
-boundary *available within that framework*. Searching the full $p$-dimensional space for a nearest
-boundary point is **out of scope** — §4.4's limitation is retained, and §6.6 restates it.
-
-### 6.1 What exactness actually requires, and how much freedom that leaves
-
-The biplot's reconstruction is the orthogonal projector onto the plane's span, so
+The biplot's reconstruction is the orthogonal projector onto the plane, so
 
 $$
 \hat{x} = \mathbf{V}_r(\mathbf{V}_r'\mathbf{V}_r)^{-1}\mathbf{V}_r'x = x
@@ -884,43 +848,47 @@ $$
 x \in \operatorname{span}(\mathbf{V}_r).
 $$
 
-That is a condition on the **plane**, not on the frame, and it is independent of how
-$\mathbf{V}_r$ is scaled or oriented — so it reads identically for PCA and CVA. Nothing beyond
-"the plane contains the target" is needed for the exact local interpretation. Consequently the
-admissible family is
+**What this condition is.**
+
+- It is a condition on the **plane**, not on the frame.
+- It does not depend on how $\mathbf{V}_r$ is scaled or oriented, so it reads the same for PCA and CVA.
+- Nothing beyond "the plane contains the target" is needed for the exact local interpretation.
+
+The admissible family is
 
 $$
-\mathcal{A} \;=\; \{\,2\text{-planes } P \subset \mathbb{R}^p \;:\; x_t \in P \,\},
+\mathcal{A} \;=\; \{\,2\text{-planes } P \subset \mathbb{R}^p \;:\; x_t \in P \,\}.
 $$
 
-and since every such plane is $\operatorname{span}(x_t, d)$ for a direction $d$ in the
-$(p-1)$-dimensional space orthogonal to $x_t$, taken modulo sign,
-$\mathcal{A} \cong \mathbb{P}^{p-2}$ — dimension $p-2$:
+Every such plane is $\operatorname{span}(x_t, d)$ for a direction $d$ in the $(p-1)$-dimensional space orthogonal
+to $x_t$, taken modulo sign. So $\mathcal{A} \cong \mathbb{P}^{p-2}$, of dimension $p-2$:
 
 | $p$ | $\dim\mathcal{A}$ | shape |
 |---|---|---|
-| 2 | 0 | a single plane — determined, which is why the thesis's toy (§2.5) teaches so cleanly |
+| 2 | 0 | a single plane — determined, which is why the thesis's toy teaches so cleanly |
 | 3 | 1 | a pencil of planes about the axis $\operatorname{span}(x_t)$ — one angle |
 | 4 | 2 | a two-parameter family |
 
-**This corrects §5.1's table.** That table reports "free = 3" at $p=4$, citing §4.1's
-"3-dimensional manifold of rotations". The 3 is right for **rotations** — those satisfying
-$\mathbf{A}'u \propto w$ form a coset of $\operatorname{Stab}(u) \cong SO(p-1)$, and
-$\dim SO(4) - \dim SO(3) = 6 - 3 = 3$ — and wrong for **planes**: containing a fixed line is *two*
-conditions on $\operatorname{Gr}(2,4)$, not one, leaving $4 - 2 = 2$. Script `17_2` §8a measures
-the plane family's tangent dimension numerically and gets **2**. The two counts differ by the
-in-plane spin, the same free rotation §5.7 measures as an entry-wise difference of 1.61 at a plane
-difference of 2.2e-16. At $p=3$ the table's "$-1$" happens to be right (planes through a line in
-3-space form a 1-parameter pencil), which is why the error never surfaced in `17_1`.
+**Two counts, both right.**
 
-So the plane choice is entirely free with respect to exactness. The two recommendations below are
-about how to spend that freedom: **deterministically** (§6.2) and **well** (§6.3).
+- **Rotations.** The rotations with $\mathbf{A}'u \propto w$ form a coset of $\operatorname{Stab}(u) \cong
+  SO(p-1)$, of dimension $(p-1)(p-2)/2$: 3 at $p=4$. That is §4.1's count.
+- **Planes.** Containing a fixed line is *two* conditions on $\operatorname{Gr}(2,4)$, not one, leaving
+  $4-2=2$. `17_2` §8a measures the family's tangent dimension numerically as **2**.
+- **The difference** is the in-plane spin of §4.3.
 
-### 6.2 Part 1 — a minimal Givens rotation, in closed form
+**The toy is the exception, not the rule.** The thesis's 2D→1D toy is the only case in the family where the
+rotation is determined (A.4). That is why it teaches cleanly, and why the intuition it builds fails from $p=3$
+onwards.
+
+The plane choice is entirely free with respect to exactness. §5.2 spends that freedom **deterministically**, §5.3
+spends it **well**.
+
+### 5.2 A minimal Givens rotation, in closed form
 
 Given a named eigenplane $P_0 = \operatorname{span}(\mathbf{V}_{[,a]}, \mathbf{V}_{[,b]})$, write
-$\mathbf{V}_{r0} = \mathbf{V}_{[,(a,b)]}$ and the target's shadow
-$x_P = \mathbf{V}_{r0}\mathbf{V}_{r0}'x_t$. For $0 < \lVert x_P\rVert < \lVert x_t\rVert$:
+$\mathbf{V}_{r0} = \mathbf{V}_{[,(a,b)]}$ and the target's shadow $x_P = \mathbf{V}_{r0}\mathbf{V}_{r0}'x_t$. For
+$0 < \lVert x_P\rVert < \lVert x_t\rVert$:
 
 $$
 u = \frac{x_P}{\lVert x_P\rVert}, \qquad
@@ -935,12 +903,9 @@ $$
 \qquad \mathbf{V}_r = \mathbf{R}\,\mathbf{V}_{r0}\;}
 $$
 
-$\{u,w\}$ is orthonormal ($r \perp P_0$ and $u \in P_0$), and $\mathbf{R}$ is a rotation by
-$\theta$ inside $\operatorname{span}(u,w)$ and the identity on its complement. Note
-$\lVert x_P\rVert^2 + \lVert r\rVert^2 = \lVert x_t\rVert^2$, so $\cos^2\theta + \sin^2\theta = 1$
-as written.
-
-**Properties.**
+- $\{u,w\}$ is orthonormal, because $r \perp P_0$ and $u \in P_0$.
+- $\mathbf{R}$ rotates by $\theta$ inside $\operatorname{span}(u,w)$ and is the identity on its complement.
+- $\lVert x_P\rVert^2 + \lVert r\rVert^2 = \lVert x_t\rVert^2$, so $\cos^2\theta + \sin^2\theta = 1$ as written.
 
 | property | proof |
 |---|---|
@@ -950,70 +915,62 @@ as written.
 | **`proj_pair` means what it says**: principal angles $(\mathbf{R}P_0, P_0) = (0,\theta)$ | the direction of $P_0$ orthogonal to $u$ lies in $\operatorname{span}(u,w)^\perp$, which $\mathbf{R}$ fixes pointwise — so the two planes share it |
 | **$O(p^2)$** — cheaper than the current $O(p^3)$ SVD | matrix assembly only |
 
-**Measured, $p=4$, target row 49.** The last property is the sharp one, because it is exactly what
-the current construction gets wrong. `ang1` is the first principal angle against the eigenplane the
-pair *names*:
+**Measured at $p=4$** (target row 49; A.9):
 
-| pair | $\theta$ | `ang1` minimal | `ang2` minimal | exactness residual | `ang1` current |
-|---|---|---|---|---|---|
-| (1,2) | 38.4522° | **0.00e+00** | 38.4522° | 1.40e-15 | 1.1111° |
-| (1,3) | 34.9160° | **0.00e+00** | 34.9160° | 1.99e-15 | 5.1471° |
-| (2,3) | 70.1512° | **0.00e+00** | 70.1512° | 1.08e-15 | 55.6173° |
-| (1,4) | 19.8488° | **0.00e+00** | 19.8488° | 4.19e-15 | 17.2008° |
-| (2,4) | 55.0840° | **0.00e+00** | 55.0840° | 2.69e-15 | 5.4437° |
-| (3,4) | 51.5478° | **0.00e+00** | 51.5478° | 2.34e-15 | 51.3428° |
+- the plane's first principal angle to the eigenplane its label names is **0 exactly** for every pair, where the
+  current construction is up to 55.62° off;
+- the basis is bit-identical across five calls.
 
-Under the minimal rotation the plane shares a direction with its named eigenplane exactly, and its
-only departure is the $\theta$ it was forced to move. Under the current construction it shares
-nothing — up to 55.62° off for pair (2,3) — which is the mechanism behind §5.2's 21–70% overlap
-figures and behind three different labels yielding the same nearest axes. **Determinism**: the
-returned basis was bit-identical across five identical calls.
+**Edge cases**, each with a convention:
 
-**Edge cases**, each needing a documented convention:
+- $\lVert x_P\rVert = 0$ (target orthogonal to $P_0$, $\theta = 90°$): $u$ is undefined. Take
+  $u = \mathbf{V}_{[,a]}$.
+- $\lVert x_P\rVert = \lVert x_t\rVert$ (target already in $P_0$): $\theta = 0$ and $\mathbf{R} = \mathbf{I}$.
+  Guard the $0/0$ in $w$.
+- $x_t = 0$ (target at the centroid): every plane contains it. Return the unrotated eigenplane and warn (§4.8).
 
-- $\lVert x_P\rVert = 0$ (target orthogonal to $P_0$; $\theta = 90°$): $u$ is undefined. Take
-  $u = \mathbf{V}_{[,a]}$, so the first named axis is the one rotated onto the target.
-- $\lVert x_P\rVert = \lVert x_t\rVert$ (target already in $P_0$): $\theta = 0$,
-  $\mathbf{R} = \mathbf{I}$, no rotation. Guard the $0/0$ in $w$.
-- $x_t = 0$ (target at the centroid): every plane contains it, no rotation is defined or needed —
-  return the unrotated eigenplane and warn.
+**The in-plane frame, fixed by convention** (resolving §4.3). Nothing *measurable* depends on the frame, so it is
+safe to fix.
 
-**The in-plane frame, fixed by convention.** The plane does not determine an ordered orthonormal
-frame, and the picture's appearance depends on which one is chosen (§5.7). Nothing *measurable*
-does, so it is safe to fix. Recommended:
-$\mathbf{V}_r = (\mathbf{R}\mathbf{V}_{[,a]},\ \mathbf{R}\mathbf{V}_{[,b]})$ — the named axes
-carried through the rotation. RC1 and RC2 then have a defensible reading for the first time
-("PC $a$ and PC $b$, tilted by $\theta$"), and §2.7's "columns 1–2 of $\mathbf{V}_\rho$ regardless
-of which pair was used" convention, with the axis-identity confusion it creates, is no longer
-needed. A documented alternative is the target-aligned frame
-$(x_t/\lVert x_t\rVert,\ \cdot)$, which puts every target on the horizontal axis and makes figures
-comparable across targets, at the cost of loading arrows that move between targets.
+- **Recommended:** $\mathbf{V}_r = (\mathbf{R}\mathbf{V}_{[,a]},\ \mathbf{R}\mathbf{V}_{[,b]})$, the named axes
+  carried through the rotation.
+  - RC1 and RC2 then read as "PC $a$ and PC $b$, tilted by $\theta$".
+  - The "columns 1–2 regardless of pair" convention of §3.1 is no longer needed.
+- **Alternative:** the target-aligned frame $(x_t/\lVert x_t\rVert,\ \cdot)$.
+  - It puts every target on the horizontal axis, making figures comparable across targets.
+  - The cost is loading arrows that move between targets.
 
-**PCA versus CVA.** §3.3 describes the loading matrix as $\mathbf{W}$-orthonormal
-($\mathbf{V}'\mathbf{W}\mathbf{V} = \mathbf{I}$). That is a CVA property: for `method = "PCA"`,
-`17_1` and `17_2` both assert $\mathbf{V}'\mathbf{V} = \mathbf{I}$ to 1e-10 and pass. The
-construction above is written for a Euclidean-orthonormal $\mathbf{V}$. Under CVA, carry it out in
-$\mathbf{W}$-whitened coordinates ($\mathbf{W}^{-1} = \mathbf{L}\mathbf{L}'$, already available as
-`bl_result$metric_inv`) and map back; the exactness condition of §6.1 is basis-independent, so it
-survives the change of metric. §4.5's CVA-specific cost is unaffected either way.
+**PCA versus CVA.** The construction is written for a Euclidean-orthonormal $\mathbf{V}$, as under PCA (`17_1` and
+`17_2` assert $\mathbf{V}'\mathbf{V} = \mathbf{I}$ to 1e-10).
 
-**The thesis's worked example is preserved.** At $p=2,\ r=1$ the admissible family is a single
-line, so the minimal rotation and Procrustes must agree. Verified on `17_1a`'s five-point
-data (target row 5): Procrustes **28.1411°**, minimal rotation **28.1411°**, agreeing to 6.75e-14
-and reproducing the thesis's 28.14° (§2.5). The change therefore does not invalidate the
-theoretical exposition — it only removes freedom that exists from $p=3$ upward.
+- Under CVA, carry it out in $\mathbf{W}$-whitened coordinates (the canonical space of §3.4) and map back.
+- The exactness condition of §5.1 is basis-independent, so it survives the change of metric.
+- The CVA cost of §2.2 is unaffected.
 
-### 6.3 Part 2 — searching the admissible family, not six labels
+**The thesis's worked example is preserved.**
 
-§6.2 alone makes reproducibility a non-issue: each of the $\binom{p}{2}$ labels now maps to one
-determinate plane, so §5.3's flip between (1,2) and (1,3) across identical calls cannot occur —
-there is nothing left to tie-break. But the labels still sample only $\binom{p}{2}$ points of a
-$(p-2)$-dimensional continuum — three at $p=3$, six at $p=4$ — so "best of the labels" is not best
-of anything well defined. Since $\mathcal{A}$ has an explicit parameterisation, search it.
+- At $p=2,\ r=1$ the family is a single line, so the minimal rotation and Procrustes must agree.
+- On `17_1a`'s five points (target row 5) both give **28.1411°**, agreeing to 6.75e-14 and reproducing the
+  thesis's 28.14°.
 
-**Parameterisation.** Let $q = x_t/\lVert x_t\rVert$ and let
-$\mathbf{U} \in \mathbb{R}^{p\times(p-1)}$ be a deterministic orthonormal basis of $q^\perp$ — the
-Householder reflector carrying $q \to e_1$, minus its first column. Then every admissible plane is
+### 5.3 Searching the admissible family, not $\binom{p}{2}$ labels
+
+**Why labels are not enough.** §5.2 makes each label map to one determinate plane. The labels still sample only
+$\binom{p}{2}$ points of a $(p-2)$-dimensional continuum, so "best of the labels" is not best of anything well
+defined.
+
+**This is the thesis's own future work.** Its §6.2 (p.172), "Grand Tour of data instead of component selection",
+proposes extending the search beyond fixed pairs to a smooth sequence of planes. Each frame would be rotated to place
+the target on the biplot, and the candidates scored by Mahalanobis distance. $\mathcal{A}$ has an explicit
+parameterisation, so it can be searched directly.
+
+**Parameterisation.**
+
+- Let $q = x_t/\lVert x_t\rVert$.
+- Let $\mathbf{U} \in \mathbb{R}^{p\times(p-1)}$ be a deterministic orthonormal basis of $q^\perp$: the
+  Householder reflector carrying $q \to e_1$, minus its first column.
+
+Then every admissible plane is
 
 $$
 P(d) = \operatorname{span}(q,\ \mathbf{U}d), \qquad d \in \mathbb{R}^{p-1},\ \lVert d\rVert = 1,\ d \equiv -d.
@@ -1025,19 +982,360 @@ $$
 | 4 | hemisphere of $S^2$ | deterministic Fibonacci lattice, then local refinement from the best few |
 | $\ge 5$ | $\mathbb{P}^{p-2}$ | the $\binom{p}{2}$ minimal-rotation planes as seeds plus local refinement; **document as a local optimum, not exhaustive** |
 
-No RNG anywhere: every candidate set is a deterministic function of $p$ and the resolution.
+There is no RNG anywhere: every candidate set is a deterministic function of $p$ and the resolution.
 
-**Objective, in two stages.** Stage 1 ranks planes cheaply; stage 2 runs the existing §3.2 pipeline
-($m\times m$ grid → `contourLines` → constraints → nearest vertex) on the best few, so the reported
-boundary and every plotting object keeps the package's established definition.
+**The objective, in two stages.**
 
-Stage 1 is a **ray scan**: in the candidate plane, cast $K$ rays from the target at equal angles
-and bisect each to its **first** cutoff crossing, taking the smallest squared Mahalanobis distance
-over rays. This is the right objective for a nearest-point search — the nearest in-plane boundary
-point is reached by some ray from $x_t$, and along that ray it must be the *first* crossing, since
-an earlier crossing would be nearer.
+- **Stage 1** ranks planes cheaply by a **ray scan**:
+  - cast $K$ rays from the target at equal angles within the plane;
+  - bisect each to its **first** cutoff crossing;
+  - take the smallest squared Mahalanobis distance over the rays.
 
-**Measured, $p=3$, target row 6, exhaustive 1° sweep of all 180 planes.**
+  The nearest in-plane boundary point is reached by some ray, and along that ray it is the first crossing.
+- **Stage 2** runs the existing §3.3 pipeline on the best few planes, so the reported boundary and every plotting
+  object keep the package's definition.
+
+**Measured** (A.10):
+
+| target | improvement in squared distance | where it comes from |
+|---|---|---|
+| $p=3$, row 6 | **5.7%** over the package | an exhaustive 1° sweep of 180 planes |
+| $p=4$, row 49 | **4.4%** | a 200-point lattice |
+
+At $p=3$, pinning to (1,2) lands within 0.05% of the *worst* plane in the family.
+
+- **Cost:** about **1.5×** the current search when batched across planes, and an order of magnitude more when
+  implemented naïvely. That is affordable per target, but a cost, not a saving.
+- **A caveat:** stage 1 and the package use different discretisations, so the percentages are indicative until
+  stage 2 is run on the winning plane (§6.1, test 4).
+
+### 5.4 One metric end to end, and feasibility as a constraint
+
+1. **One metric, chosen by projection** (resolving §4.4).
+   - **Under CVA** there is already one metric, because the in-plane distance is Mahalanobis (§3.4). The
+     `distance` option can be documented as having no effect, or removed for CVA.
+   - **Under PCA**, choose one metric and use it both within and across planes:
+     - either the thesis's standardised Euclidean, which needs no change within the plane;
+     - or `W_binary` Mahalanobis within the plane as well. The vertices are already back-projected for filter (d),
+       so this costs no extra model evaluations.
+
+     Which one is a methodological decision for the user. The thesis's rule is the default candidate.
+2. **Feasibility as a constraint, not a filter** (resolving §4.5).
+   - Restrict the grid and contour extraction to the feasible region, so the search seeks the nearest *feasible*
+     point.
+   - `set_filters` actionability likewise becomes a box or half-space constraint rather than filter (b).
+
+### 5.5 Reporting
+
+**What changes in the output:**
+
+- **The distance table.** Replace `all_distances_mahalanobis` (one value per sampled label) with the objective over
+  the searched family, plus the runner-up local minima, so near-ties are visible instead of silently resolved.
+- **At $p=3$ this is a curve.** Distance against $\varphi$ is a genuinely informative per-target diagnostic: for
+  row 6 the reported distance moves by a factor of 1.13 across the family.
+- **Continuity.** Keep $\theta$ and the nearest named pair in the output, for continuity with `best_pair`.
+
+### 5.6 Adoption path
+
+**Land it as new options, defaults unchanged:**
+
+- `rotation = c("procrustes", "minimal")`;
+- `plane_search = c("pairs", "family")`.
+
+**Switch the defaults** only once the §6.1 acceptance tests have been run and reported across a full training set,
+not just the two targets measured here.
+
+---
+
+## 6. Future developments
+
+### 6.1 Acceptance tests for §5
+
+All are run by `17_3`; the "runs in" column names its section. Tests 1, 2, 3 and 6 are asserted, so the script fails
+if they stop holding.
+
+| # | test | runs in | status |
+|---|---|---|---|
+| 1 | **Exactness** — $x_t \in \operatorname{span}(\mathbf{V}_r)$ to ~1e-12 for every candidate | `17_3` §2 | ✅ asserted; residuals 1.1e-15 to 4.2e-15, all six pairs |
+| 2 | **Determinism** — identical across ≥5 calls and across BLAS/LAPACK builds | `17_3` §3 | ✅ asserted bit-identical across 5 calls; cross-BLAS **not yet run** |
+| 3 | **Minimality / label integrity** — principal angles $(0,\theta)$ exactly | `17_3` §2 | ✅ asserted; `ang1` = 0.00e+00 and `ang2` $=\theta$, all six pairs |
+| 4 | **Monotonicity** — family optimum $\le$ current, per target | `17_3` §7, §8 | ◐ asserted and holding at both targets, but the family figure comes from the stage-1 ray scan and the package figure from its own 200×200 grid. Needs stage 2 re-run on the winning plane for a like-for-like number, and a sweep over all rows to quantify what the label sample costs |
+| 5 | **Variance retained** — adequacy, axis predictivity, RSS at $\mathbf{J}=\operatorname{diag}(1,1,0,\ldots)$, minimal versus current | — | ⬜ **not run.** Reuse `17_1` §13 / `17_2` §11's diagnostic block |
+| 6 | **Thesis reproduction** — the 28.14° at $p=2, r=1$ | `17_3` §10 | ✅ asserted; 28.1411°, matching Procrustes to 6.75e-14 |
+| 7 | **Cost** | `17_3` §9 | ◐ measured at $p=3$ and reported, not asserted — wall clock is machine-dependent. $p\ge4$ **not yet timed** |
+
+**Properties of the current package that `17_3` also asserts** (not on this list):
+
+- §5 and §8b: within-platform determinism (A.2);
+- §11: the CVA identity (§3.4).
+
+### 6.2 Further work on the current method
+
+Each item needs an explicit instruction (CLAUDE.md §9). Ranked as in §4:
+
+1. **Cross-platform reproducibility** (§4.1). Run `17_3` and the harness on another OS or BLAS (macOS, Linux,
+   OpenBLAS) and compare. This matters for Paper 1, where a reviewer on another platform may not reproduce the
+   quoted counterfactuals.
+2. **The pair terminology** (§4.2). Decide how to describe a pair in output and in papers; report $\theta$ or the
+   overlap.
+3. **A frame convention** for the local plot (§4.3, §5.2).
+4. **The metric under PCA** (§4.4, §5.4). Choose between the thesis's Euclidean and `W_binary`, **after** the
+   rotation problem (§4.1) is fully addressed: deferred on 2026-10-31, since Paper 1 uses Mahalanobis comparisons
+   under CVA only. Also add a test that pins the CVA identity: the ratio is $n-g$ for every pair, including 2-group
+   CVA. `17_3` §11 asserts it today; `tests/testthat/` does not.
+5. **Feasibility as a constraint** (§4.5, §5.4).
+6. **Off-plane counterfactuals** (§4.6). Mark them on the plot, or recompute `dist_z` / `dist_mahalanobis` for the
+   reported point.
+7. **Pair control** (§4.7):
+   - a `pairs =` argument to force any pair;
+   - a `max_pairs` default tied to $\binom{p}{2}$, so the default search covers every pair for any $p$, as the
+     thesis's does. The default of 21 already does so up to $p=7$.
+8. **A centroid guard** (§4.8). Verify, then warn.
+
+### 6.3 What the proposal does not fix
+
+- **§4.9 stands.** The search finds the best plane *within the biplot framework*, not the nearest boundary in the
+  full $p$-dimensional space. The drawn curve is still a slice of the decision surface. Global fidelity is still
+  traded for local accuracy:
+  - the minimal rotation should *reduce* that trade for a given eigenplane, because it is the smallest rotation
+    achieving exactness;
+  - that is test 5, and it is not yet measured.
+- **Downstream objects still inherit the plane.** Shapley attribution and sparse counterfactuals inherit whichever
+  plane is drawn. The search makes that choice principled and reproducible; it does not remove the dependence.
+- **Off-plane points are unchanged.** Sparse and restored counterfactuals still leave the plane (§4.6).
+
+---
+
+## Appendix A — Measurements
+
+Unless stated otherwise:
+
+- **`17_1`** is the workhorse: target row 6, with the planes taken from the package's own `Vr_rot`. A 3×3 PCA basis
+  is a lossless rotation, so anything that changes between its views is the rotation alone.
+- **`17_2`** is lossy: four features into three PCs, target row 49.
+
+### A.1 The plane under perturbation (`17_2`; supports §4.1)
+
+**Setting:** loan-default GAM model, PCA, $p=4$, target row 49; the search selects pair (2,3).
+
+- **The rank.** The singular values of $\mathbf{C}$ for pair (2,3) are `1.63e+00, 6.71e-17, 0, 0`: rank 1 of 4,
+  with a 3-dimensional null space. All six pairs are rank 1 (`17_2` §8).
+- **Identical inputs give an identical plane** (A.2).
+- **Inputs that differ in their last bits give different planes.**
+  - The first principal angle between two such planes is always 0°, because both contain the target.
+  - The *second* angle is the arbitrary part:
+
+  | Input change (pair rotated onto) | max abs change | 2nd principal angle | source |
+  |---|---|---|---|
+  | re-orthonormalise V only, (1,2) | 5.55e-16 | 24.09° | `17_2` §8b |
+  | random noise on V, scale 1e-16, (1,2) | 5.55e-16 | 24.09° | `17_2` §8b |
+  | random noise on V, scale 1e-15, (1,2) | 1.44e-15 | 71.57° | `17_2` §8b |
+  | random noise on V, scale 1e-12, (1,2) | 1.61e-12 | 24.09° | `17_2` §8b |
+  | random noise on V, scale 1e-08, (1,2) | 1.01e-08 | 36.87° | `17_2` §8b |
+  | `svd(X_std)$v` instead of `bl_result$V` (numerically the same matrix), (2,3) | **4.65e-15** | **65.91°** | `17_2` §7b |
+  | target standardised as a row of `scale()` instead of the package's `(x - X_center)/X_sd`, (1,2) | 3.33e-16 | 29.81° | `17_2` §7b |
+
+- **The counterfactual moves with the plane.** At pair (1,2), noise of 1e-15 on V moves the nearest boundary point
+  by 0.138 in feature space (√$d_M$ 1.1262 → 1.1088; `17_2` §8c).
+- **The label overlap.** Only **21%** of the selected (2,3) plane's second direction (taken orthogonal to the
+  target) lies inside $\text{span}(\mathbf{V}_{[,2]}, \mathbf{V}_{[,3]})$ (`17_2` §9).
+- **Why it is easy to miss.** The target lies in every one of these planes (distance ~1e-15; `17_2` §14). The one
+  thing a reader would naturally check, whether the target lands correctly, looks fine either way.
+
+### A.2 Within-platform determinism (supports §4.1)
+
+For identical inputs:
+
+- `.bl_rotate()` returns a bit-identical basis;
+- the nearest boundary vertex is the exact minimum.
+
+So a repeated call, or the same call after any other package function, returns the identical counterfactual.
+
+| target | calls | result |
+|---|---|---|
+| `17_1` set-up, row 102 | 5 identical full searches | `best_pair` (1,2) every call; squared $d_M$ (1,2) 0.229143, (1,3) 0.232776, (2,3) 0.232243 |
+| `17_1` set-up, rows 6, 104, 140, 161 | 5 identical full searches each | one result per row |
+| `17_2` set-up, row 49 | 7 mixed full and pinned searches (`17_3` §8b) | full 1.147879 and pinned 1.208670 on every call, in any order |
+
+Asserted by:
+
+- `17_3` §5 and §8b;
+- `tests/testthat/test-boundary.R`, which checks for identical results under any RNG state and after
+  `bl_find_boundary()` / `bl_surrogate()`.
+
+Before 2026-10-30, repeated calls could differ through a random tie-break in the nearest-vertex step
+(`../nearest-vertex-tie-break.md`).
+
+### A.3 The pair labels at $p=3$ (`17_1` §12; supports §4.2)
+
+**Setting:** row 6, rotating onto each named pair with `17_1`'s own copy of `.bl_rotate()` from `svd(X_std)$v`.
+
+| named pair | $\theta$ | 2nd principal angle vs `span(V[,pair])` | 2nd direction inside the named eigenplane |
+|---|---|---|---|
+| (1,2) | 48.25° | 86.26° | **56.08%** |
+| (1,3) | 3.03° | 3.32° | 99.94% |
+| (2,3) | 41.59° | 86.97° | **44.35%** |
+
+**These planes versus the package's.** They come from `svd(X_std)$v`, which is 1.4e-15 from the package's
+`bl_result$V`.
+
+- For (1,3) the package draws the same plane.
+- For (1,2) its plane is a different valid completion, **86.42°** away (`17_1` §15c). A.6 measures that plane's
+  tilt as 48.28°.
+
+The two figures for "the (1,2) plane" are §4.1 in action, not a contradiction.
+
+**Per column:** for all three pairs alike, rotated column 1 comes out closest to PC3 and column 2 closest to PC1.
+Three different labels give the same resulting axes.
+
+**$\theta$ does not predict the overlap.** Across all 663 (row, pair) combinations:
+
+- Pearson $r = +0.33$, Spearman $+0.14$;
+- among the 74 cases with $\theta < 5°$, the overlap spans the full range, 0% to 100%;
+- row 6's pairing of $\theta = 3.03°$ with 99.94% is a coincidence: row 137 has $\theta = 1.49°$ with **0.1%**.
+
+### A.4 The dimensional ladder and the toy (`17_1a`, `17_1`, `17_2`; supports §5.1)
+
+| setting | free rotations | admissible planes (§5.1) |
+|---|---|---|
+| $p=2,\ r=1$ (the thesis's toy) | 0 — unique | 0 — unique |
+| $p=3,\ r=2$ | 1 | 1 |
+| $p=4,\ r=2$ | 3 | 2 (`17_2` §8a) |
+
+**The toy.** Rotating onto **PC1** and onto **PC2** gives:
+
+- the *identical* rotation matrix $\mathbf{A}$, retained axis, adequacy, RSS and sample predictivity;
+- only $\rho$ differs (1.134058 versus 2.120244), and $\rho$ is discarded.
+
+With $r=1$ the retained axis is forced to be the target's own direction ($|\cos| = 1.000000000000$ for all five
+points), and in 2D only one line through the origin contains the target.
+
+**At $p=3$ a first principal angle of 0° carries no information.**
+
+- In 3-space any two 2-planes meet in a line. Three random plane pairs give `0.00, 83.34` / `0.00, 47.79` /
+  `0.00, 87.81`.
+- Nor is the shared line the target's direction: for row 6, only 0.4435 of that direction lies in the PC1–PC2
+  plane, which is its unrotated sample predictivity.
+
+### A.5 A slice, not a view (`17_1`; supports §4.9)
+
+- **In 3D:** a figure of a 3-variable model shows the whole $p\approx0.5$ surface. Every rotated view holds the same
+  surface, cloud and points; rotating only moves the camera.
+- **In 2D:** a biplot shows where the model crosses 0.5 **within the drawn plane**, with the off-plane coordinate
+  pinned at 0.
+
+Row 6, pinned (1,2) versus the selected (1,3):
+
+| | points | model $p$ along the curve | $\max|p-0.5|$ |
+|---|---|---|---|
+| pinned (1,2) | 700 | [0.49816, 0.50202] | 2.02e-03 |
+| selected (1,3) | 498 | [0.49812, 0.50198] | 1.98e-03 |
+
+**Two genuine boundary curves, far apart.**
+
+- Both are genuine boundary curves, yet the nearest-neighbour distance between them is median **2.30**, max
+  **3.85**, against a data span of **6.71**. They separate by 57% of the data's extent.
+- The planes are **90.00°** apart.
+
+**They share exactly one point, and this is forced.**
+
+- Both planes contain the origin and the target. Two distinct planes meet in one line, so their intersection is the
+  target's ray, $\operatorname{span}(x_t)$; verified $|\cos(n_B \times n_C,\ x_t)| = 1.000000000000$.
+- The surface crosses that ray at $t=0.41223$. Both curves pass within 0.0036 and 0.0010 of that crossing, against
+  a contour grid step of 0.0363.
+
+**The counterfactuals differ.**
+
+- $B_x = (+0.759, +0.062, +0.165)$ versus $(+0.861, +0.381, +0.084)$: **0.345 apart**.
+- $\sqrt{d_M}$ is 1.2527 versus 1.1455.
+
+A different slice gives a different nearest boundary point and so different advice.
+
+### A.6 Tilt needs two angles, and is not a criterion (`17_1`; supports §4.9)
+
+**Two numbers, not one.** Relative to the unrotated PC1–PC2 plane, a rotated plane's orientation needs **two**
+numbers.
+
+- Write it as $s_3 = s_1 s_{1\text{ax}} + s_2 s_{2\text{ax}}$.
+- The component tilts are $\arctan s_1$ along PC1 and $\arctan s_2$ along PC2.
+- The dihedral angle is their resultant, $\tan^2\theta = s_1^2 + s_2^2$ (verified to 6 dp).
+
+**For row 6:**
+
+- the pinned (1,2) plane is $(-48.26°, +2.04°)$, almost a pure PC1 tilt;
+- the selected (1,3) plane is $(+65.85°, +88.64°)$.
+
+**The admissible tilts form a line.** "Contains the target" is one equation, $s_1 a_1 + s_2 a_2 = a_3$, so the
+admissible tilts form a **line** in the $(s_1, s_2)$ plane.
+
+- For row 6 that line admits dihedrals from **48.25° to 89.05°**.
+- The pinned plane came out at 48.28° (the shallow end), the selected plane at 88.64° (the steep end).
+- The criterion and the tilt run in opposite directions here.
+
+### A.7 What the rotation costs, per variable (`17_1`; supports §4.9)
+
+**What is measured.** `adequacy` and axis predictivity index the **rows** of $\mathbf{V}$: they are per *variable*.
+Row 6, $\mathbf{J} = \operatorname{diag}(1,1,0)$:
+
+| | adequacy (income / score / rate) | RSS (of 660) | target sample predictivity | mean of the other 220 |
+|---|---|---|---|---|
+| unrotated | 0.5023 / 0.4978 / 0.9999 | **168.656** | 0.4435 | 0.7161 |
+| rotated → (1,2) | 0.9988 / **0.0442** / 0.9570 | 229.465 | **1.000000** | 0.6710 |
+| rotated → (1,3) | 0.9671 / 0.9609 / **0.0720** | 213.624 | **1.000000** | 0.6758 |
+
+**What it shows:**
+
+- **Different sacrifices.** The two rotations sacrifice different variables: `credit_score` in one,
+  `loan_int_rate` in the other.
+- **Exactness.** The target reaches sample predictivity exactly 1 in both, measured at 2.2e-15.
+- **An arithmetic check.** The unrotated RSS equals the dropped component's variance $d_3^2$ exactly, which is a
+  useful check on any reimplementation.
+
+### A.8 The thesis toy's numbers (`17_1a`; supports §2.3)
+
+**What reproduces:**
+
+- **The angle and dilation.** `17_1a` reproduces the thesis's rotation angle (**28.14°**; measured 28.1411°) and
+  dilation ($\rho = 1.134 \approx 1/1.13$) exactly.
+
+**What does not:**
+
+- **Predictivity and residuals.** The thesis reports sample predictivity 0.72 → 1 and RSS 0.28 → 4 of 14. The
+  script's five points give **0.7776 → 1** and **4.307 → 4.927 of 11.4**.
+
+The data behind the thesis's example is probably not the script's.
+
+**On the residual figure:**
+
+- RSS here is the **trace** of $\mathbf{X}'\mathbf{X}$, not the sum of its entries.
+- Summing every entry is not a sum of squares, and it makes the rotation appear to *improve* global fit.
+- With the trace, the unrotated RSS equals $d_2^2$ exactly and the rotated RSS is larger, as §4.9 requires.
+
+### A.9 The minimal rotation's label integrity (`17_3` §2; supports §5.2)
+
+**Setting:** $p=4$, target row 49. `ang1` is the first principal angle against the eigenplane the pair *names*.
+
+| pair | $\theta$ | `ang1` minimal | `ang2` minimal | exactness residual | `ang1` current |
+|---|---|---|---|---|---|
+| (1,2) | 38.4522° | **0.00e+00** | 38.4522° | 1.40e-15 | 1.1111° |
+| (1,3) | 34.9160° | **0.00e+00** | 34.9160° | 1.99e-15 | 5.1471° |
+| (2,3) | 70.1512° | **0.00e+00** | 70.1512° | 1.08e-15 | 55.6173° |
+| (1,4) | 19.8488° | **0.00e+00** | 19.8488° | 4.19e-15 | 17.2008° |
+| (2,4) | 55.0840° | **0.00e+00** | 55.0840° | 2.69e-15 | 5.4437° |
+| (3,4) | 51.5478° | **0.00e+00** | 51.5478° | 2.34e-15 | 51.3428° |
+
+**The two constructions compared:**
+
+- **Under the minimal rotation**, the plane shares a direction with its named eigenplane exactly, and its only
+  departure is $\theta$.
+- **Under the current construction**, it shares nothing. That is the mechanism behind the 0.3–70% overlaps `17_2`
+  §9 measures at $p=4$, and behind three labels giving the same axes (A.3).
+
+The returned basis was bit-identical across five calls (`17_3` §3).
+
+### A.10 The family search (`17_3` §6–§9; supports §5.3)
+
+**$p=3$, target row 6, exhaustive 1° sweep of all 180 planes:**
 
 | | squared $d_M$ | $d_M$ |
 |---|---|---|
@@ -1049,115 +1347,91 @@ an earlier crossing would be nearer.
 | minimal rotation, label (2,3) | 1.568419 | 1.2524 |
 | **the package, as it stands** | 1.312277 | 1.1456 |
 
-Three things this shows.
+**Three findings:**
 
-1. **The plane choice matters, and the search wins.** The sweep improves on the package by **5.7%
-   in squared distance (2.9% in distance)**, and monotonicity holds as it must — every plane the
-   current method draws lies in $\mathcal{A}$, so the sweep's optimum cannot be worse.
-2. **Pinning to (1,2) lands at the worst plane in the family for this target.** Its 1.580762 is
-   within 0.05% of the sweep's *maximum* of 1.579964. A pinned pair is not a neutral default.
-3. **The curve has two local minima.** Near-ties are real, so they should be reported rather than
-   silently resolved.
+1. **The search wins.** It improves on the package by **5.7% in squared distance** (2.9% in distance).
+   Monotonicity holds as it must: every plane the current method draws lies in $\mathcal{A}$.
+2. **Pinning to (1,2) lands at the worst plane** for this target: 1.580762, within 0.05% of the sweep's maximum of
+   1.579964. A pinned pair is not a neutral default.
+3. **The curve has two local minima.** Near-ties are real, and should be reported rather than silently resolved.
 
-At $p=4$, target row 49, over a 200-point Fibonacci lattice: best label (1,2) **1.147994**, package
-**1.147879**, family best **1.097519** — a **4.4%** improvement in squared distance.
+**At $p=4$**, target row 49, over a 200-point Fibonacci lattice:
 
-**One caveat on those comparisons.** The sweep's figures come from the stage-1 ray scan and the
-package's from its own $200\times200$ grid, so the two are measured with different discretisations
-and the percentages are indicative rather than exact. The ray scan's 10° angular resolution can
-only *miss* the nearest point, so it should if anything understate the improvement — but a
-like-for-like number requires running stage 2 (the package's own pipeline) on the sweep's winning
-plane, which is the gap recorded against test 4 in §6.5.
+- best label (1,2): **1.147994**;
+- the package: **1.147879**;
+- the family's best: **1.097519**, a **4.4%** improvement in squared distance.
 
-**Cost — measured, and it is a cost, not a saving.** A
-plane-at-a-time sweep is **6.3×** the package's time (5.75 s vs 0.91 s at $p=3$), even though the
-prediction counts are comparable (129,600 vs 120,000). The cost is per-call overhead, not
-arithmetic: the package's grid does 40,000 rows in one vectorised call per pair, while a per-plane
-ray scan does 36 rows per call. Batching the scan **across planes** — all $180 \times 36 = 6{,}480$
-rows in one call per march/bisect step, 20 calls for the entire sweep — brings it to **1.65×**
-(0.81 s vs 0.49 s). So the honest statement is: an exhaustive sweep at $p=3$ costs roughly
-**1.6× the current search when batched, and about 6× if implemented naïvely.** That is affordable
-for a per-target explanation, and the sweep is embarrassingly parallel besides, but it is a real
-cost and should not be advertised as a saving.
+**Discretisation.**
 
-**Two further fixes, both nearly free.**
+- **What differs:** the sweep's figures come from the stage-1 ray scan, the package's from its 200×200 grid.
+- **Which way it biases:** the ray scan's 10° angular resolution can only *miss* the nearest point, so if anything
+  it understates the improvement.
+- **What is still needed:** a like-for-like figure needs stage 2 on the winning plane (§6.1, test 4).
 
-1. **Feasibility as a constraint, not a post-hoc filter.** §5.7 measured `train_ranges` removing
-   18–56% of boundary candidates *after* contouring. Filtering afterwards means the reported point
-   is "nearest among survivors" and no better feasible point was ever sought — a bias, not just a
-   loss of candidates. Restrict the grid and contour extraction to the feasible region instead.
-   The same argument applies to `set_filters` actionability, which becomes a box or half-space
-   constraint on the search rather than filter stage (b).
-2. **One metric throughout**, resolving §4.2. Use squared Mahalanobis for the within-plane
-   nearest-vertex step as well as across planes, so "nearest" means one thing end to end. The
-   vertices are already back-projected to X-space for filter stage (d), so this costs no additional
-   model evaluations.
+**Cost.**
 
-**Reporting.** Replace `all_distances_mahalanobis` — six arbitrary planes — with the objective over
-the searched family, plus the runner-up local minima, so near-ties are visible instead of silently
-resolved. At $p=3$ that is a distance-versus-$\varphi$ **curve**, a genuinely informative
-per-target diagnostic: for row 6 it shows the reported distance moving by a factor of 1.13 across
-the family. Keep $\theta$ and the nearest named pair in the output for continuity with `best_pair`.
-
-### 6.4 Adoption path
-
-§4.1's own bar applies: this changes every Phase 3 counterfactual the package has produced, so it
-should not be substituted unilaterally. Land it as a new option — `rotation = c("procrustes",
-"minimal")` and `plane_search = c("pairs", "family")` — with the defaults unchanged, and switch the
-defaults only once §6.5's tests have been run and reported across the full training set rather than
-the two targets measured here.
-
-### 6.5 Acceptance tests
-
-These are the measurements §4.1 asks for. All of them are run by
-`17_3_minimal-rotation-verification.R`; the "runs in" column names the section of that script, so a
-claim can be traced to the code that produced it. Tests 1, 2, 3 and 6 are asserted there — the
-script fails if they stop holding. Tests 4, 5 and 7 remain partial, and the table says so rather
-than rounding them up.
-
-| # | test | runs in | status |
-|---|---|---|---|
-| 1 | **Exactness** — $x_t \in \operatorname{span}(\mathbf{V}_r)$ to ~1e-12 for every candidate | `17_3` §2 | ✅ asserted; residuals 1.1e-15 to 4.2e-15, all six pairs |
-| 2 | **Determinism** — identical across ≥5 calls and across BLAS/LAPACK builds | `17_3` §3 | ✅ asserted bit-identical across 5 calls; cross-BLAS **not yet run** |
-| 3 | **Minimality / label integrity** — principal angles $(0,\theta)$ exactly | `17_3` §2 | ✅ asserted; `ang1` = 0.00e+00 and `ang2` $=\theta$, all six pairs |
-| 4 | **Monotonicity** — family optimum $\le$ current, per target | `17_3` §7, §8 | ◐ asserted and holding at both targets, but the family figure comes from the stage-1 ray scan and the package figure from its own 200×200 grid. Needs stage 2 re-run on the winning plane for a like-for-like number, and a sweep over all rows to quantify what the label sample costs |
-| 5 | **Variance retained** — adequacy, axis predictivity, RSS at $\mathbf{J}=\operatorname{diag}(1,1,0,\ldots)$, minimal versus current | — | ⬜ **not run.** Reuse `17_1` §13 / `17_2` §11's diagnostic block |
-| 6 | **Thesis reproduction** — §2.5's 28.14° at $p=2, r=1$ | `17_3` §10 | ✅ asserted; 28.1411°, matching Procrustes to 6.75e-14 |
-| 7 | **Cost** | `17_3` §9 | ◐ measured at $p=3$ and reported, not asserted — wall clock is machine-dependent. $p\ge4$ **not yet timed** |
-
-One further check the script performs that is not on §4.1's list, because it is a property of the
-*current* implementation rather than the proposal: `17_3` §8b measures the order dependence
-recorded in §5.9 below.
-
-### 6.6 What this does *not* fix
-
-- **§4.4 stands.** This finds the best plane *within the biplot framework* — the smallest in-plane
-  distance to the in-plane slice of the boundary. It is **not** the nearest boundary in the full
-  $p$-dimensional feature space, and the improved search must not be read as implying otherwise.
-- **§5.4 stands, unchanged.** The drawn curve is still a cross-section of the decision surface, not
-  a view of it. Choosing the plane better does not make the slice representative.
-- **§4.3 and §5.6 stand.** Global fidelity is still traded for local accuracy. The minimal rotation
-  should *reduce* that trade for a given eigenplane, since it is the smallest rotation achieving
-  exactness — but that is test 5, and it has not yet been measured.
-- **§4.1 point 4 stands.** Shapley attribution and sparse counterfactuals still inherit whichever
-  plane is drawn. The search makes that choice principled and reproducible; it does not remove the
-  dependence. Sparse counterfactuals mix coordinates of the target and the counterfactual, so they
-  generally leave the plane and remain approximate in the picture — no worse than at present, but
-  not fixed here.
+- **Plane at a time:** at $p=3$ the sweep takes **6–12×** the package's search time, though the prediction counts
+  are comparable (129,600 vs 120,000).
+- **Why:** the cost is per-call overhead. The package's grid scores 40,000 rows in one call per pair; a per-plane
+  ray scan scores 36 rows per call.
+- **Batched across planes:** all 180 × 36 = 6,480 rows go in one call per march/bisect step, 20 calls in all. That
+  brings it to **1.4–1.7×**.
+- **The recorded ratios** (`17_3` §9): 6.3× / 1.65× on 2026-09-04, and 12.1× / 1.44–1.63× on 2026-10-30. They move
+  with machine load; the ratio, not the seconds, is the point.
 
 ---
 
-## 7. References
+## Appendix B — Reproducing the package's objects
 
-- PhD thesis, "Optimal rotation of the biplot," §3.5–3.5.2 (theoretical source for Part A).
-- `R/local_cf.R` — `.generate_pairs()` (pair enumeration), `.bl_rotate()` (Procrustes rotation),
-  `bl_find_local_cf()` (the full per-pair search and selection pipeline).
-- `documentation/mahalanobis_technical_note.md` — full derivation of the $\mathbf{W}$ metric, the
-  Cholesky-based inversion, and the cross-pair selection criterion behind §3.3.
-- `2 implementation_summary.txt` §4.2, §4.2.1, §4.8 — code-mechanics description of the rotation
-  and the local counterfactual search.
-- `1 Foundation intro documents.txt` §10.3, §10.4, §10.7 — original design constraints (CVA
-  scatter-matrix requirement, hull-polygon invalidation under rotation, the `max_pairs` cap).
-- Original PhD research code (branch `original_PhD_code`): `scripts/1.3 Optimal Rotation.R`
-  (`Biplot_rotation()`, the `pc.distz` cross-pair criterion) and `scripts/1 Functions for biplot.R`
-  (`Wmat` construction).
+- **Use the package's own objects rather than re-deriving them.**
+  - `bl_local$Vr_rot` is the rotated basis the local biplot uses.
+  - `bl_local$ct_local` (the local plane) and `bl_result$biplot_grid$ct` (the global biplot) are the boundary
+    contours, already in their plane's 2D coordinates. They plot verbatim.
+- **To reproduce the package's plane, use its exact inputs:** `bl_result$V`, and the target standardised as the
+  package does, `(x - X_center) / X_sd`.
+  - Rotating from `svd(X)$v` (1.4e-15 away), or from a target computed another way (3e-16 away), can land on a
+    different plane (§4.1; `17_1` §15c, `17_2` §7b).
+  - With identical inputs, the mirror reproduces `.bl_rotate()` exactly (`17_1` §15a, `17_2` §7a).
+- **Compare planes by their projection matrices** $\mathbf{P} = \mathbf{V}_r\mathbf{V}_r'$, never entry-wise. Even
+  with the plane matching exactly, the in-plane basis can differ by a large rotation: 1.61 entry-wise at a plane
+  difference of 2.2e-16 (§4.3).
+- **`max_pairs = 1L` pins the search to pair (1,2)**, because `.generate_pairs()` emits colexicographically. It is
+  the only supported way to force a plane, and it makes a pinned-versus-selected comparison possible (§4.7).
+- **Any replication of the pair search must include the `train_ranges` filter** (§3.3, filter (c)).
+  - **Its effect:** it removes 31% / 18% / 56% of boundary candidates by pair for row 6, and 56% / 51% / 49% for
+    row 199.
+  - **Without it:** a replication (`17_1`'s `select_pair()`) agrees with the package on 76 of 221 rows, and on 84
+    when it also rotates from `bl_result$V` (§4.5).
+- **`all_distances_mahalanobis` stores the squared distance.** The package's summary prints its square root.
+
+---
+
+## References
+
+- **The thesis:** Rowan, A. (2025), PhD thesis, `../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`:
+  - §3.4–3.4.2 (pp.70–79): the rotation and its CVA variant;
+  - §3.7.3, §3.8.1, §3.8.3 and §3.9 (pp.102–114): PCA versus CVA, the distance criterion, and the procedure;
+  - §4.2.1 (pp.136–140): the search over all component pairs (the Pima example);
+  - §4.3 (p.148): the conclusions;
+  - §6.2 (p.172): the Grand Tour as future work.
+- **Package source:**
+  - `R/local_cf.R`: `.generate_pairs()`, `.bl_rotate()`, `bl_find_local_cf()`, `.restore_fixed()`;
+  - `R/projection.R`: `.compute_metric_inverse()`, `bl_build_projection()`.
+- **Companion and related notes:**
+  - [`../boundary-distance-and-robustness.md`](../boundary-distance-and-robustness.md): $\mathbf{W}$, its Cholesky
+    inverse, and Phase 2's distance and robustness measures;
+  - [`../nearest-vertex-tie-break.md`](../nearest-vertex-tie-break.md): why the nearest vertex is the exact minimum;
+  - [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md): the post-search "fixed" restore (§3.5).
+- **Design documents:**
+  - `2 implementation_summary.txt` §4.2, §4.2.1 and §4.8: code mechanics;
+  - `1 Foundation intro documents.txt` §10.3, §10.4 and §10.7: the CVA scatter-matrix requirement, hull
+    invalidation under rotation, and the `max_pairs` cap.
+- **The research code** (branch `origin/original_PhD_code`), `scripts/`:
+  - `1.3 Optimal Rotation.R` (`Biplot_rotation()`);
+  - `4.3 Different Eigenvalues.R` (the pair search and `pc.distz`);
+  - `1.4 Biplot Boundary Search_optimized.R` (the in-plane search);
+  - `3.1 Biplot search - Train data.r` (`Wmat`);
+  - `1 Functions for biplot.R` (the CVA call).
+- **biplotEZ** 2.2: `CVA.biplot()` and `CVAlowdim()`, read from the installed package.
+- Cox & Cox (2008), on Procrustes analysis, as cited in the thesis §3.4 (full reference in the thesis's
+  bibliography).

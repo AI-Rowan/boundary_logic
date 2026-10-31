@@ -3,19 +3,19 @@
 # This repo is now this script's home; edit it here.
 
 # ============================================================================
-# Verification harness for the reference note's §6 recommendation
+# Verification harness for the reference note's §5 recommendation
 # ----------------------------------------------------------------------------
 # WHY THIS SCRIPT EXISTS
 #
-# §6 of biplot_rotation_and_pair_selection.md
+# §5 of biplot_rotation_and_pair_selection.md
 # recommends replacing the rank-1 Procrustes rotation with a closed-form minimal
 # (Givens) rotation, and replacing the six-eigenvector-pair sample with a search
-# over the family of planes containing the target. Every number §6 quotes was
-# measured -- and §4.1 declined the change pending exactly that measurement.
+# over the family of planes containing the target. Every number §5 quotes was
+# measured -- and adoption waits on exactly that measurement (§5.6).
 #
 # This script IS that measurement. It is the harness the package project needs in
 # order to re-run the acceptance tests before adopting anything, and it is why
-# §6 is a proposal with evidence rather than an assertion.
+# §5 is a proposal with evidence rather than an assertion.
 #
 # WHAT IS ASSERTED AND WHAT IS ONLY REPORTED
 #
@@ -24,21 +24,27 @@
 #     the thesis reproduction. These are properties of the construction and must
 #     hold on any machine. Each carries its expected value in a comment, so a
 #     future drift is diagnosable rather than just a failure.
-#   REPORTED ONLY -- anything timed, and the within-pair cost. Wall clock is
-#     machine-dependent; asserting it would make this script fail on a different
-#     laptop for no methodological reason.
+#   ASSERTED -- the package's own local search is deterministic: one pair gives one
+#     answer whichever call evaluates it, in any call order (sections 5 and 8b).
+#   ASSERTED -- under CVA the in-plane distance is the Mahalanobis distance up to
+#     the constant n - g, for every pair (section 11).
+#   REPORTED ONLY -- anything timed. Wall clock is machine-dependent; asserting it
+#     would make this script fail on a different laptop for no methodological
+#     reason.
 #
 # SECTIONS
-#   1  min_rotation()          the closed-form construction (§6.2)
-#   2  exactness + labels      the headline table (§6.2)
-#   3  determinism             (§6.5 test 2)
-#   4  plane dimension         the correction to §5.1's table (§6.1)
-#   5  within-pair cost        (§6.2's supporting measurement)
-#   6  ray_scan()              the in-plane objective (§6.3)
-#   7  p = 3 exhaustive sweep  (§6.3's table)
-#   8  p = 4 family lattice    (§6.3)
-#   9  cost                    (§6.3's cost paragraph)
-#  10  thesis reproduction     (§6.2)
+#   1  min_rotation()          the closed-form construction (§5.2)
+#   2  exactness + labels      the headline table (A.9)
+#   3  determinism             (§6.1 test 2)
+#   4  plane dimension         planes versus rotations (§5.1, A.4)
+#   5  package determinism     one pair, one answer (A.2)
+#   6  ray_scan()              the in-plane objective (§5.3)
+#   7  p = 3 exhaustive sweep  (A.10's table)
+#   8  p = 4 family lattice    (A.10)
+#   8b package determinism     any call order (A.2)
+#   9  cost                    (A.10's cost paragraph)
+#  10  thesis reproduction     (§5.2)
+#  11  CVA identity            in-plane distance = Mahalanobis, every pair (§3.4)
 #
 # Console output only -- no figures. Runs in roughly a minute.
 # ============================================================================
@@ -61,7 +67,7 @@ gen_pairs <- function(p) {            # the package's colexicographic order
 }
 
 # ---- 0) The two data setups ------------------------------------------------
-# p = 4 row 49 (the note's §4.1 target) and p = 3 row 6 (§5's workhorse target).
+# p = 4 row 49 (the note's A.1 target) and p = 3 row 6 (Appendix A's workhorse).
 # Mirrors 17_2 §1-5 and 17_1 §1-5: standardise in place so the package's "raw"
 # feature space IS this script's Xstd space, then wrap the GAM.
 build_setup <- function(feats, target_row, k_smooth = 8L, ttl = "verify") {
@@ -112,17 +118,14 @@ S3 <- build_setup(c("loan_percent_income", "credit_score",
                     "loan_int_rate"),          6L,  ttl = "p3")
 cat(sprintf("  p = 4, target row %d | p = 3, target row %d\n", S4$i, S3$i))
 
-# The package's own answer, taken NOW -- as the FIRST bl_find_local_cf call on each
-# setup, before anything else in this script has touched it. That ordering matters:
-# section 8b measures a full search returning a DIFFERENT distance when it follows a
-# max_pairs = 1L call on the same objects. Capturing the reference here keeps
-# sections 7 and 8 comparing against the unperturbed figure.
+# The package's own answer for each setup. The local search is deterministic
+# (sections 5 and 8b assert it), so the call order does not matter.
 pkg_ref4 <- bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)$dist_mahalanobis
 pkg_ref3 <- bl_find_local_cf(S3$bl_res, S3$tgt, verbose = FALSE)$dist_mahalanobis
-cat(sprintf("  package reference (first calls): p = 4 %.6f | p = 3 %.6f\n",
+cat(sprintf("  package reference: p = 4 %.6f | p = 3 %.6f\n",
             pkg_ref4, pkg_ref3))          # expect 1.147879 and 1.312277
 
-# ---- 1) The proposed construction (§6.2) -----------------------------------
+# ---- 1) The proposed construction (§5.2) -----------------------------------
 # Minimal Givens rotation carrying the named eigenplane onto a plane containing
 # the target. R is a rotation by theta inside span(u, w) and the identity on its
 # complement, so it is the SMALLEST rotation achieving exactness.
@@ -162,11 +165,11 @@ procrustes_plane <- function(x_t, V, pair) {
   (V %*% t(sv$v %*% t(sv$u)))[, 1:2, drop = FALSE]
 }
 
-# ---- 2) Exactness and label integrity, p = 4 (§6.2's table) ----------------
+# ---- 2) Exactness and label integrity, p = 4 (A.9's table) ------------------
 # The sharp result. Under the minimal rotation the plane SHARES a direction with
 # the eigenplane its label names (first principal angle 0) and its only departure
 # is the theta it was forced to move. Under the current construction it shares
-# nothing -- which is the mechanism behind §5.2's overlap figures.
+# nothing -- which is the mechanism behind A.3's overlap figures.
 cat("\n=== 2) Exactness and label integrity (p = 4, row 49) ===\n")
 prs4 <- gen_pairs(S4$p)
 pn4  <- apply(prs4, 1L, function(r) sprintf("(%d,%d)", r[1], r[2]))
@@ -188,18 +191,19 @@ cat("  ASSERTED: ang1 = 0 and ang2 = theta exactly, every pair.\n")
 cat("  The rightmost column is the CURRENT construction's first angle -- nonzero,\n")
 cat("  so its plane shares no direction with the eigenplane it is named after.\n")
 
-# ---- 3) Determinism (§6.5 test 2) ------------------------------------------
+# ---- 3) Determinism (§6.1 test 2) ------------------------------------------
 cat("\n=== 3) Determinism ===\n")
 h <- replicate(5L, paste(sprintf("%.17g",
        as.numeric(min_rotation(S4$x_t, S4$V, c(2L, 3L))$Vr)), collapse = "|"))
 cat(sprintf("  basis bit-identical across 5 calls: %s\n", length(unique(h)) == 1L))
 stopifnot(length(unique(h)) == 1L)
-cat("  (The current construction fails the equivalent check: §5.3 records\n")
-cat("   best_pair flipping between (1,2) and (1,3) across five identical calls.)\n")
+cat("  (The current construction is also bit-identical for identical inputs. What\n")
+cat("   it lacks is §4.1: its plane is LAPACK's arbitrary completion, so inputs\n")
+cat("   that differ only in their last bits can give a different plane.)\n")
 
-# ---- 4) The plane dimension (§6.1) -----------------------------------------
-# §5.1's table reports "free = 3" at p = 4, citing §4.1's "3-dimensional manifold
-# of rotations". That 3 is right for ROTATIONS and wrong for PLANES: containing a
+# ---- 4) The plane dimension (§5.1) -----------------------------------------
+# An earlier version of the note reported "free = 3" at p = 4, citing "a 3-dimensional
+# manifold of rotations". That 3 is right for ROTATIONS and wrong for PLANES: containing a
 # fixed line is TWO conditions on Gr(2,4), not one, leaving 4 - 2 = 2. Measured
 # here as the tangent rank of the planes-through-the-target family, rather than
 # asserted algebraically.
@@ -223,28 +227,32 @@ cat("\n=== 4) Dimension of the planes-through-the-target family (p = 4) ===\n")
               paste(format(sv_t, digits = 3), collapse = "  ")))   # expect 1.41 1.41
   cat(sprintf("  -> measured PLANE dimension = %d (rotations = 3; the difference is\n",
               sum(sv_t > 1e-8 * max(sv_t))))
-  cat("     the in-plane spin, 3 = 2 + 1). This is the correction to §5.1.\n")
+  cat("     the in-plane spin, 3 = 2 + 1). This is the plane count of §5.1.\n")
   stopifnot(sum(sv_t > 1e-8 * max(sv_t)) == (p - 2L))
 }
 
-# ---- 5) What the arbitrary completion costs, WITHIN one pair ---------------
-# The note's §5.4 measures the consequence ACROSS pairs. The tighter claim -- that
-# the completion alone moves the answer at one fixed pair -- comes free: the
-# package called twice on pair (1,2) gives two different distances.
-cat("\n=== 5) Within-pair cost of the arbitrary completion (p = 4) ===\n")
+# ---- 5) The package's local search: one pair, one answer --------------------
+# The same pair evaluated by two different calls -- pinned (max_pairs = 1L) and as
+# the (1,2) entry of a full search -- and the pinned call repeated must agree bit
+# for bit. The rotation is deterministic for identical inputs and the nearest
+# boundary vertex is the exact minimum. (Before 2026-10-30 a random tie-break in
+# the nearest-vertex step made these differ; see the note's A.2.)
+cat("\n=== 5) The package's local search: one pair, one answer (p = 4) ===\n")
 {
-  l12 <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, verbose = FALSE)
-  lop <- bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)
-  a <- sqrt(l12$dist_mahalanobis)
-  b <- sqrt(as.numeric(lop$all_distances_mahalanobis[["(1,2)"]]))
-  cat(sprintf("  max_pairs = 1L         sqrt(mah) = %.6f\n", a))   # expect 1.096767
-  cat(sprintf("  inside the full search sqrt(mah) = %.6f\n", b))   # expect 1.099395
-  cat(sprintf("  difference %.2e -- same pair, same data, two calls.\n", abs(a - b)))
-  cat("  REPORTED, not asserted: the size is data-dependent; the point is that it\n")
-  cat("  is nonzero at all.\n")
+  l12a <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, verbose = FALSE)
+  lop  <- bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)
+  l12b <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, verbose = FALSE)
+  a <- l12a$dist_mahalanobis
+  b <- as.numeric(lop$all_distances_mahalanobis[["(1,2)"]])
+  cat(sprintf("  pinned (1,2), squared mah      = %.6f\n", a))   # expect 1.208670
+  cat(sprintf("  (1,2) inside the full search   = %.6f\n", b))   # expect 1.208670
+  cat(sprintf("  pinned call repeated, same B_x : %s\n", identical(l12a$B_x, l12b$B_x)))
+  stopifnot(identical(a, b), identical(l12a$B_x, l12b$B_x),
+            identical(l12a$dist_mahalanobis, l12b$dist_mahalanobis))
+  cat("  ASSERTED: identical, bit for bit.\n")
 }
 
-# ---- 6) The in-plane objective (§6.3, stage 1) -----------------------------
+# ---- 6) The in-plane objective (§5.3, stage 1) -----------------------------
 # Nearest in-plane boundary point, by casting K rays from the target and bisecting
 # each to its FIRST cutoff crossing. Correct for a nearest-point search: the
 # nearest point is reached by some ray, and along that ray it must be the first
@@ -304,7 +312,7 @@ plane_from <- function(pb, d) {
 
 # ---- 7) p = 3: the family is ONE parameter, so sweep it exhaustively -------
 # Ranking settings (K = 18, march 12, bisect 8) -- coarser than section 8's,
-# because stage 1 only has to rank planes; §6.3's stage 2 re-runs the package's
+# because stage 1 only has to rank planes; §5.3's stage 2 re-runs the package's
 # own pipeline on the winner.
 cat("\n=== 7) p = 3 exhaustive 1-degree sweep of the admissible pencil ===\n")
 {
@@ -376,51 +384,35 @@ cat("\n=== 8) p = 4 family lattice (200 points) ===\n")
               100 * (1 - min(fam) / min(lab4))))
 }
 
-# ---- 8b) FINDING: the full search depends on WHAT WAS CALLED BEFORE IT ------
-# Found while rebuilding this harness (2026-09-10) and not previously recorded.
-# For one fixed target, bl_find_local_cf()'s reported distance changes according
-# to the call history of the session -- specifically, a full search run
-# immediately after a max_pairs = 1L call on the SAME objects returns a different
-# distance from the same call made in isolation.
-#
-# This is NOT the floating-point under-determination of §4.1, and not §5.3's
-# within-session pair flip: the selected pair is unchanged, 200 unrelated svd()
-# calls have no effect, and building a second bl_result has no effect. It is
-# specific to prior bl_find_local_cf() calls. The mechanism is not established
-# here -- the installed package ships as a lazy-load database, so the source was
-# not available to inspect -- so this is a measurement and a bug report, not a
-# diagnosis.
-cat("\n=== 8b) Order dependence of the full search (p = 4, row 49) ===\n")
+# ---- 8b) The package's local search: any call order --------------------------
+# A mixed sequence of full and pinned searches on the same objects. Each call type
+# must return one value, whatever ran before it in the session (the note's A.2).
+# (Before 2026-10-30 the values depended on the earlier calls, through a random
+# tie-break in the nearest-vertex step.)
+cat("\n=== 8b) The package's local search: any call order (p = 4, row 49) ===\n")
 {
   full <- function() bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)
   pin  <- function() bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L,
                                       verbose = FALSE)
   seqn <- list("full" = full, "pin" = pin, "full" = full, "full" = full,
                "pin" = pin, "full" = full, "full" = full)
-  seen <- c()
+  seen <- list(full = numeric(0), pin = numeric(0))
   for (k in seq_along(seqn)) {
     lo <- seqn[[k]]()
     pr <- as.integer(lo$best_pair)
     cat(sprintf("  %d. %-5s -> pair (%d,%d) | dist_mah %.6f\n",
                 k, names(seqn)[k], pr[1], pr[2], lo$dist_mahalanobis))
-    if (names(seqn)[k] == "full") seen <- c(seen, lo$dist_mahalanobis)
+    seen[[names(seqn)[k]]] <- c(seen[[names(seqn)[k]]], lo$dist_mahalanobis)
   }
-  # The SEQUENCE is itself not stable run to run -- two runs on 2026-09-10 gave
-  # ... / 1.153789 / 1.147879 / ... and ... / 1.153789 / 1.153789 / ... at calls
-  # 3-4. What is stable is the SET: the full search returns 1.147879 or 1.153789,
-  # and the pinned search 1.208670 or 1.202898. Do not encode an expected order.
-  cat(sprintf("  distinct full-search values in one session: %s\n",
-              paste(unique(sprintf("%.6f", seen)), collapse = " | ")))
-  if (length(unique(sprintf("%.6f", seen))) > 1L)
-    cat("  -> the SAME call on the SAME objects returns more than one answer.\n")
-  cat("  REPORTED, not asserted: this is the behaviour under test, so asserting a\n")
-  cat("  particular sequence would freeze in a bug rather than surface it.\n")
-  cat("  Practical rule: capture a quoted counterfactual from a FIRST call on a\n")
-  cat("  fresh result object, and re-run to confirm it is stable (§5.3, §6.5 test 2).\n")
+  cat(sprintf("  distinct values: full %s | pinned %s\n",   # expect 1.147879 | 1.208670
+              paste(unique(sprintf("%.6f", seen$full)), collapse = ", "),
+              paste(unique(sprintf("%.6f", seen$pin)),  collapse = ", ")))
+  stopifnot(length(unique(seen$full)) == 1L, length(unique(seen$pin)) == 1L)
+  cat("  ASSERTED: one value per call type, in any order.\n")
 }
 
 # ---- 9) Cost -- REPORTED ONLY ---------------------------------------------
-# §6.3's cost paragraph. The plane-at-a-time sweep is dominated by per-call
+# A.10's cost paragraph. The plane-at-a-time sweep is dominated by per-call
 # overhead, not arithmetic: the package's grid does 40,000 rows in one vectorised
 # call per pair, while a per-plane ray scan does 36 rows per call. Batching the
 # scan ACROSS planes puts the whole sweep in one call per march/bisect step.
@@ -493,10 +485,10 @@ cat("\n=== 9) Cost (reported, not asserted -- wall clock is machine-dependent) =
   cat("     move with machine load -- the ratio, not the seconds, is the point.\n")
 }
 
-# ---- 10) The thesis's worked example is preserved (§6.2) -------------------
+# ---- 10) The thesis's worked example is preserved (§5.2) -------------------
 # At p = 2, r = 1 the admissible family is a single line -- there is exactly one
 # line through the origin containing the target -- so the minimal rotation and
-# Procrustes MUST agree, and the §2.5 exposition is untouched by the change.
+# Procrustes MUST agree, and the §2.3 exposition is untouched by the change.
 #
 # The five points are 17_1a's (originally A3's), defined inline rather than
 # sourced: 17_1a draws its six-panel figure on load.
@@ -517,13 +509,110 @@ cat("\n=== 10) Thesis reproduction (p = 2, r = 1, target row 5) ===\n")
 
   cat(sprintf("  Procrustes       %.4f deg\n", th_proc))   # expect 28.1411
   cat(sprintf("  minimal rotation %.4f deg\n", th_min))    # expect 28.1411
-  cat(sprintf("  thesis (§2.5)    28.14 deg | agreement %.2e\n",
+  cat(sprintf("  thesis (§2.3)    28.14 deg | agreement %.2e\n",
               abs(th_min - th_proc)))                      # expect 6.75e-14
   stopifnot(abs(th_min - th_proc) < 1e-8, abs(th_min - 28.14) < 0.01)
   cat("  ASSERTED: the two constructions agree, so the change removes only the\n")
   cat("  freedom that exists from p = 3 upward.\n")
 }
 
-cat("\n=== Done. Asserted: sections 2, 3, 4, 7, 8, 10. Reported: 5, 9. ===\n")
-cat("Still unrun (see §6.5): test 5 (variance retained), test 7 at p >= 4,\n")
+# ---- 11) The CVA identity: the in-plane distance IS the Mahalanobis distance -
+# The note's §3.4. Each pair has its own rotation A, so its own prediction matrix
+# (M A')^-1 = A M^-1: the same in-plane step dz maps to a different X-space step
+# dx in every pair. But biplotEZ builds the CVA loadings as M = W^-1/2 V, so
+# M'WM = I (W the within-class SSP) and M^-1 = M'W. For any orthogonal A,
+#   dx W^-1 dx' = dz J'A (M'WM) A'J dz' = |dz|^2,
+# A cancelling as A A' = I. With the package's metric W / (n - g) the ratio is
+# n - g, the same for every pair, so the Mahalanobis and Z-distance selectors
+# rank the pairs identically. Shown on iris (versicolor against the rest, GLM,
+# CVA on the TP/TN/FP/FN groups), with the package's own .bl_rotate() and
+# bl_find_local_cf(); then for 2-group CVA; then PCA as the contrast, where
+# V'V = I and the in-plane distance is standardised Euclidean instead.
+cat("\n=== 11) The CVA identity: one in-plane step, every pair (iris) ===\n")
+{
+  quiet <- function(e) suppressWarnings(suppressMessages(e))
+  ir <- iris
+  ir$class   <- as.numeric(ir$Species == "versicolor")
+  ir$Species <- NULL
+  f_ir  <- setdiff(names(ir), "class")
+  d_ir  <- bl_wrap_data(ir, ir, var_names = f_ir)
+  m_ir  <- quiet(bl_fit_model(d_ir$train_data, d_ir$var_names, model_type = "GLM"))
+  r_cva <- quiet(bl_build_result(d_ir, m_ir, method = "CVA"))
+
+  # n - g from the groups the package derives (empty groups are dropped)
+  pp  <- boundarylogic:::.pred_function(m_ir$model, m_ir$model_type,
+                                        d_ir$train_data[, f_ir])
+  grp <- paste(d_ir$train_data$class, as.numeric(pp >= m_ir$cutoff))
+  n_g <- nrow(d_ir$train_data) - length(unique(grp))
+  V   <- r_cva$V; Wi <- r_cva$metric_inv
+  e_basis <- max(abs(t(V) %*% r_cva$metric %*% V * n_g - diag(ncol(V))))
+  cat(sprintf("  n - g = %d | max |V'WV (n-g) - I| = %.2e\n",
+              n_g, e_basis))                                # expect 146 | ~1e-14
+
+  # The same in-plane step through every pair's prediction matrix
+  x_t <- as.numeric(d_ir$train_data[1L, f_ir]) - r_cva$X_center  # CVA: centred only
+  dz  <- c(0.7, -0.4)
+  P12 <- boundarylogic:::.bl_rotate(x_t, V, c(1L, 2L))$tVr_rot
+  tab <- t(apply(gen_pairs(length(f_ir)), 1L, function(pair) {
+    rot <- boundarylogic:::.bl_rotate(x_t, V, pair)
+    dx  <- as.numeric(dz %*% rot$tVr_rot)
+    mh  <- as.numeric(t(dx) %*% Wi %*% dx)
+    c(i = pair[1], j = pair[2], pdiff = max(abs(rot$tVr_rot - P12)),
+      eucl = sum(dx^2), mahal = mh, ratio = mh / sum(dz^2))
+  }))
+  print(data.frame(pair         = sprintf("(%d,%d)", tab[, "i"], tab[, "j"]),
+                   P_minus_P12  = round(tab[, "pdiff"], 3),
+                   dx_euclid_sq = round(tab[, "eucl"], 4),
+                   dx_mahal_sq  = round(tab[, "mahal"], 4),
+                   ratio        = round(tab[, "ratio"], 6)), row.names = FALSE)
+  # expect dx_euclid_sq 12.7235 to 239.3651, dx_mahal_sq 94.9 and ratio 146 throughout
+  stopifnot(e_basis < 1e-8,
+            all(abs(tab[, "ratio"] / n_g - 1) < 1e-8),   # one ratio, n - g, every pair
+            diff(range(tab[, "eucl"])) > 1)              # though dx differs between pairs
+
+  # The package's own search: both selectors, one ratio
+  tg   <- bl_select_target(r_cva, target = 1L)
+  lo_m <- quiet(bl_find_local_cf(r_cva, tg, verbose = FALSE))
+  lo_e <- quiet(bl_find_local_cf(r_cva, tg, distance = "euclidean", verbose = FALSE))
+  rt   <- lo_m$all_distances_mahalanobis / lo_m$all_distances^2
+  rt   <- rt[is.finite(rt)]
+  cat(sprintf("  package search, target 1: %d pairs | d2_M / dist_z^2 in [%.6f, %.6f]\n",
+              length(rt), min(rt), max(rt)))             # expect 6 pairs, 146 and 146
+  cat(sprintf("  best pair: distance = \"mahalanobis\" (%s) | \"euclidean\" (%s)\n",
+              paste(lo_m$best_pair, collapse = ","),
+              paste(lo_e$best_pair, collapse = ",")))    # expect (3,4) | (3,4)
+  stopifnot(length(rt) >= 2L, all(abs(rt / n_g - 1) < 1e-8),
+            identical(lo_m$best_pair, lo_e$best_pair))
+
+  # 2-group CVA: biplotEZ adds the second axis by CVAlowdim("sample.opt"),
+  # cbind(M[, 1], M[, -1] %*% <orthogonal>), which keeps M'WM = I.
+  r_2g <- quiet(bl_build_result(d_ir, m_ir, method = "CVA",
+                                cva_classes = as.factor(d_ir$train_data$class)))
+  n_2  <- nrow(d_ir$train_data) - 2L
+  e_2g <- max(abs(t(r_2g$V) %*% r_2g$metric %*% r_2g$V * n_2 - diag(ncol(r_2g$V))))
+  lo_2 <- quiet(bl_find_local_cf(r_2g, bl_select_target(r_2g, target = 1L),
+                                 verbose = FALSE))
+  rt_2 <- lo_2$all_distances_mahalanobis / lo_2$all_distances^2
+  rt_2 <- rt_2[is.finite(rt_2)]
+  cat(sprintf("  2-group CVA: max |V'WV (n-2) - I| = %.2e | ratio in [%.6f, %.6f]\n",
+              e_2g, min(rt_2), max(rt_2)))              # expect ~1e-15 | 148 and 148
+  stopifnot(e_2g < 1e-8, all(abs(rt_2 / n_2 - 1) < 1e-8))
+
+  # PCA, the contrast (reported): the ratio is not constant, so the two
+  # selectors are different criteria and can pick different pairs.
+  r_pca <- quiet(bl_build_result(d_ir, m_ir, method = "PCA"))
+  lo_p  <- quiet(bl_find_local_cf(r_pca, bl_select_target(r_pca, target = 1L),
+                                  verbose = FALSE))
+  rt_p  <- lo_p$all_distances_mahalanobis / lo_p$all_distances^2
+  rt_p  <- rt_p[is.finite(rt_p)]
+  cat(sprintf("  PCA (reported): ratio in [%.6f, %.6f] | best by Z %s, by Mahalanobis %s\n",
+              min(rt_p), max(rt_p),
+              names(which.min(lo_p$all_distances)),
+              names(which.min(lo_p$all_distances_mahalanobis))))  # expect 1.30 to 1.58
+  cat("  ASSERTED: under CVA the ratio is n - g for every pair, so both selectors\n")
+  cat("  pick the same pair; the prediction matrices and dx still differ.\n")
+}
+
+cat("\n=== Done. Asserted: sections 2, 3, 4, 5, 7, 8, 8b, 10, 11. Reported: 9. ===\n")
+cat("Still unrun (see §6.1): test 5 (variance retained), test 7 at p >= 4,\n")
 cat("and cross-BLAS determinism.\n")

@@ -94,12 +94,15 @@
 #    0.182 in W -- PCA maximises retained variance, that is its job) and the
 #    GEOMETRY worse. "Better" has to name what it is better AT.
 #
-# 3. THE UNDER-DETERMINATION IS WORSE, AND ITS COST IS MEASURED WITHIN ONE PAIR.
+# 3. THE UNDER-DETERMINATION IS WORSE, AND ITS COST IS MEASURED ON ONE PAIR.
 #    Section 8. The Procrustes matrix is rank 1 of 4, so 3 of the rotation's
 #    degrees of freedom are an arbitrary completion (at p = 3 only 1 was). Section
 #    8 measures the free dimensions rather than quoting a ladder -- see the CAREFUL
 #    note there, because the count of free ROTATIONS and the count of free PLANES
-#    are different numbers and the reference note's section 5.1 conflates them.
+#    are different numbers. Sections 8b and 8c perturb the input basis at the
+#    floating-point level and show the plane, and the counterfactual, move. For
+#    IDENTICAL inputs the rotation is deterministic; the sensitivity is to the
+#    inputs' last bits.
 #
 # ----------------------------------------------------------------------------
 # HOW TO READ THE ROTATED VIEWS: THEY ARE **RC BIPLOTS**, NOT "ROTATED PCs"
@@ -107,7 +110,7 @@
 # After the rotation the axes are RC1 / RC2 -- "rotated components", the thesis's
 # own term for a rotated component (RC) biplot. They are NOT "rotated PC2 / PC3",
 # and the named pair is NOT an axis identity. From the reference note
-# (biplot_rotation_and_pair_selection.md, section 2.7):
+# (biplot_rotation_and_pair_selection.md, section 3.1):
 #
 #   "the SVD construction guarantees the target's rotated information concentrates
 #    in columns 1-2 of Vrho REGARDLESS of which eigenvector pair was used to build
@@ -157,14 +160,12 @@ library(mgcv)
 #      B and C planes coincide EXACTLY (0.00 deg), so the two views would be one
 #      picture drawn twice. This is 17_1 section 11's collapse guard, and it fires
 #      on the plane, not the label;
-#   3. best_pair is reproducible run to run. The note's section 5.3 records row 102
-#      flipping between (1,2) and (1,3) across five identical calls at p = 3. All
-#      15 rows scanned here were stable at p = 4, but the check is kept and run.
+#   3. best_pair is reproducible. The package's local search is deterministic
+#      (the note's Appendix A.2), and the check below stops the script if a repeat
+#      call ever disagrees.
 #
 # ROW 49 (set below) satisfies all three: selected pair (2,3), planes 26.98 deg
-# apart, stable across five identical calls. It is also the row the reference
-# note's section 4.1 perturbation table is measured on, so this script stays
-# continuous with the note.
+# apart. It is also the row the reference note's Appendix A.1 measurements use.
 #
 # Alternatives, if a more extreme contrast is wanted: rows 6 (1,3), 95 (1,4) and
 # 175 (2,3) all give planes a full 90.00 deg apart -- orthogonal, the largest
@@ -294,15 +295,15 @@ if (ang_BC[2] < 5)
                         "effectively the same picture. Pick a different target row."),
                   ang_BC[2]), call. = FALSE)
 
-# Reproducibility check (note section 5.3). Cheap, and the alternative is quoting
-# a counterfactual that a rerun does not reproduce.
+# Reproducibility check (note Appendix A.2): the package's local search is
+# deterministic, so five repeat calls must agree. A disagreement is a regression.
 reps <- replicate(5L, paste(as.integer(
   bl_find_local_cf(bl_res, tgt, verbose = FALSE)$best_pair), collapse = ","))
 cat(sprintf("best_pair across 5 identical calls: %s\n",
             paste(unique(reps), collapse = " | ")))
 if (length(unique(reps)) > 1L)
-  warning(sprintf("best_pair is NOT reproducible for row %d: %s", i,
-                  paste(unique(reps), collapse = " / ")), call. = FALSE)
+  stop(sprintf("best_pair is NOT reproducible for row %d: %s", i,
+               paste(unique(reps), collapse = " / ")), call. = FALSE)
 
 # --- 7) .bl_rotate_full() — a mirror, for the per-pair table only -----------
 # The package's .bl_rotate() (R/local_cf.R:45) is the authority for this maths.
@@ -332,12 +333,12 @@ if (length(unique(reps)) > 1L)
 #     IDENTICAL inputs -- same x_target, same V, same pair. That is the only fair
 #     test of whether the mirror implements the same maths, and it passes exactly.
 #   REPORTED, NOT ASSERTED: the mirror against the package's LIVE objects
-#     (loc_12$Vr_rot, loc_op$Vr_rot). bl_find_local_cf() reaches .bl_rotate()
-#     through its own path, so its inputs differ from V_full at the 1e-15 level --
-#     and section 8 measures that this is enough to land on a different plane. A
-#     nonzero number in that column is the free completion, not an error. It comes
-#     out LARGE for the pinned pair (1,2) and small for the selected pair, which is
-#     exactly 17_1 section 15c's observation reproduced at p = 4.
+#     (loc_12$Vr_rot, loc_op$Vr_rot). V_full IS bl_res$V, but bl_find_local_cf()
+#     standardises the target itself, as (x - X_center) / X_sd, and that vector
+#     differs from this script's x_t (a row of scale()'s output) in the last bits.
+#     Section 8 measures that a perturbation that small is enough to land on a
+#     different plane. A nonzero number in that column is the free completion, not
+#     an error. Rotating from svd(Xstd)$v (4.65e-15 from bl_res$V) is printed too.
 # Nothing drawn in this script uses the mirror, so neither number affects a figure.
 .bl_rotate_full <- function(x_target_st, V, proj_pair) {
   p    <- length(x_target_st)
@@ -383,21 +384,25 @@ stopifnot(mirror_max < 1e-12)
 cat("  -> .bl_rotate_full() reproduces .bl_rotate() exactly. The mirror is faithful.\n")
 
 cat("\n--- 7b) Mirror vs the package's LIVE objects — reported, not asserted ---\n")
+x_pkg <- (as.numeric(tgt$x_obs[, bl_res$var_names]) - bl_res$X_center) / bl_res$X_sd
+cat(sprintf("  inputs: max|x_t - package target| %.2e | max|bl_res$V - svd(Xstd)$v| %.2e\n",
+            max(abs(x_t - x_pkg)), max(abs(abs(V_full) - abs(svd(Xstd)$v)))))
 for (nm in c("pinned (1,2)", "selected")) {
   pr <- if (nm == "pinned (1,2)") c(1L, 2L) else pkg_pair
   vk <- if (nm == "pinned (1,2)") Vr_B else Vr_C
   m_pkg <- .bl_rotate_full(x_t, V_full,      pr)[, 1:2, drop = FALSE]
   m_svd <- .bl_rotate_full(x_t, svd(Xstd)$v, pr)[, 1:2, drop = FALSE]
-  cat(sprintf(paste0("  %-13s rotated from bl_res$V : plane %.3e | entry-wise %.3e\n",
-                     "  %-13s rotated from svd()$v  : plane %.3e\n"),
-              nm, max(abs(Pj(m_pkg) - Pj(vk))), max(abs(m_pkg - vk)),
-              "", max(abs(Pj(m_svd) - Pj(vk)))))
+  cat(sprintf(paste0("  %-13s rotated from bl_res$V : plane %.3e (2nd angle %6.2f deg)",
+                     " | entry-wise %.3e\n",
+                     "  %-13s rotated from svd()$v  : plane %.3e (2nd angle %6.2f deg)\n"),
+              nm, max(abs(Pj(m_pkg) - Pj(vk))), prin_ang(m_pkg, vk)[2],
+              max(abs(m_pkg - vk)),
+              "", max(abs(Pj(m_svd) - Pj(vk))), prin_ang(m_svd, vk)[2]))
 }
-cat("  A nonzero plane difference here is the FREE COMPLETION, not an error: the\n")
-cat("  package reaches .bl_rotate() through its own path, whose V differs from this\n")
-cat("  script's at ~1e-15, and section 8b measures that this is enough. The gap is\n")
-cat("  large for the pinned pair and small for the selected one -- 17_1 section 15c\n")
-cat("  saw the same asymmetry at p = 3. Entry-wise differences are the in-plane spin.\n")
+cat("  A nonzero plane difference here is the FREE COMPLETION, not an error: inputs\n")
+cat("  that differ only in their last bits (the target vector, or V from svd()) can\n")
+cat("  land on a different plane through the same target; section 8b measures this.\n")
+cat("  Entry-wise differences at a zero plane difference are the in-plane spin.\n")
 cat("  Nothing drawn uses the mirror; the drawn planes ARE loc_12/loc_op$Vr_rot.\n")
 
 # --- 8) The rotation is under-determined — measured at p = 4 -----------------
@@ -424,10 +429,10 @@ for (k in seq_len(nrow(pairs_all))) {
 cat("  Rank 1 of 4 -> a 3-dimensional null space. At p = 3 it was 1-dimensional.\n")
 
 # ---- 8a) CAREFUL: free ROTATIONS and free PLANES are different counts -----
-# The reference note's section 5.1 tabulates "subspace DOF ... minus contains the
-# target ... free = 3" for p = 4, r = 2, and cites section 4.1's "3-dimensional
-# manifold of rotations" as confirmation. The 3 is right FOR ROTATIONS and wrong
-# FOR PLANES:
+# An earlier version of the reference note tabulated "subspace DOF ... minus
+# contains the target ... free = 3" for p = 4, r = 2, citing "a 3-dimensional
+# manifold of rotations" as confirmation (the note now gives both counts, section
+# 5.1 and Appendix A.4). The 3 is right FOR ROTATIONS and wrong FOR PLANES:
 #   ROTATIONS. Those with A'u ~ w form a coset of Stab(u) = SO(p-1), so the
 #     manifold has dim SO(4) - dim SO(3) = 6 - 3 = 3. This is section 4.1's number.
 #   PLANES. 2-planes in 4-space containing a fixed line form Gr(1,3), of dimension
@@ -459,7 +464,7 @@ cat(sprintf("\n  8a) planes-through-the-target family: tangent singular values %
             paste(format(sv_t, digits = 3), collapse = "  ")))
 cat(sprintf("      -> measured PLANE dimension = %d  (rotations = 3; the difference\n",
             sum(sv_t > 1e-8 * max(sv_t))))
-cat("         is the in-plane spin, 3 = 2 + 1). The note's section 5.1 needs this fix.\n")
+cat("         is the in-plane spin, 3 = 2 + 1). The note's section 5.1 gives both counts.\n")
 stopifnot(sum(sv_t > 1e-8 * max(sv_t)) == (p - 2L))
 
 # ---- 8b) perturbation: section 4.1's table, on the live objects -----------
@@ -493,24 +498,25 @@ for (s in c(0, 1e-16, 1e-15, 1e-12, 1e-08)) {
 }
 
 # ---- 8c) what that costs, WITHIN ONE PAIR --------------------------------
-# The note's section 5.4 measures the consequence ACROSS pairs (pinned (1,2) versus
+# The note's Appendix A.5 measures the consequence ACROSS pairs (pinned (1,2) versus
 # the selected pair). The tighter claim -- that noise alone, at one fixed pair,
-# moves the advice -- needs a within-pair measurement, and this is it.
+# moves the advice -- needs a within-pair measurement, and this is it: the mirror,
+# re-rotated onto pair (1,2) from a basis perturbed at 1e-15, with the nearest
+# boundary point recomputed by the package's own recipe.
 #
-# Two independent measurements, both of pair (1,2):
-#   (a) the package itself, called twice. loc_12 (max_pairs = 1L) and the (1,2)
-#       entry of loc_op's all_distances_mahalanobis are the SAME pair evaluated in
-#       two calls. If the rotation were determined, they would be identical.
-#   (b) the mirror, re-rotated from a basis perturbed at 1e-15, with the nearest
-#       boundary point recomputed by the package's own recipe.
+# (The package itself is deterministic for identical inputs: loc_12 and the (1,2)
+# entry of loc_op's all_distances_mahalanobis agree exactly -- printed below as a
+# control. The movement comes only from perturbing the inputs.)
 #
 # plane_cf() reproduces bl_find_local_cf()'s within-plane search: a 200 x 200 grid
 # over the padded range of the rotated training scores, mapped back to feature
 # space, predicted, contoured at cutoff -/+ b_margin, wrong-side segments dropped,
-# nearest surviving vertex by EUCLIDEAN distance in the plane, then that point
-# mapped back and scored by SQUARED Mahalanobis. It omits the actionability filters
-# (none are set) and the train_ranges test -- so it is a MEASUREMENT TOOL for this
-# section only, not a fidelity check and not a drawing path.
+# nearest surviving vertex by EUCLIDEAN distance in the plane (the exact minimum,
+# as in the package), then that point mapped back and scored by SQUARED
+# Mahalanobis. It omits the actionability filters (none are set, so the package's
+# post-search "fixed" restore does not apply either) and the train_ranges test --
+# so it is a MEASUREMENT TOOL for this section only, not a fidelity check and not a
+# drawing path.
 plane_cf <- function(Vr, m = m_probe) {
   Zt  <- as.numeric(x_t %*% Vr)
   Ztr <- Xstd %*% Vr
@@ -539,16 +545,19 @@ plane_cf <- function(Vr, m = m_probe) {
 cat("\n  8c) the cost of the arbitrary completion, within pair (1,2):\n")
 mah_12_pinned <- sqrt(loc_12$dist_mahalanobis)
 mah_12_search <- sqrt(as.numeric(loc_op$all_distances_mahalanobis[["(1,2)"]]))
-cat(sprintf(paste0("      (a) the package, called twice, same pair (1,2):\n",
-                   "          max_pairs = 1L        sqrt(mah) = %.6f\n",
-                   "          inside the full search sqrt(mah) = %.6f   difference %.2e\n"),
+cat(sprintf(paste0("      control -- the package, identical inputs, two calls: sqrt(mah) ",
+                   "%.6f and %.6f (difference %.2e)\n"),
             mah_12_pinned, mah_12_search, abs(mah_12_pinned - mah_12_search)))
+stopifnot(identical(mah_12_pinned, mah_12_search))
+# qr.Q() may flip column signs (see 8b). A sign flip leaves the plane, and so the
+# counterfactual, unchanged in exact arithmetic, so the shift below is still the
+# floating-point sensitivity; 8b uses the polar factor to isolate it cleanly.
 set.seed(23L)
 Vq <- qr.Q(qr(V_full + matrix(rnorm(p * p, sd = 1e-15), p)))
 cf0 <- plane_cf(.bl_rotate_full(x_t, V_full, c(1L, 2L))[, 1:2, drop = FALSE])
 cf1 <- plane_cf(.bl_rotate_full(x_t, Vq,     c(1L, 2L))[, 1:2, drop = FALSE])
 if (!is.null(cf0) && !is.null(cf1)) {
-  cat(sprintf(paste0("      (b) the mirror, basis perturbed at 1e-15, same pair (1,2):\n",
+  cat(sprintf(paste0("      the mirror, basis perturbed at 1e-15, same pair (1,2):\n",
                      "          B_x unperturbed (%s)\n",
                      "          B_x perturbed   (%s)\n",
                      "          the advice moves by %.4f in feature space; sqrt(mah) %.4f -> %.4f\n"),
@@ -556,8 +565,8 @@ if (!is.null(cf0) && !is.null(cf1)) {
               paste(sprintf("%+.3f", cf1$B_x), collapse = ", "),
               sqrt(sum((cf0$B_x - cf1$B_x)^2)), sqrt(cf0$mah), sqrt(cf1$mah)))
 }
-cat("      Reported, not asserted: the size of the shift is data-dependent, and\n")
-cat("      the point is that it is nonzero at all from noise at 1e-15.\n")
+cat("      Reported, not asserted: the size of the shift is data-dependent; the\n")
+cat("      point is that noise at 1e-15 in the INPUTS moves the counterfactual.\n")
 
 # --- 9) What the pair label is worth ----------------------------------------
 # Per candidate pair: theta (the rotation angle), the principal angles between the
@@ -621,7 +630,7 @@ cat("      (pct_in_named measures the second direction taken ORTHOGONAL to the\n
 cat("      target direction -- the definition is in the loop above, and a different\n")
 cat("      convention gives a different number, so quote it with its definition.)\n")
 
-# Does theta predict the overlap? The note's section 5.2 measures r = +0.33 at
+# Does theta predict the overlap? The note's Appendix A.3 measures r = +0.33 at
 # p = 3 and warns there is no cheap screen. Measured here at p = 4 rather than
 # quoted, across every (row, pair) combination.
 ov <- matrix(NA_real_, nrow(Xstd), nrow(pairs_all))
