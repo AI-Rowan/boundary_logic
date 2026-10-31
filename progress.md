@@ -16,131 +16,180 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **`main` was last merged and pushed on 2026-08-03.** `method_developments` is at `b7aee65`
   (pushed 2026-10-29). Merging `paper_nr1_changes` back, and the release tag the paper will pin,
   wait for the user's instruction after Gate 3.
-- **`paper_nr1_changes` state:** `f2a076b` (session 1) and `7aa1344` (session 2) are committed
-  but **not pushed**. Session 3's Gate 2 code fixes (below) are **uncommitted** in the working
-  tree. Commit only when the user says so.
+- **`paper_nr1_changes` state:**
+  - **Committed, not pushed:** `f2a076b` (session 1), `7aa1344` (session 2) and `f4f3647`
+    (session 3, Gate 2 fixes).
+  - **Uncommitted** in the working tree:
+    - session 3's Part B (nearest-vertex fix) and Part C (rotation folder);
+    - session 4's merge of the two notes;
+    - session 5's package changes (`max_pairs = 21`, the Mahalanobis check, the 2-dp print
+      format, `bl_apply_scaling()` and the Step 16 fix).
+  - **Staged:** the rename `documentation/mahalanobis_technical_note.md` →
+    `documentation/boundary-distance-and-robustness.md`, from `git mv`.
+  - Commit only when the user says so.
 - **`scripts/` is gitignored** — the user's personal scratch playground, never published. Task C
   will write `scripts/paper1-pima/` there (local only, by design).
-- **`.bl_rotate()` plane under-determination** — documented, deliberately not actioned.
-  See `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §4.1 and §6
-  (a proposal, not implemented), and CLAUDE.md §9. Do not "fix" without an explicit instruction.
+- **The boundary searches are deterministic** since 2026-10-30 (exact nearest vertex;
+  `documentation/nearest-vertex-tie-break.md`).
+- **The rotation and pair selection are documented in one note:**
+  `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`.
+  - **Its parts:**
+    - §2: the original PhD method;
+    - §3: the implementation;
+    - §4: the problems;
+    - §5: the proposal (not implemented);
+    - §6: future developments;
+    - Appendix A: the measurements.
+  - **Phase 2 distances** are in `documentation/boundary-distance-and-robustness.md`.
+  - **The plane under-determination** (§4.1) stays documented and deliberately not actioned. Do
+    not "fix" it without an explicit instruction (CLAUDE.md §9).
 - **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
-- **Baseline test status: 278 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are pre-existing
-  biplotEZ CVA 2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-10-30,
-  session 3).
+- **Baseline test status: 348 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are pre-existing biplotEZ CVA
+  2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-10-31, session 5).
 - **Verification:** run R as `.R` files via the PowerShell tool,
   `& "C:/Program Files/R/R-4.6.0/bin/Rscript.exe" <driver>.R`, with the driver calling
   `devtools::document(<pkg root>)` then `devtools::test(<pkg root>)`. The dev harness runs end to
   end through a scratchpad driver (CLAUDE.md §5).
+  - **The installed `boundarylogic` is stale** (installed 2026-09-10, before the tie-break fix).
+    Drivers must `devtools::load_all()` the repo; `library(boundarylogic)` alone runs old code.
 - **`.claude/plans/` is gitignored** — plan files are local only. `.claude/reference/` *is*
   tracked (generic docs + archived plans).
 
 ---
 
-## Session summary (2026-10-30, session 3, latest) — Gate 2 code issues fixed before Task C
+## Session summary (2026-10-31, session 5, latest) — Step 16 raw units, `max_pairs = 21`, the Phase 2 check, 2-dp tables
 
-Goal: the user asked for the background and fixes of the four code issues pre-seeded in Task C's
-Gate 2 issues table, then approved fixing all four now. The plan is
-`.claude/plans/can-you-summarise-the-replicated-magpie.md`, archived as
-`.claude/reference/gate2-code-fixes-plan.md`. Session 2's work was committed first as `7aa1344`
-(user's instruction; not pushed).
+**Plan:** `.claude/plans/step16-pairs-check-decimals.md` (approved, implemented). Archive it with
+session 4's plan (`.claude/plans/can-you-compare-the-nifty-flask.md`) in `.claude/reference/` when
+the user commits.
 
-### What was done
+### What was done (the user's five requests)
 
-1. **`rotate_deg` removed from the local plots** (`R/local_cf.R`, `R/shapley.R`).
-   - The user's rule: `rotate_deg` is only for viewing the global biplot. Whenever `.bl_rotate()`
-     is used, it is in effect 0, and it never turns a rotated individual point.
-   - `plot.bl_local_result()` lost the argument and the rotation block. Passing `rotate_deg` to it
-     or to `plot.bl_sparse_result()` now stops with an error before any device opens.
-   - This removes the sparse-cross bug. `plot_biplotEZ()` and `plot.bl_surrogate()` keep
-     `rotate_deg`.
-2. **Grid cutoff** (`R/biplot_grid.R`, `R/result.R`).
-   - `bl_build_grid()` defaults to `cutoff = bl_model$cutoff` and stores `bl_grid$cutoff`.
-   - `bl_assemble()` stops if the grid's and the model's cutoffs differ. A grid with no `cutoff`
-     field (an older object) skips the check.
-3. **`xgboost::xgboost()` models** (`R/predict_utils.R`, `R/model_fit.R`).
-   - The XGB branch scores `"xgboost"`-class models from the data frame. Their predict method
-     refuses an `xgb.DMatrix`.
-   - `bl_wrap_model()` stops unless such a model is `binary:logistic` on levels 0/1. Fitted with a
-     numeric response, `xgboost()` gives a regression.
-4. **Empty CVA group** (`R/projection.R`).
-   - A message names an empty TP/TN/FP/FN group, and empty levels are dropped before CVA and `W`.
-   - `point_col` uses the confusion palette for any subset of the four labels.
-5. **Documents:**
-   - NEWS (one breaking change, three fixes) and roxygen;
-   - `2 implementation_summary.txt` (§4.3 `bl_grid$cutoff`, §4.4 and §4.8 the `rotate_deg` note,
-     the XGB passages, CVA empty groups);
-   - walkthroughs `review_section4_to_6.md` and `review_section9_to_15.md` (the `rotate_deg` note
-     after the `plot(bl_local)` Parameters table);
-   - README, and the rotation note §4.6;
-   - CLAUDE.md §4 ("never add `rotate_deg` back to the local plots") and §6 (CVA level order);
-   - the Task C plan's issues table marks the four as fixed.
+1. **PCA selector default: deferred** (documentation only).
+   - **The decision:** Paper 1 compares by Mahalanobis distance only, under CVA, where both
+     selectors are identical. The PCA default (`W_binary`) is revisited only once the rotation
+     problem is fully addressed.
+   - **Recorded in:** rotation note §4.4 and §6.2, and CLAUDE.md §6 and §9.
+2. **`max_pairs` default 10 → 21** (`bl_find_local_cf()`).
+   - **The user's choice:** 21, after being told that 15 never reaches component 7.
+   - **What it covers:** every pair for p ≤ 7, so Paper 1's Pima search (p = 7) tries all 21
+     pairs, including the thesis's (1,7). From p = 8 the cap still leaves pairs out.
+   - **Effect:** the loan harness (p = 4) is unchanged. The README Pima example (p = 6) now tries
+     all 15 pairs, and its result is unchanged.
+   - **Also updated:** the local plan files `boundary-logic-fix-prompt.md` (Task C set-up,
+     figure 6, a Task E note) and `commit-and-push-the-mutable-hearth.md`.
+3. **The Phase 2 Mahalanobis check now describes the plot** (`plot.bl_boundary()`).
+   - **The fix:** its "diagonal" is `sum(vec_to_boundary_sd^2)` (1/W_jj, as plotted), instead of
+     `diag(W^-1)`.
+   - **New output:** a renamed print, and a new `mahalanobis_check` return field.
+   - **Measured on the harness:**
+     - Step 7: +17.7% (the old diagnostic printed −42.6%, mostly the mismatch);
+     - Step 7b: +15.9%;
+     - neither reaches the 25% note.
+   - **Tests:** new `tests/testthat/test-boundary_plot.R`.
+4. **Fixed 2-dp print tables.**
+   - **Covered:** the comparison tables of `print(bl_local)`, `print(bl_shapley)` and
+     `print(bl_sparse)`, the Target/Counterfactual blocks, the Shapley column and the sparse path.
+   - **The format:**
+     - fixed notation with 2 decimals;
+     - widened per feature row (up to 4) where a change would print as 0.00;
+     - the sparse path's predictions keep 4 decimals within 0.005 of the cutoff.
+   - **Helpers:** `.fmt_digits()`, `.fmt_fixed()`, `.format_cf_table()`, `.print_values()`.
+   - `print.bl_target()` and `print.bl_counterfactual()` gain `digits = NULL`.
+   - **The cause of the scientific notation:** the old harness log had it only in Step 16, from
+     the raw-unit bug (a loan of 72 million).
+5. **Step 16 raw units fixed.**
+   - **New export:** `bl_apply_scaling(data, bl_result)` converts raw-unit data to the model's
+     units.
+   - **New warning:** `bl_select_target()` warns when a data-frame target lies outside
+     `train_ranges`, with a `bl_apply_scaling()` hint when the target looks like raw units.
+   - **The harness:** Step 16 converts the applicant.
+   - **The new result:**
+     - Z 0.0135 (was 115.76);
+     - the applicant is predicted 0.296, class 0 (was 0.787, class 1);
+     - pair (1,2) wins, at √d²_M 1.7026;
+     - the counterfactual's credit score is 489.44, at the training minimum (489).
+   - **The applicant still warns:** credit score 420 is below the training range (489–754).
 
-### Modified files (uncommitted)
+**Documentation:**
+- NEWS (one Breaking-change bullet, one New-feature bullet, two Bug-fix bullets);
+- `2 implementation_summary.txt`;
+- `1 Foundation intro documents.txt` §10.7;
+- CLAUDE.md (§2, §3, §5, §6, §9);
+- both notes;
+- walkthroughs `review_section4_to_6.md`, `review_section7_to_8.md` and `review_section9_to_15.md`
+  (every quoted block refreshed from the harness).
 
-- **Package:** `R/biplot_grid.R`, `R/local_cf.R`, `R/model_fit.R`, `R/plot_biplot.R`,
-  `R/predict_utils.R`, `R/projection.R`, `R/result.R`, `R/shapley.R`, `R/surrogate.R`, 10 files
-  in `man/`, and the tests `test-biplot_grid.R`, `test-local_cf.R`, `test-predict_utils.R`,
-  `test-projection.R`, `test-result.R`.
-- **Documents:** `2 implementation_summary.txt`, `CLAUDE.md`, `NEWS.md`, `README.md`,
-  `development/reference/review_section4_to_6.md`, `development/reference/review_section9_to_15.md`,
-  `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`, `progress.md`.
-- **New:** `.claude/reference/gate2-code-fixes-plan.md`.
-
-### Key decisions (all the user's)
-
-- All four issues are fixed now, not deferred.
-- `rotate_deg` is removed from the local plots, with an error if passed, rather than made to
-  rotate the sparse cross.
-- The xgboost fix includes the wrap-time objective and level checks. These read xgboost object
-  attributes that are not documented API.
-
-### Finding (recorded in CLAUDE.md §6)
-
-- The first version built the confusion factor with levels `TP, TN, FP, FN`. That changed every
-  Phase 3 number in the harness:
-  - target 13's constrained CF went from 0.547 to 0.509;
-  - Step 15 went from 0.5554 / 0.542 to 0.6094 / 0.517.
-- The level order feeds `biplotEZ::CVA()`, and the change in `V` moves `.bl_rotate()`'s
-  under-determined plane.
-- The factor now keeps the alphabetical order of `as.factor()`, and a test pins it.
+`review_section9_to_15.md` also had a stale sentence saying repeated calls can differ; it was
+replaced.
 
 ### Test status
 
-- 278 PASS / 0 FAIL / 4 WARN / 0 SKIP, up from 250.
-- `R CMD check`: Status OK, 0 / 0 / 0.
-- Harness: the full console log matches a run of the committed `7aa1344` code line for line, apart
-  from the timestamps, so every walkthrough number stands.
+- **Tests:** 348 PASS / 0 FAIL / 4 WARN / 0 SKIP.
+- **`17_3`:** every assertion passes; reference values unchanged (1.147879 / 1.312277).
+- **Harness:** runs end to end; no scientific notation in the log.
+- **`R CMD check`:** 0 errors / 0 warnings / 0 notes.
 
 ### Open points / blockers
 
 - **No blockers.**
 - **Parked by the user (2026-10-29), not to be raised again unless the user brings them up.** They
   go into Task D's known-issues note:
-  - The README's Pima constraint example finds no counterfactual for its first predicted-diabetic
-    patient (`solution_found = FALSE`, no error).
-  - The harness plot title still says "Loan default (prior defaulters)"; the data are applicants
-    with no prior default.
-- 32 pre-existing non-ASCII characters remain in `R/` comments (allowed by `R CMD check`, but
-  against CLAUDE.md §4).
-- The pkgdown site (`docs/`) has not been rebuilt for sessions 2-3's man-page and vignette changes.
-  Rebuild before a release (CLAUDE.md §5).
+  - the README's Pima constraint example finds no counterfactual for its first predicted-diabetic
+    patient;
+  - the harness plot title says "Loan default (prior defaulters)".
+- **The vignette's external applicant** (raw units, no scaling, so correct) now gets the
+  target-range warning too: its credit score of 420 is below the training range.
+- 32 pre-existing non-ASCII characters remain in `R/` comments.
+- **The pkgdown site** (`docs/`) has not been rebuilt for sessions 2–5. Rebuild before a release
+  (CLAUDE.md §5).
 
-### Exact next step
+### Next session (exact next steps)
 
-1. The user reviews the session 3 fixes and says whether to commit them (nothing is committed or
-   pushed without an explicit instruction).
-2. Then start **Task C**: the Pima example in `scripts/paper1-pima/` (gitignored, local only).
-   - Read `.claude/plans/commit-and-push-the-mutable-hearth.md` (Task C section; the four issues
-     are now marked fixed) and `.claude/plans/boundary-logic-fix-prompt.md`.
-   - Plan in `.claude/plans/` and wait for approval.
-   - Build the example, ending at Gate 2.
+**0. Commit decision.** Sessions 3 (Parts B and C), 4 and 5 are uncommitted; the session-4 rename
+is staged. Ask the user. A natural split is five commits:
+
+- the nearest-vertex fix (code, test, note);
+- the rotation folder brought to the current state;
+- the note merge and Phase 2 note;
+- `max_pairs = 21`, together with the PCA deferral;
+- the Mahalanobis check, the 2-dp format, and `bl_apply_scaling()` with the Step 16 fix.
+
+Some files carry changes from several of these (NEWS, CLAUDE.md, the implementation summary, the
+walkthroughs), so splitting them needs `git add -p`, or fewer, larger commits.
+
+**1. The remaining rotation concerns.** The ranked list is in the rotation note §6.2. The first is
+cross-platform reproducibility (§4.1), which matters for Paper 1. The PCA selector waits for the
+rotation work.
+
+**2. Then Task C** (the Pima example in `scripts/paper1-pima/`, gitignored).
+
+- Read `.claude/plans/commit-and-push-the-mutable-hearth.md` and
+  `.claude/plans/boundary-logic-fix-prompt.md`; the Task C set-up now uses `max_pairs = 21L`.
+- Plan, wait for approval, and build to Gate 2.
+- The Task E pair-selector measurement: under CVA the two selectors are identical, so report the
+  identity. Paper 1 uses Mahalanobis comparisons only.
 
 ---
 
 ## History (one line per session, newest first)
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
+
+- **2026-10-31 (session 4)** — the rotation and Mahalanobis notes were reconciled and merged
+  (`biplot_rotation_and_pair_selection.md`, rewritten; plan `can-you-compare-the-nifty-flask.md`).
+  - The Phase 2 note was renamed to `boundary-distance-and-robustness.md` (staged `git mv`).
+  - Under CVA the two pair selectors are identical: d²_M = (n−g)·dist_z²; `17_3` §11 asserts it.
+  - Documentation only; 314 PASS. Uncommitted.
+
+- **2026-10-30 (session 3)** — three pieces of work:
+  - Gate 2 code fixes, committed as `f4f3647`: `rotate_deg` removed from the local plots; the
+    grid cutoff taken from the model; `xgboost()` models; empty CVA groups.
+  - The deterministic nearest boundary vertex (`ties.method = "first"`;
+    `documentation/nearest-vertex-tie-break.md`, new `test-boundary.R`). Uncommitted.
+  - The rotation folder brought to the current state (re-measured; `17_3` checks asserted).
+    Uncommitted.
+  - 314 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0.
 
 - **2026-10-29 (session 2)** — walkthrough review completed:
   - Parameters tables in the three walkthroughs, and a variable-pruning section;

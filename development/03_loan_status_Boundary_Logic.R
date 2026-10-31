@@ -633,6 +633,7 @@ names(loan_encoded)
 # EXTERNAL APPLICANT
 # Analyse a new loan application not in the training data.
 # Only include variables in feature_cols_v2 (remove any pruned variables).
+# Give the values in raw loan units; bl_apply_scaling() converts them.
 # No class column is required.
 # ===========================================================
 
@@ -653,6 +654,9 @@ names(loan_encoded)
   # Drop any columns pruned in "Prune least-important variables"
   new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
                                   drop = FALSE]
+  # bl_set_scaling() is display-only: bl_results_v2's model works in z-scores
+  # (Steps 4b-6b), so convert the raw application to the model's units first.
+  new_applicant <- bl_apply_scaling(new_applicant, bl_results_v2)
 
 
   # Local search — no actionability constraints for this new applicant.

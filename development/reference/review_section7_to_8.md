@@ -127,7 +127,7 @@ Helper: `.nearest_idx_block(Z_obs, Mi, block = 5000L)`
 For each retained contour segment `Mi` (a matrix of k boundary vertices in Z-space):
 - Chunk the n observations into blocks of 5 000 rows
 - For each block, compute pairwise squared Euclidean distances to all k contour vertices: `d2 = (z_i - m_j)^2 summed over dimensions`
-- Find the column minimum per row (nearest vertex) via `max.col(-d2)`
+- Find the column minimum per row (nearest vertex) via `max.col(-d2, ties.method = "first")`: the exact nearest vertex, the first one on an exact tie. The result is deterministic. R's default, `"random"`, would treat every vertex within 1e-5 of the farthest vertex's squared distance as tied and draw one at random (see `documentation/nearest-vertex-tie-break.md`).
 
 This gives, for each observation, the index of the nearest vertex on each contour — collected into `B_boundary_z` (list of n × 2 matrices, one per contour).
 
@@ -273,7 +273,7 @@ Both calls render the same data in two different chart styles. The core computat
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
 | `type` | `"jitter"` | `"jitter"`, then `"boxplot"` | Chart style; the computation below is the same for both |
-| `distance` | `"mahalanobis"` | default | Per-feature denominator: `sqrt(diag(W))` (within-class SD), or `X_sd` (total SD) under `"euclidean"`. `"mahalanobis"` also prints the cross-correlation diagnostic |
+| `distance` | `"mahalanobis"` | default | Per-feature denominator: `sqrt(diag(W))` (within-class SD), or `X_sd` (total SD) under `"euclidean"`. `"mahalanobis"` also prints the Mahalanobis check |
 
 Full argument list: `?plot.bl_boundary`.
 
@@ -307,7 +307,7 @@ Each cell `[i, j]` is the **signed standardised distance** from observation `i` 
 
 **Why within-class SD (the default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
 
-A cross-correlation diagnostic is printed to the console when `distance = "mahalanobis"`, comparing the diagonal d_M^2 contribution to the full d_M^2: small cross-correlation percentage means the diagonal approximation is essentially lossless. See `2 implementation_summary.txt` Section 4.6.1 for why the full Shapley decomposition is theoretically more correct but is not used (`O(n * 2^p)` cost).
+A Mahalanobis check is printed to the console when `distance = "mahalanobis"`. It compares the squared length of the plotted distances, `sum(vec_to_boundary_sd^2)` (that is, the sum of v_j^2 / W_jj), with the full squared Mahalanobis distance v' W^-1 v, both summed across observations. Their difference is what the per-feature plot leaves out by ignoring the correlations in W: positive means the plot understates the distance, negative that it overstates it. See `2 implementation_summary.txt` Section 4.6.1 for why the full Shapley decomposition is theoretically more correct but is not used (`O(n * 2^p)` cost).
 
 **Step 2 — Compute per-variable importance**
 
@@ -361,28 +361,25 @@ The n × p matrix is stacked into a three-column data frame:
 **Console output after plot** (each `plot(bl_bnd)` call prints this; from the harness run):
 ```
 Distance metric: mahalanobis
-Robustness (total distance): 9203.63
+Robustness (total distance): 9203.29
 
 Per-variable totals (descending):
              loan_int_rate        loan_percent_income 
-                   3929.70                    1570.89 
+                   3929.71                    1570.78 
                  loan_amnt              person_income 
-                   1301.72                     777.83 
+                   1301.68                     777.71 
               credit_score                 person_age 
-                    556.14                     390.67 
+                    556.06                     390.66 
             person_emp_exp cb_person_cred_hist_length 
-                    323.82                     305.43 
+                    323.83                     305.42 
              person_gender 
-                     47.44 
+                     47.43 
 
-Mahalanobis decomposition (sum across obs):
-  diagonal = 16763.11 | cross-correlation = -5008.40 (-42.6% of total d_M^2)
-  Note: |cross-correlation| >= 25% -- the diagonal approximation
-        is meaningfully lossy for this data. See implementation_summary.txt
-        Section 4.6.1 for theoretical alternatives.
+Mahalanobis check (squared distances, summed across obs):
+  plotted (per feature) = 9675.25 | full d_M^2 = 11754.70 | difference = 2079.45 (+17.7% of full)
 ```
 
-The decomposition block appears only for `distance = "mahalanobis"`, and the note only when the cross-correlation share is at least 25% in absolute value. Here it is -42.6%, so the diagonal (per-feature) importance leaves out a large part of the full Mahalanobis distance for this data.
+The check appears only for `distance = "mahalanobis"`. A note is added only when the difference is at least 25% of the full distance in absolute value. Here it is +17.7%: the correlations in W make the full distance about a sixth longer than the plotted per-feature distances, so the per-feature importance is a fair summary. For the four-feature model of Step 7b the check gives `plotted (per feature) = 7993.67 | full d_M^2 = 9509.20 | difference = 1515.54 (+15.9% of full)`.
 
 ---
 
@@ -416,6 +413,7 @@ Returns a list invisibly:
 | `robustness` | numeric scalar | Sum of `sum_of_distance` across all features |
 | `vec_to_boundary_sd` | numeric matrix (n × p) | Full signed standardised distance matrix |
 | `distance` | character | The denominator used: `"mahalanobis"` (within-class SD) or `"euclidean"` (total SD) |
+| `mahalanobis_check` | list or `NULL` | `plotted`, `full`, `difference`, `pct`: the console check's numbers; `NULL` under `"euclidean"` |
 
 ---
 
@@ -466,16 +464,16 @@ Full argument list: `?bl_robustness`.
 **Console output** (from the harness run):
 ```
              person_gender cb_person_cred_hist_length 
-                     47.44                     305.43 
+                     47.43                     305.42 
             person_emp_exp                 person_age 
-                    323.82                     390.67 
+                    323.83                     390.66 
               credit_score              person_income 
-                    556.14                     777.83 
+                    556.06                     777.71 
                  loan_amnt        loan_percent_income 
-                   1301.72                    1570.89 
+                   1301.68                    1570.78 
              loan_int_rate 
-                   3929.70 
-Overall robustness (not used here): 9203.63
+                   3929.71 
+Overall robustness (not used here): 9203.29
 Retained features: loan_amnt, loan_int_rate, loan_percent_income, credit_score 
 ```
 
@@ -485,15 +483,15 @@ The overall score equals the "Robustness (total distance)" line that `plot(bl_bn
 
 | Feature | Total | Decision |
 |---|---|---|
-| `person_gender` | 47.44 | Dropped: the weakest |
-| `cb_person_cred_hist_length` | 305.43 | Dropped |
-| `person_emp_exp` | 323.82 | Dropped |
-| `person_age` | 390.67 | Dropped |
-| `credit_score` | 556.14 | **Kept:** actionable |
-| `person_income` | 777.83 | **Dropped:** redundant, although it outranks `credit_score` |
-| `loan_amnt` | 1301.72 | Kept |
-| `loan_percent_income` | 1570.89 | Kept |
-| `loan_int_rate` | 3929.70 | Kept: the strongest |
+| `person_gender` | 47.43 | Dropped: the weakest |
+| `cb_person_cred_hist_length` | 305.42 | Dropped |
+| `person_emp_exp` | 323.83 | Dropped |
+| `person_age` | 390.66 | Dropped |
+| `credit_score` | 556.06 | **Kept:** actionable |
+| `person_income` | 777.71 | **Dropped:** redundant, although it outranks `credit_score` |
+| `loan_amnt` | 1301.68 | Kept |
+| `loan_percent_income` | 1570.78 | Kept |
+| `loan_int_rate` | 3929.71 | Kept: the strongest |
 
 The ranking guides the choice, and two judgements override it:
 - **`person_income` is redundant.** `loan_percent_income` is `loan_amnt / person_income` rounded to two decimals (it matches in 44,992 of the 45,000 raw rows, and differs by at most 0.005). With both loan variables kept, income adds little.
@@ -555,7 +553,7 @@ bl_bnd  [bl_boundary]
      │     ├── sort variables by sum_of_distance
      │     ├── render jitter plot (one dot per obs per variable)
      │     └─→ console: metric, robustness scalar, per-variable totals,
-     │                  Mahalanobis decomposition (+ note when |cross| >= 25%)
+     │                  Mahalanobis check (+ note when |difference| >= 25%)
      │
      ├── plot(bl_bnd, type = "boxplot")   [type = "boxplot"]
      │     ├── same vec_to_boundary_sd computation
@@ -565,7 +563,7 @@ bl_bnd  [bl_boundary]
      ▼
 rob  [list]
   ├── sum_of_distance  (per-variable totals: used to rank features)
-  ├── robustness       (overall score 9203.63: printed, not used)
+  ├── robustness       (overall score 9203.29: printed, not used)
   └── distance         "mahalanobis"
      │
      │  var_imp <- sort(rob$sum_of_distance)

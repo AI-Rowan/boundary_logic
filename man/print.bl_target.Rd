@@ -4,10 +4,13 @@
 \alias{print.bl_target}
 \title{Print method for bl_target}
 \usage{
-\method{print}{bl_target}(x, ...)
+\method{print}{bl_target}(x, digits = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{"bl_target"} object.}
+
+\item{digits}{Optional named integer vector of decimals per feature; by
+default 2, or more where a value would print as 0.00.}
 
 \item{...}{Currently ignored.}
 }

@@ -109,6 +109,48 @@
 }
 
 
+#' Warn when a data-frame target lies outside the training ranges
+#'
+#' A target given in raw units to a model fitted on standardised features is
+#' the usual cause: `bl_set_scaling()` is display-only. When a scaling is
+#' recorded and converting the target would leave fewer features out of range,
+#' the warning suggests `bl_apply_scaling()`.
+#'
+#' @param x_obs     One-row data frame of the target's feature values.
+#' @param bl_result A `"bl_result"` object.
+#' @return `NULL`, invisibly; warns as a side effect.
+#' @noRd
+.warn_target_range <- function(x_obs, bl_result) {
+  rng <- bl_result$train_ranges
+  if (!is.list(rng)) return(invisible(NULL))
+  vars <- intersect(names(rng), names(x_obs))
+  out_of_range <- function(x) {
+    vars[vapply(vars, function(v) {
+      val <- x[[v]][1L]
+      !is.na(val) && (val < rng[[v]][1L] || val > rng[[v]][2L])
+    }, logical(1L))]
+  }
+
+  out_now <- out_of_range(x_obs)
+  if (length(out_now) == 0L) return(invisible(NULL))
+
+  msg <- sprintf(paste(
+    "The target lies outside the training range for: %s.",
+    "The local search looks for counterfactuals within that range."),
+    paste(out_now, collapse = ", "))
+  if (!is.null(bl_result$scaling)) {
+    out_conv <- tryCatch(out_of_range(bl_apply_scaling(x_obs, bl_result)),
+                         error = function(e) out_now)
+    if (length(out_conv) < length(out_now))
+      msg <- paste(msg,
+                   "It looks like raw units: bl_set_scaling() is display-only, so",
+                   "convert the target first with bl_apply_scaling(target, bl_result).")
+  }
+  warning(msg, call. = FALSE)
+  invisible(NULL)
+}
+
+
 # ---------------------------------------------------------------------------
 # Exported functions
 # ---------------------------------------------------------------------------
@@ -132,6 +174,13 @@
 #'   for a data frame. The class column is \code{"class"} when present,
 #'   otherwise the first non-feature column. When there is no such column the
 #'   true class is unknown (\code{NA}).
+#'
+#'   A data-frame target must be in the model's units. When
+#'   \code{\link{bl_set_scaling}} recorded a scaling, the model works in the
+#'   standardised units, so convert a raw-unit target first with
+#'   \code{\link{bl_apply_scaling}}. A data-frame target with any feature
+#'   outside \code{bl_result$train_ranges} gives a warning, which suggests
+#'   \code{bl_apply_scaling()} when the target looks like raw units.
 #'
 #' @return A list of class \code{"bl_target"} with the following fields:
 #'   \describe{
@@ -172,6 +221,7 @@ bl_select_target <- function(bl_result, target, data = NULL) {
                    paste(missing_vars, collapse = ", ")), call. = FALSE)
     x_obs  <- target[, var_names, drop = FALSE]
     row_id <- NA_integer_
+    .warn_target_range(x_obs, bl_result)
   } else if (is.numeric(target) || is.integer(target)) {
     row_id <- as.integer(target[[1L]])
     if (is.null(data)) data <- bl_result$test_data
@@ -352,18 +402,20 @@ set_filters <- function(bl_target, ...) {
 #'   \item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
 #'     original X-space using the within-class covariance matrix \eqn{W} stored
 #'     on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
-#'     \eqn{v = B_x - x_{obs}}. This is invariant to the eigenvector pair
-#'     chosen and is the mathematically sound default -- it measures
-#'     within-class noise units regardless of which 2D rotated slice produced
-#'     the counterfactual.}
+#'     \eqn{v = B_x - x_{obs}}. This is the PhD's cross-pair criterion.}
 #'   \item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
-#'     Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}. Not comparable across
-#'     pairs (each pair captures a different amount of variance), but
-#'     preserves the pre-Mahalanobis behaviour for reproducibility.}
+#'     Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}.}
 #' }
+#' Under CVA the two give the same pair: the CVA loadings satisfy
+#' \eqn{V^T W V = I / (n - g)}, every rotated basis inherits this, and so
+#' \eqn{d_M^2 = (n - g) d_z^2} for every pair. Under PCA they are different
+#' metrics (standardised Euclidean versus the binary-class \eqn{W}) and can
+#' pick different pairs; the thesis's rule for PCA is the Euclidean one.
 #' Within-pair selection (the nearest valid contour vertex) always uses 2D
 #' Euclidean distance in the rotated Z-space; only the cross-pair comparison
-#' is affected by \code{distance}.
+#' is affected by \code{distance}. See
+#' \code{documentation/biplot-rotation/biplot_rotation_and_pair_selection.md}
+#' section 3.4 in the package repository.
 #'
 #' @param bl_result   A \code{"bl_result"} object.
 #' @param bl_target   A \code{"bl_target"} object from
@@ -371,7 +423,9 @@ set_filters <- function(bl_target, ...) {
 #' @param set_filters A \code{"bl_filters"} object from
 #'   \code{\link{set_filters}}, or \code{NULL} (no actionability constraints).
 #' @param max_pairs   Integer; maximum number of eigenvector pairs to try.
-#'   Default \code{10L}.
+#'   Default \code{21L}: every pair for up to 7 features
+#'   (\code{choose(7, 2) = 21}). With more features, the pairs with the
+#'   highest components are left out.
 #' @param m           Integer; grid resolution along each axis. Default
 #'   \code{200L}.
 #' @param distance    Character; cross-pair selection metric. One of
@@ -439,7 +493,7 @@ set_filters <- function(bl_target, ...) {
 #' @export
 bl_find_local_cf <- function(bl_result, bl_target,
                                    set_filters = NULL,
-                                   max_pairs   = 10L,
+                                   max_pairs   = 21L,
                                    m           = 200L,
                                    distance    = c("mahalanobis", "euclidean"),
                                    verbose     = TRUE) {
@@ -923,8 +977,9 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param var_names   Character vector of feature names (the row order).
 #' @param scaling     `bl_result$scaling`, or `NULL`.
 #' @param constraints Named list of constraints, or `NULL`.
-#' @return A list with `table` (data frame, rows = features) and `units`
-#'   (`"raw"` or `"model"`).
+#' @return A list with `table` (data frame, rows = features, unrounded),
+#'   `units` (`"raw"` or `"model"`) and `digits` (decimals to print per
+#'   feature row; see `.fmt_digits()`).
 #' @noRd
 .cf_compare_table <- function(x_obs, cols, var_names, scaling, constraints) {
   # The first conversion warns once if the scaling is incomplete; the other
@@ -939,10 +994,66 @@ bl_find_local_cf <- function(bl_result, bl_target,
     tab[[nm]] <- .scale_to_raw(unname(cols[[nm]]), sc, var_names, "level")
   last       <- unname(cols[[length(cols)]])
   tab$change <- .scale_to_raw(last - unname(x_obs), sc, var_names, "delta")
-  tab        <- round(tab, 4L)
   tab$constraint <- .constraint_labels(constraints, var_names)
 
-  list(table = tab, units = if (raw) "raw" else "model")
+  # Decimals per feature row: 2, widened where a difference from observed
+  # would otherwise print as 0.00 (e.g. a change of -0.0016).
+  diffs <- as.matrix(tab[c(names(cols), "change")])
+  diffs[, names(cols)] <- diffs[, names(cols)] - tab$observed
+  d      <- .fmt_digits(diffs)
+  dim(d) <- dim(diffs)
+
+  list(table = tab, units = if (raw) "raw" else "model",
+       digits = as.integer(apply(d, 1L, max)))
+}
+
+
+#' Decimals needed to print a value at 2 dp without hiding it
+#'
+#' @param x          Numeric vector (or matrix).
+#' @param digits     Default number of decimals.
+#' @param max_digits Most decimals used.
+#' @return Integer vector, one per element of `x`: `digits`, or more when `x`
+#'   is not zero but rounds to zero at `digits` decimals (2 significant
+#'   digits, at most `max_digits`). A value that rounds to zero even at
+#'   `max_digits` keeps `digits`.
+#' @noRd
+.fmt_digits <- function(x, digits = 2L, max_digits = 4L) {
+  x      <- as.numeric(x)
+  d      <- rep(as.integer(digits), length(x))
+  hidden <- !is.na(x) & round(x, digits) == 0 & round(x, max_digits) != 0
+  d[hidden] <- pmin(as.integer(max_digits),
+                    as.integer(1 - floor(log10(abs(x[hidden])))))
+  d
+}
+
+
+#' Format numbers in fixed notation
+#'
+#' @param x Numeric vector.
+#' @param d Integer decimals, one per element (recycled).
+#' @return Character vector: never scientific notation, never `"-0.00"`.
+#' @noRd
+.fmt_fixed <- function(x, d) {
+  x <- as.numeric(x)
+  d <- rep_len(as.integer(d), length(x))
+  x <- round(x, d)
+  x[!is.na(x) & x == 0] <- 0
+  sprintf("%.*f", d, x)
+}
+
+
+#' Format a comparison table for printing
+#'
+#' @param cmp The list returned by `.cf_compare_table()`.
+#' @return `cmp$table` with every numeric column formatted by `.fmt_fixed()`,
+#'   using the row decimals `cmp$digits`.
+#' @noRd
+.format_cf_table <- function(cmp) {
+  tab <- cmp$table
+  for (nm in setdiff(names(tab), "constraint"))
+    tab[[nm]] <- .fmt_fixed(tab[[nm]], cmp$digits)
+  tab
 }
 
 
@@ -1327,6 +1438,10 @@ plot.bl_local_result <- function(x,
 #' table explains why and whether the restored point was used (see
 #' \strong{Fixed constraints} in \code{\link{bl_find_local_cf}}).
 #'
+#' Numbers print in fixed notation with 2 decimals; a feature whose change
+#' would print as 0.00 gets more decimals (up to 4) in its row, and the Target
+#' and Counterfactual blocks use the same decimals as the table.
+#'
 #' @param x A \code{"bl_local_result"} object.
 #' @param ... Currently ignored.
 #' @export
@@ -1349,11 +1464,25 @@ print.bl_local_result <- function(x, ...) {
   } else {
     cat(sprintf("  Reason         : %s\n", x$blocking_constraint))
   }
+  # The comparison table sets the decimals that the Target and
+  # Counterfactual blocks then share.
+  cmp    <- NULL
+  digits <- NULL
+  if (isTRUE(x$solution_found) && !is.null(x$B_x)) {
+    var_names <- x$bl_result$var_names
+    scaling   <- x$bl_result$scaling
+    x_obs     <- as.numeric(unlist(x$bl_target$x_obs[1L, var_names]))
+    cf        <- as.numeric(unlist(x$B_x[1L, var_names]))
+    cmp <- .cf_compare_table(x_obs, list(counterfactual = cf), var_names,
+                             scaling, x$set_filters$constraints)
+    digits <- setNames(cmp$digits, var_names)
+  }
+
   cat("\n  Target:\n")
-  print(x$bl_target)
+  print(x$bl_target, digits = digits)
   if (!is.null(x$bl_counterfactual)) {
     cat("\n  Counterfactual:\n")
-    print(x$bl_counterfactual)
+    print(x$bl_counterfactual, digits = digits)
   }
   cat("\n  Per-pair distances:\n")
   df <- data.frame(
@@ -1365,15 +1494,9 @@ print.bl_local_result <- function(x, ...) {
   )
   print(df, row.names = FALSE)
 
-  if (isTRUE(x$solution_found) && !is.null(x$B_x)) {
-    var_names <- x$bl_result$var_names
-    scaling   <- x$bl_result$scaling
-    x_obs     <- as.numeric(unlist(x$bl_target$x_obs[1L, var_names]))
-    cf        <- as.numeric(unlist(x$B_x[1L, var_names]))
-    cmp <- .cf_compare_table(x_obs, list(counterfactual = cf), var_names,
-                             scaling, x$set_filters$constraints)
+  if (!is.null(cmp)) {
     cat(sprintf("\n  Observed vs counterfactual (%s units):\n", cmp$units))
-    print(cmp$table)
+    print(.format_cf_table(cmp))
     notes <- .fixed_notes(x$fixed_check, x_obs, var_names, scaling)
     if (length(notes) > 0L) cat("\n", paste(notes, collapse = "\n"), "\n", sep = "")
   }
@@ -1384,9 +1507,11 @@ print.bl_local_result <- function(x, ...) {
 #' Print method for bl_target
 #'
 #' @param x A \code{"bl_target"} object.
+#' @param digits Optional named integer vector of decimals per feature; by
+#'   default 2, or more where a value would print as 0.00.
 #' @param ... Currently ignored.
 #' @export
-print.bl_target <- function(x, ...) {
+print.bl_target <- function(x, digits = NULL, ...) {
   cat("-- bl_target --\n")
   rid <- if (is.na(x$row_id)) "external" else as.character(x$row_id)
   cat(sprintf("  Row ID         : %s\n", rid))
@@ -1397,9 +1522,29 @@ print.bl_target <- function(x, ...) {
   vals  <- as.numeric(x$x_obs)
   nms   <- names(x$x_obs)
   vals  <- .scale_to_raw(vals, x$scaling, nms, "level")
-  names(vals) <- nms
-  print(round(vals, 4L))
+  .print_values(vals, nms, digits)
   invisible(x)
+}
+
+
+#' Print feature values in fixed notation
+#'
+#' @param vals   Numeric vector of feature values.
+#' @param nms    Feature names.
+#' @param digits Optional named integer vector of decimals per feature; a
+#'   feature it does not name gets `.fmt_digits()`.
+#' @return `NULL`, invisibly; prints a named character vector.
+#' @noRd
+.print_values <- function(vals, nms, digits = NULL) {
+  d <- .fmt_digits(vals)
+  if (!is.null(digits)) {
+    given <- unname(digits[nms])
+    d[!is.na(given)] <- as.integer(given[!is.na(given)])
+  }
+  out <- .fmt_fixed(vals, d)
+  names(out) <- nms
+  print(out, quote = FALSE, right = TRUE)
+  invisible(NULL)
 }
 
 
@@ -1411,9 +1556,11 @@ print.bl_target <- function(x, ...) {
 #'
 #' @param x A \code{"bl_counterfactual"} object (the \code{bl_counterfactual}
 #'   field of a \code{"bl_local_result"}).
+#' @param digits Optional named integer vector of decimals per feature; by
+#'   default 2, or more where a value would print as 0.00.
 #' @param ... Currently ignored.
 #' @export
-print.bl_counterfactual <- function(x, ...) {
+print.bl_counterfactual <- function(x, digits = NULL, ...) {
   cat("-- bl_counterfactual --\n")
   cat(sprintf("  Boundary prob  : %.4f\n", x$pred_prob))
   cat(sprintf("  Predicted class: %d\n",   x$pred_class))
@@ -1422,8 +1569,7 @@ print.bl_counterfactual <- function(x, ...) {
   vals <- as.numeric(x$x_cf)
   nms  <- names(x$x_cf)
   vals <- .scale_to_raw(vals, x$scaling, nms, "level")
-  names(vals) <- nms
-  print(round(vals, 4L))
+  .print_values(vals, nms, digits)
   invisible(x)
 }
 

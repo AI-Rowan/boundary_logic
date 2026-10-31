@@ -45,4 +45,11 @@ its features: \code{data[target, ]} for an index, or \code{target} itself
 for a data frame. The class column is \code{"class"} when present,
 otherwise the first non-feature column. When there is no such column the
 true class is unknown (\code{NA}).
+
+A data-frame target must be in the model's units. When
+\code{\link{bl_set_scaling}} recorded a scaling, the model works in the
+standardised units, so convert a raw-unit target first with
+\code{\link{bl_apply_scaling}}. A data-frame target with any feature
+outside \code{bl_result$train_ranges} gives a warning, which suggests
+\code{bl_apply_scaling()} when the target looks like raw units.
 }

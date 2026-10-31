@@ -227,8 +227,9 @@ test_that("print.bl_counterfactual shows raw units matching B_x*scale+center", {
   expect_match(txt, "raw units")
   vn      <- p$d$feats
   raw_cf  <- as.numeric(p$loc$B_x[, vn]) * p$d$scale[vn] + p$d$center[vn]
-  # The first feature's raw value should appear (rounded to 4 dp) in the output.
-  expect_match(txt, as.character(round(raw_cf[1L], 4L)), fixed = TRUE)
+  # The first feature's raw value should appear (at 2 dp) in the output.
+  expect_match(txt, formatC(round(raw_cf[1L], 2L), format = "f", digits = 2L),
+               fixed = TRUE)
 })
 
 test_that("print(bl_local) shows both Target and Counterfactual blocks", {
@@ -246,4 +247,62 @@ test_that("bl_counterfactual is NULL when no scaling -> model-unit print", {
   expect_s3_class(cf, "bl_counterfactual")
   txt <- paste(capture.output(print(cf)), collapse = "\n")
   expect_no_match(txt, "raw units")
+})
+
+
+# ---- bl_apply_scaling(): new raw-unit data into the model's units ----------
+
+build_scaled_result <- function(with_scaling = TRUE) {
+  d  <- make_std_data()
+  bl <- bl_wrap_data(d$std, d$std, var_names = d$feats)
+  if (with_scaling)
+    bl <- bl_set_scaling(bl, center = d$center, scale = d$scale)
+  mod <- bl_fit_model(bl$train_data, bl$var_names, model_type = "GLM")
+  res <- suppressWarnings(suppressMessages(
+    bl_build_result(bl, mod, method = "PCA", m = 40L, b_margin = 0.01)))
+  list(d = d, bl = bl, res = res)
+}
+
+test_that("bl_apply_scaling converts raw features and leaves other columns alone", {
+  s   <- build_scaled_result()
+  out <- bl_apply_scaling(s$d$raw, s$bl)
+  expect_equal(as.matrix(out[s$d$feats]), as.matrix(s$d$std[s$d$feats]),
+               ignore_attr = TRUE)
+  expect_identical(out$class, s$d$raw$class)
+
+  # Column order does not matter, and a bl_result works like the bl_data.
+  rev_raw <- s$d$raw[, rev(names(s$d$raw))]
+  expect_equal(bl_apply_scaling(rev_raw, s$res)[s$d$feats], out[s$d$feats])
+})
+
+test_that("bl_apply_scaling rejects bad inputs", {
+  s <- build_scaled_result()
+  expect_error(bl_apply_scaling(as.matrix(s$d$raw), s$bl), "data.frame")
+  expect_error(bl_apply_scaling(s$d$raw, list()), "must be a 'bl_result'")
+  expect_error(bl_apply_scaling(s$d$raw[, -1L], s$bl), "missing feature columns")
+  chr <- s$d$raw
+  chr$Sepal.Length <- as.character(chr$Sepal.Length)
+  expect_error(bl_apply_scaling(chr, s$bl), "must be numeric")
+  unscaled <- bl_wrap_data(s$d$std, s$d$std, var_names = s$d$feats)
+  expect_error(bl_apply_scaling(s$d$raw, unscaled), "No scaling")
+})
+
+test_that("a raw-unit data-frame target warns and suggests bl_apply_scaling", {
+  s       <- build_scaled_result()
+  raw_row <- s$d$raw[1L, s$d$feats]
+  expect_warning(bl_select_target(s$res, target = raw_row), "bl_apply_scaling")
+  expect_no_warning(bl_select_target(s$res,
+                                     target = bl_apply_scaling(raw_row, s$res)))
+  expect_no_warning(bl_select_target(s$res, target = 1L))
+})
+
+test_that("an out-of-range target without a scaling warns without the hint", {
+  s   <- build_scaled_result(with_scaling = FALSE)
+  row <- s$d$std[1L, s$d$feats]
+  row$Sepal.Length <- 10
+  expect_warning(bl_select_target(s$res, target = row), "Sepal.Length")
+  expect_no_match(
+    tryCatch(bl_select_target(s$res, target = row),
+             warning = function(w) conditionMessage(w)),
+    "bl_apply_scaling")
 })

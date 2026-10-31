@@ -2,6 +2,11 @@
 
 ## Breaking changes
 
+* `bl_find_local_cf()`'s `max_pairs` default is now `21L` (was `10L`), so the
+  search tries every eigenvector pair for up to 7 features, as the thesis
+  does. Results change for models with 6 or more features: more pairs are
+  tried, the selected pair can change, and run time grows with the number of
+  pairs. Pass `max_pairs = 10L` to reproduce earlier results.
 * `rotate_deg` is removed from `plot.bl_local_result()` and
   `plot.bl_sparse_result()`; passing it stops with an error. `rotate_deg` is
   only for viewing the global biplot (`plot_biplotEZ()`, `plot.bl_surrogate()`
@@ -38,6 +43,14 @@
 
 ## New features
 
+* New `bl_apply_scaling(data, bl_result)` converts new data given in raw
+  units, such as an external applicant, to the model's units with the
+  scaling recorded by `bl_set_scaling()`. `bl_set_scaling()` is
+  display-only, so every function that takes new data (`bl_select_target()`,
+  `bl_project_points()`, `plot(..., target_point =)`) expects model units.
+  `bl_select_target()` now warns when a data-frame target lies outside the
+  training ranges, and suggests `bl_apply_scaling()` when the target looks
+  like raw units.
 * Added Mahalanobis-aware distance measures, replacing per-feature Euclidean
   (divided by total SD) with squared Mahalanobis distance using the
   within-class covariance matrix `W`:
@@ -47,13 +60,13 @@
   - `bl_robustness()` and `plot.bl_boundary()` gain the same `distance`
     parameter governing the per-feature standardisation denominator
     (`sqrt(diag(W))` instead of total SD `X_sd`). `plot.bl_boundary()` also
-    prints a cross-correlation diagnostic, with a note when the
-    cross-correlation term is at least 25% (in absolute value) of the full
-    squared Mahalanobis distance.
+    prints a Mahalanobis check, with a note when the per-feature measure
+    leaves out at least 25% (in absolute value) of the full squared
+    Mahalanobis distance.
   - `bl_build_projection()` now computes and stores the metric matrix and its
     Cholesky-based inverse (`metric`, `metric_inv`, `metric_type`), propagated
     through `bl_assemble()` into `bl_result`. See
-    `documentation/mahalanobis_technical_note.md` for the full derivation.
+    `documentation/boundary-distance-and-robustness.md` for the full derivation.
   - Both new measures default to `"mahalanobis"`; pass `distance = "euclidean"`
     to reproduce the legacy behaviour exactly. Older `bl_result` objects
     without `metric_inv` fall back to Euclidean with a warning.
@@ -100,6 +113,48 @@
 
 ## Bug fixes and other improvements
 
+* The observed / counterfactual / change tables of `print()` for
+  `bl_local_result`, `bl_shapley` and `bl_sparse_result`, the Target and
+  Counterfactual blocks, and the sparse path now print in fixed notation with
+  2 decimals. They printed with 4 decimals and switched to scientific
+  notation when a column mixed large and small values. A feature whose change
+  would print as 0.00 gets more decimals (up to 4) in its row, so a small
+  move such as a loan-to-income change of -0.0016 stays visible.
+  `print.bl_target()` and `print.bl_counterfactual()` gain a `digits`
+  argument, which `print.bl_local_result()` uses to keep its blocks
+  consistent.
+* `plot.bl_boundary()`'s Mahalanobis diagnostic now describes the plotted
+  measure. Its "diagonal" used `diag(W^-1)`, which is not what the plot
+  divides by (`sqrt(diag(W))`); for correlated features
+  `(W^-1)_jj >= 1/W_jj`, so the printed "cross-correlation" share mostly
+  measured that mismatch (-42.6% on the loan harness). The renamed
+  "Mahalanobis check" compares the squared length of the plotted distances,
+  `sum(vec_to_boundary_sd^2)`, with the full `v' W^-1 v` (+17.7% on the same
+  run), and returns the numbers as a new `mahalanobis_check` field. See
+  `documentation/boundary-distance-and-robustness.md` §4.2.
+* `bl_find_boundary()`, `bl_surrogate()` and `bl_find_local_cf()` are now
+  deterministic. Their shared helper `.nearest_idx_block()` picked the nearest
+  contour vertex with `max.col(-d2)`, whose default `ties.method = "random"`
+  treats every vertex within 1e-5 of the *farthest* vertex's squared distance
+  as tied and draws one from the session's random-number stream. Results could
+  therefore change between repeated calls and depend on what had been called
+  before (and on any `set.seed()`). It now takes the exact nearest vertex
+  (`ties.method = "first"`). The behaviour was inherited from the PhD code. In
+  the loan harness, 1-3% of global counterfactuals could change under the old
+  rule. Their 2D distance moved by less than 1e-4, but their feature values
+  moved by up to 0.36 training SDs and their model score by up to 0.18. See
+  `documentation/nearest-vertex-tie-break.md`.
+* Documentation: the help for `bl_find_local_cf()` no longer says the
+  `"euclidean"` selector is "not comparable across pairs". Under CVA the two
+  `distance` options are the same criterion: the CVA loadings satisfy
+  `V'WV = I/(n-g)` for every rotated basis, so the squared Mahalanobis distance
+  is `n - g` times the squared in-plane distance for every pair, and both pick
+  the same pair. Under PCA they differ, and the thesis's rule is the Euclidean
+  one. The rotation and pair-selection material is now one note,
+  `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` (the
+  original PhD method, the implementation, its problems, a proposed solution,
+  and future work); the Mahalanobis note is renamed
+  `documentation/boundary-distance-and-robustness.md` and covers Phase 2 only.
 * `bl_build_grid()` now takes its `cutoff` from the model by default
   (`cutoff = bl_model$cutoff`) and stores it as `bl_grid$cutoff`; `bl_assemble()`
   stops if the grid's and the model's cutoffs differ. Previously the grid

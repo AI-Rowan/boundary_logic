@@ -41,9 +41,11 @@ utils::globalVariables(c("values", "Variable"))
 #'     Mahalanobis metric matrix stored on `bl_result$metric`. Features
 #'     that are good class separators (large between-class variance, small
 #'     within-class variance) are correctly *amplified* in the importance
-#'     measure. A cross-correlation diagnostic is printed to the console
-#'     so users can judge whether the diagonal approximation captures
-#'     enough of the full Mahalanobis distance for their data.}
+#'     measure. A Mahalanobis check is printed to the console: it compares
+#'     the squared length of the plotted per-feature distances,
+#'     `sum_j v_j^2 / W_jj`, with the full squared Mahalanobis distance
+#'     `v' W^{-1} v`, so users can judge how much the plot leaves out by
+#'     ignoring the correlations in `W`.}
 #'   \item{`"euclidean"`}{`X_sd` — total per-feature standard deviation
 #'     (legacy behaviour). Conflates within- and between-class variance.}
 #' }
@@ -85,6 +87,12 @@ utils::globalVariables(c("values", "Variable"))
 #'     distances (one row per obs, one column per variable).}
 #'   \item{`distance`}{Character; the denominator used, `"mahalanobis"`
 #'     (within-class SD) or `"euclidean"` (total SD).}
+#'   \item{`mahalanobis_check`}{For `"mahalanobis"`, a list of squared
+#'     distances summed across observations: `plotted` (the per-feature
+#'     measure, `sum(vec_to_boundary_sd^2)`), `full` (`v' W^{-1} v`),
+#'     `difference` (`full - plotted`) and `pct` (the difference as a
+#'     percentage of `full`). `NULL` for `"euclidean"` or when
+#'     `bl_result$metric_inv` is missing.}
 #' }
 #'
 #' @importFrom ggplot2 ggplot aes geom_jitter geom_boxplot geom_vline labs
@@ -212,27 +220,31 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
   cat("\nPer-variable totals (descending):\n")
   print(round(sort(sum_of_distance, decreasing = TRUE), 2L))
 
-  # ---- Cross-correlation diagnostic (Mahalanobis only) -----------
-  # Tells the user how much of the full squared Mahalanobis distance is
-  # captured by the diagonal-only approximation. Small cross-term =>
-  # diagonal approximation is essentially lossless.
+  # ---- Mahalanobis check (Mahalanobis only) ------------------------
+  # Compares the plotted per-feature measure with the full Mahalanobis
+  # distance. The plot divides each feature by sqrt(W_jj), so its squared
+  # length is sum_j v_j^2 / W_jj = rowSums(vec_to_boundary_sd^2); the full
+  # squared distance is v' W^-1 v. The difference is what the per-feature
+  # plot leaves out by ignoring the correlations in W.
+  mahalanobis_check <- NULL
   if (distance == "mahalanobis" && !is.null(metric_inv)) {
-    # Per-row full d_M^2 = rowSums(vec %*% W_inv * vec); diagonal d_M^2
-    # uses only the diagonal of W_inv.
-    full_per_row <- rowSums((vec_to_boundary %*% metric_inv) * vec_to_boundary)
-    diag_per_row <- rowSums(sweep(vec_to_boundary^2, 2L, diag(metric_inv), "*"))
-    total_full   <- sum(full_per_row, na.rm = TRUE)
-    total_diag   <- sum(diag_per_row, na.rm = TRUE)
-    cross        <- total_full - total_diag
-    pct          <- if (total_full != 0) 100 * cross / total_full else 0
-    cat(sprintf(
-      "\nMahalanobis decomposition (sum across obs):\n  diagonal = %.2f | cross-correlation = %.2f (%+.1f%% of total d_M^2)\n",
-      total_diag, cross, pct
+    full_per_row    <- rowSums((vec_to_boundary %*% metric_inv) * vec_to_boundary)
+    plotted_per_row <- rowSums(vec_to_boundary_sd^2)
+    total_full      <- sum(full_per_row, na.rm = TRUE)
+    total_plotted   <- sum(plotted_per_row, na.rm = TRUE)
+    difference      <- total_full - total_plotted
+    pct             <- if (total_full != 0) 100 * difference / total_full else 0
+    mahalanobis_check <- list(plotted = total_plotted, full = total_full,
+                              difference = difference, pct = pct)
+    cat(sprintf(paste0(
+      "\nMahalanobis check (squared distances, summed across obs):\n",
+      "  plotted (per feature) = %.2f | full d_M^2 = %.2f | difference = %.2f (%+.1f%% of full)\n"),
+      total_plotted, total_full, difference, pct
     ))
     if (abs(pct) >= 25) {
-      cat("  Note: |cross-correlation| >= 25% -- the diagonal approximation\n")
-      cat("        is meaningfully lossy for this data. See implementation_summary.txt\n")
-      cat("        Section 4.6.1 for theoretical alternatives.\n")
+      cat("  Note: |difference| >= 25% -- the per-feature plot leaves out a large\n")
+      cat("        part of the full Mahalanobis distance (the correlations in W).\n")
+      cat("        See implementation_summary.txt Section 4.6.1 for alternatives.\n")
     }
   }
 
@@ -241,7 +253,8 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
     sum_of_distance    = sum_of_distance,
     robustness         = robustness,
     vec_to_boundary_sd = vec_to_boundary_sd,
-    distance           = distance
+    distance           = distance,
+    mahalanobis_check  = mahalanobis_check
   ))
 }
 

@@ -22,5 +22,8 @@ uses the feature's counterfactual value. Values are in original (raw) units
 when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
 units. Last, it prints the path \code{\link{bl_find_sparse_cf}} took: the
 feature changed at each step, its Shapley value, the prediction after the
-step, and whether the predicted class has flipped.
+step, and whether the predicted class has flipped. Numbers print in fixed
+notation with 2 decimals, with more (up to 4) where a change or Shapley value
+would otherwise print as 0.00, or where a prediction is within 0.005 of the
+cutoff.
 }

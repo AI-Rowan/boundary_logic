@@ -8,7 +8,7 @@ bl_find_local_cf(
   bl_result,
   bl_target,
   set_filters = NULL,
-  max_pairs = 10L,
+  max_pairs = 21L,
   m = 200L,
   distance = c("mahalanobis", "euclidean"),
   verbose = TRUE
@@ -24,7 +24,9 @@ bl_find_local_cf(
 \code{\link{set_filters}}, or \code{NULL} (no actionability constraints).}
 
 \item{max_pairs}{Integer; maximum number of eigenvector pairs to try.
-Default \code{10L}.}
+Default \code{21L}: every pair for up to 7 features
+(\code{choose(7, 2) = 21}). With more features, the pairs with the
+highest components are left out.}
 
 \item{m}{Integer; grid resolution along each axis. Default
 \code{200L}.}
@@ -146,17 +148,19 @@ to the nearest valid boundary vertex. Two distance metrics are available:
 \item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
 original X-space using the within-class covariance matrix \eqn{W} stored
 on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
-\eqn{v = B_x - x_{obs}}. This is invariant to the eigenvector pair
-chosen and is the mathematically sound default -- it measures
-within-class noise units regardless of which 2D rotated slice produced
-the counterfactual.}
+\eqn{v = B_x - x_{obs}}. This is the PhD's cross-pair criterion.}
 \item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
-Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}. Not comparable across
-pairs (each pair captures a different amount of variance), but
-preserves the pre-Mahalanobis behaviour for reproducibility.}
+Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}.}
 }
+Under CVA the two give the same pair: the CVA loadings satisfy
+\eqn{V^T W V = I / (n - g)}, every rotated basis inherits this, and so
+\eqn{d_M^2 = (n - g) d_z^2} for every pair. Under PCA they are different
+metrics (standardised Euclidean versus the binary-class \eqn{W}) and can
+pick different pairs; the thesis's rule for PCA is the Euclidean one.
 Within-pair selection (the nearest valid contour vertex) always uses 2D
 Euclidean distance in the rotated Z-space; only the cross-pair comparison
-is affected by \code{distance}.
+is affected by \code{distance}. See
+\code{documentation/biplot-rotation/biplot_rotation_and_pair_selection.md}
+section 3.4 in the package repository.
 }
 

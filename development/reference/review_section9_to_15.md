@@ -157,12 +157,45 @@ tgt_train <- bl_select_target(bl_results_v2, target = 5L, data = bl_results_v2$t
 
 **Alternative call — external data frame (Step 16):**
 ```r
+new_applicant <- bl_apply_scaling(new_applicant, bl_results_v2)
 tgt_ext <- bl_select_target(bl_results_v2, target = new_applicant)
 ```
+
+**Convert to model units first — `bl_apply_scaling()`** (`R/data_prepare.R`).
+- **Why:** a data-frame target must be in the units the model was fitted on. `bl_set_scaling()` is display-only, and `bl_results_v2`'s model works in z-scores (Steps 4b–6b), while the script writes the application in raw loan units (credit score 420, loan 12,000).
+- **What it does:** each feature column becomes `(raw - center) / scale`, with the training `center`/`scale` recorded on `bl_results_v2$scaling`; other columns are left alone.
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `data` | required | `new_applicant` | The new observation(s), every feature in raw units |
+| `bl_result` | required | `bl_results_v2` | Supplies the recorded scaling and `var_names`; a `bl_data` or `bl_filter_result` also works |
+
+Full argument list: `?bl_apply_scaling`.
+
+The converted applicant (model units, from the harness run) is `loan_amnt` 0.368, `loan_int_rate` 0.620, `loan_percent_income` −1.203 and `credit_score` −5.399.
+
 When `target` is a data frame instead of an integer, the fields are filled as follows:
 - **`x_obs`:** taken directly from the frame.
 - **`row_id`:** `NA_integer_`.
 - **`class_obs`:** read from the frame's own class column if it has one. The script's `new_applicant` has none, so `class_obs = NA` (no true label available).
+
+**The target-range warning.** For a data-frame target, `bl_select_target()` warns when any feature lies outside `bl_result$train_ranges`. If a scaling is recorded and converting the target would bring more features into range, the warning adds that the target looks like raw units and suggests `bl_apply_scaling()`. Here the converted applicant still warns, without that hint, because a credit score of 420 is below the training range (489 to 754; −3.73 in z-scores):
+```
+Warning message:
+The target lies outside the training range for: credit_score. The local search looks for counterfactuals within that
+range.
+```
+In the harness log this warning appears at the end of the run, because R defers top-level warnings.
+
+**Step 16 result** (from the harness run):
+- **The applicant:** predicted 0.296, class 0.
+- **The search:** it selects pair (1, 2), with Distance (Z) 0.0135 and Mahalanobis distance 1.7026.
+- **The counterfactual (prediction 0.519):**
+  - raises the credit score from 420 to 489.44, the edge of the training range;
+  - raises the interest rate from 13.50 to 13.99;
+  - lowers the loan from 12,000 to 11,642.32;
+  - lowers the loan-to-income ratio from 0.0484 to 0.0437.
+- **The sparse counterfactual:** changing the interest rate alone crosses the boundary (0.52).
 
 **Returned object — `tgt` (S3 class `"bl_target"`):**
 
@@ -184,10 +217,10 @@ When `target` is a data frame instead of an integer, the fields are filled as fo
   Predicted class: 0
   Feature values (raw units) :
           loan_amnt       loan_int_rate loan_percent_income        credit_score 
-           12000.00               12.69                0.05              634.00 
+           12000.00               12.69              0.0500              634.00 
 ```
 
-The values print in raw loan units because `bl_results_v2` carries a scaling; `tgt$x_obs` itself stays in z-score units.
+The values print in raw loan units because `bl_results_v2` carries a scaling; `tgt$x_obs` itself stays in z-score units. They print in fixed notation with 2 decimals. Inside `print(bl_local)`, as here, the block takes the comparison table's decimals per feature, so `loan_percent_income` prints as 0.0500; `print(tgt)` on its own prints 0.05.
 
 ---
 
@@ -263,7 +296,7 @@ bl_local <- bl_find_local_cf(
 |---|---|---|---|
 | `bl_target` | required | `tgt` | The observation to explain (Step 10a) |
 | `set_filters` | `NULL` | `flt` | Actionability constraints (Step 10b); `NULL` searches without constraints (Step 15) |
-| `max_pairs` | `10L` | default | Eigenvector pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
+| `max_pairs` | `21L` | default | Eigenvector pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
 | `m` | `200L` | default | Grid resolution per pair |
 | `distance` | `"mahalanobis"` | default | Cross-pair selector: squared Mahalanobis distance in X-space, or Z-space distance under `"euclidean"` |
 | `verbose` | `TRUE` | default | Prints progress messages |
@@ -372,7 +405,7 @@ If all segments are eliminated, the pair is skipped.
 
 #### Stage F — Find nearest surviving point
 
-All surviving contour rows are combined into `all_Mi`. The nearest to `Z_target` is found via `.nearest_idx_block(Z_target, all_Mi, block=1)`. Distance = `sqrt(sum((Z_target - B_z_local)^2))`.
+All surviving contour rows are combined into `all_Mi`. The nearest to `Z_target` is found via `.nearest_idx_block(Z_target, all_Mi, block=1)`. It returns the exact nearest vertex (the first on an exact tie) and uses no random numbers, so repeating the call, or calling other searches first, gives the same counterfactual (`documentation/nearest-vertex-tie-break.md`). Distance = `sqrt(sum((Z_target - B_z_local)^2))`.
 
 #### Stage G — Update best result
 
@@ -387,8 +420,15 @@ where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance
 
 The pair selector then depends on the `distance` argument of `bl_find_local_cf()`:
 
-- `distance = "mahalanobis"` (default): pair selected by minimum `dist_mah`. Pair-invariant; matches the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` formula.
-- `distance = "euclidean"` (Z-space alternative): pair selected by minimum `dist_z`. Not comparable across pairs because each pair captures a different amount of variance in its 2D slice.
+- `distance = "mahalanobis"` (default): pair selected by minimum `dist_mah`. This is the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` criterion.
+- `distance = "euclidean"`: pair selected by minimum `dist_z`.
+
+**Under CVA, as here, the two are the same criterion.**
+
+- **The identity:** biplotEZ's CVA loadings satisfy `V'WV = I/(n-g)`, and every rotated basis inherits it, so for the search's in-plane point `dist_mah = (n - g) * dist_z^2` for every pair.
+- **On `bl_results_v2`:** the ratio `all_distances_mahalanobis / all_distances^2` is 15992 (n = 15996, g = 4) for every pair. That holds in the Step 11 search, Step 15's unconstrained search and Step 16's external search. The two options pick the same pair.
+
+They differ only under PCA, where `dist_z` is standardised Euclidean distance and `W` is the binary-class covariance. The derivation is in `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §3.4.
 
 If the chosen selector for this pair beats the running `best_selector`, save everything for this pair as the new best result. The loop continues through all configured pairs, keeping the global minimum. Both `dist_z` and `dist_mah` are reported for the winning pair, plus per-pair tables `all_distances` and `all_distances_mahalanobis`.
 
@@ -455,7 +495,7 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
   Predicted class: 0
   Feature values (raw units) :
           loan_amnt       loan_int_rate loan_percent_income        credit_score 
-           12000.00               12.69                0.05              634.00 
+           12000.00               12.69              0.0500              634.00 
 
   Counterfactual:
 -- bl_counterfactual --
@@ -463,7 +503,7 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
   Predicted class: 1
   Feature values (raw units) :
           loan_amnt       loan_int_rate loan_percent_income        credit_score 
-         12000.0000             14.1460              0.0484            634.2206 
+           12000.00               14.15              0.0484              634.22 
 
   Per-pair distances:
   pair      dist_z dist_mahalanobis
@@ -476,10 +516,10 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
 
   Observed vs counterfactual (raw units):
                     observed counterfactual  change constraint
-loan_amnt           12000.00     12000.0000  0.0000      fixed
-loan_int_rate          12.69        14.1460  1.4560   increase
-loan_percent_income     0.05         0.0484 -0.0016       none
-credit_score          634.00       634.2206  0.2206   increase
+loan_amnt           12000.00       12000.00    0.00      fixed
+loan_int_rate          12.69          14.15    1.46   increase
+loan_percent_income   0.0500         0.0484 -0.0016       none
+credit_score          634.00         634.22    0.22   increase
 
   Note: loan_amnt is "fixed", but the boundary search moved it to 12398.5032
         (+398.5032). The search lets a "fixed" feature move by up to 0.5
@@ -492,11 +532,12 @@ credit_score          634.00       634.2206  0.2206   increase
 
 Before printing, `bl_find_local_cf()` also reports the restore as a message: "Fixed feature(s) loan_amnt restored to observed value(s); the restored point still crosses the boundary (pred 0.547) and is used as the counterfactual."
 
-Pair (3, 4) has the smallest squared Mahalanobis distance (0.3408), so it wins. Its boundary point moves the loan amount from 12,000 to 12,398.5, inside the ±3,001 `"fixed"` tolerance (Step 10b). Setting the loan amount back to 12,000 still gives 0.547, so that restored point is the counterfactual (Stage H). It raises the interest rate from 12.69 to 14.15 and the credit score from 634 to 634.22, which satisfies both `"increase"` constraints, and keeps the loan amount at 12,000. The model's probability rises from 0.111 to 0.547. The distances and the per-pair table describe the search's boundary point, which decided the pair. Because `bl_find_local_cf()`'s reported distance can differ between repeated calls in one session, quote these values from a first call on a fresh `bl_results_v2` (see CLAUDE.md §6).
+Pair (3, 4) has the smallest squared Mahalanobis distance (0.3408), so it wins. Its boundary point moves the loan amount from 12,000 to 12,398.5, inside the ±3,001 `"fixed"` tolerance (Step 10b). Setting the loan amount back to 12,000 still gives 0.547, so that restored point is the counterfactual (Stage H). It raises the interest rate from 12.69 to 14.15 and the credit score from 634 to 634.22, which satisfies both `"increase"` constraints, and keeps the loan amount at 12,000. The model's probability rises from 0.111 to 0.547. The distances and the per-pair table describe the search's boundary point, which decided the pair. The search is deterministic, so repeating the call gives the same values (`documentation/nearest-vertex-tie-break.md`).
 
 **The comparison table at the end of `print(bl_local)`.** One row per feature, with:
 - **Columns:** the observed value, the counterfactual, the change (counterfactual minus observed) and the Step 10 constraint (`"none"` when unconstrained; a range prints as `[lo, hi]`).
 - **Units:** raw, because `bl_results_v2` carries a scaling. Levels convert as `value * scale + center` and the change as `value * scale`, by `.scale_to_raw()`, so the counterfactual column matches the Counterfactual block above. Without a scaling the header reads "(model units)".
+- **Format:** fixed notation, never scientific, with 2 decimals. A row whose change would print as 0.00 gets more decimals, up to 4: here `loan_percent_income`, whose change is −0.0016. The Target and Counterfactual blocks above use the same decimals per feature. `print(bl_shapley_values)` and `print(bl_sparse)` use the same rule for their Shapley values. The sparse path's predictions keep 4 decimals only within 0.005 of the cutoff.
 - **Note:** printed only when the search moved a `"fixed"` feature. It explains the tolerance and says whether the restored point was used. When it was not, because the restored point does not cross the boundary or leaves `train_ranges`, the counterfactual keeps the moved value and the note gives the reason.
 - **No table:** when no solution exists, `print()` shows the Reason line instead, and Steps 13 and 14 stop, because `bl_shapley()` needs a solution.
 
@@ -730,10 +771,10 @@ The observed value is rounded to 3 d.p. and the change to 2 d.p. For `bl_results
 
   Observed vs counterfactual, with Shapley values (raw units):
                     observed counterfactual  change constraint shapley
-loan_amnt           12000.00     12000.0000  0.0000      fixed  0.0000
-loan_int_rate          12.69        14.1460  1.4560   increase  0.2915
-loan_percent_income     0.05         0.0484 -0.0016       none  0.1445
-credit_score          634.00       634.2206  0.2206   increase  0.0000
+loan_amnt           12000.00       12000.00    0.00      fixed    0.00
+loan_int_rate          12.69          14.15    1.46   increase    0.29
+loan_percent_income   0.0500         0.0484 -0.0016       none    0.14
+credit_score          634.00         634.22    0.22   increase    0.00
                     contribute
 loan_amnt            No effect
 loan_int_rate         Supports
@@ -823,17 +864,17 @@ The selection follows the Shapley order, so it is not guaranteed to be the small
   Sparse CF pred : 0.5470
 
   Observed vs sparse counterfactual (raw units):
-                    observed counterfactual     sparse  change constraint  used
-loan_amnt           12000.00     12000.0000 12000.0000  0.0000      fixed FALSE
-loan_int_rate          12.69        14.1460    14.1460  1.4560   increase  TRUE
-loan_percent_income     0.05         0.0484     0.0484 -0.0016       none  TRUE
-credit_score          634.00       634.2206   634.0000  0.0000   increase FALSE
+                    observed counterfactual   sparse  change constraint  used
+loan_amnt           12000.00       12000.00 12000.00    0.00      fixed FALSE
+loan_int_rate          12.69          14.15    14.15    1.46   increase  TRUE
+loan_percent_income   0.0500         0.0484   0.0484 -0.0016       none  TRUE
+credit_score          634.00         634.22   634.00    0.00   increase FALSE
   (change = sparse - observed)
 
   Path (Supports features, largest Shapley value first):
- step            variable shapley  pred crosses
-    1       loan_int_rate  0.2915 0.360   FALSE
-    2 loan_percent_income  0.1445 0.547    TRUE
+ step            variable shapley pred crosses
+    1       loan_int_rate    0.29 0.36   FALSE
+    2 loan_percent_income    0.14 0.55    TRUE
 ```
 
 The table has the same layout as the one at the end of `print(bl_local)` (Step 11):
@@ -901,17 +942,17 @@ Identical pipeline to Steps 11–14, with `set_filters = NULL`. The unconstraine
   Sparse CF pred : 0.5420
 
   Observed vs sparse counterfactual (raw units):
-                    observed counterfactual     sparse  change constraint  used
-loan_amnt           12000.00     12544.2324 12000.0000  0.0000       none FALSE
-loan_int_rate          12.69        14.1062    14.1062  1.4162       none  TRUE
-loan_percent_income     0.05         0.0399     0.0399 -0.0101       none  TRUE
-credit_score          634.00       633.4348   634.0000  0.0000       none FALSE
+                    observed counterfactual   sparse change constraint  used
+loan_amnt           12000.00       12544.23 12000.00   0.00       none FALSE
+loan_int_rate          12.69          14.11    14.11   1.42       none  TRUE
+loan_percent_income     0.05           0.04     0.04  -0.01       none  TRUE
+credit_score          634.00         633.43   634.00   0.00       none FALSE
   (change = sparse - observed)
 
   Path (Supports features, largest Shapley value first):
- step            variable shapley  pred crosses
-    1       loan_int_rate  0.2905 0.360   FALSE
-    2 loan_percent_income  0.1405 0.542    TRUE
+ step            variable shapley pred crosses
+    1       loan_int_rate    0.29 0.36   FALSE
+    2 loan_percent_income    0.14 0.54    TRUE
 ```
 
 Without constraints the sparse counterfactual makes the same two changes as the constrained one (Step 14). It raises the interest rate (to 14.11) and lowers the loan-to-income ratio (to 0.0399). The unconstrained moves in the loan amount and the credit score do not move the prediction, so both are `"No effect"` and stay at their observed values. The interest rate alone again reaches only 0.360, so both changes are needed.
@@ -951,7 +992,7 @@ flt  [bl_filters]
   ├── constraints = list(loan_amnt="fixed", loan_int_rate="increase", credit_score="increase")
   └── bl_target = tgt
      │
-     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 10
+     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 21
      │
      │  [for each of the 6 eigenvector pairs (p = 4)]:
      │    .bl_rotate() → Vr_rot, tVr_rot (SVD-based local rotation)

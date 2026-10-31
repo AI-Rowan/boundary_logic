@@ -56,6 +56,20 @@ test_that("plot.bl_local_result draws a train_data target and an old bl_target",
 })
 
 
+# ---- The pair search covers every pair up to p = 7 ----------------------------
+
+test_that("max_pairs defaults to 21, every pair for p = 7", {
+  expect_identical(formals(bl_find_local_cf)$max_pairs, 21L)
+
+  pairs7 <- boundarylogic:::.generate_pairs(7L, 21L)
+  expect_identical(nrow(pairs7), 21L)
+  expect_identical(pairs7[16L, ], c(1L, 7L))
+  expect_identical(pairs7[21L, ], c(6L, 7L))
+
+  expect_identical(nrow(boundarylogic:::.generate_pairs(4L, 21L)), 6L)
+})
+
+
 # ---- "fixed" restore after the search (.restore_fixed) ----------------------
 
 # A minimal bl_result-like setup with a custom model whose probability depends
@@ -152,6 +166,33 @@ test_that(".cf_compare_table stays in model units and measures change from the l
   expect_named(cmp$table, c("observed", "counterfactual", "sparse", "change", "constraint"))
   expect_equal(cmp$table$change, c(0, 0.5))
   expect_identical(cmp$table$constraint, c("none", "none"))
+})
+
+test_that(".fmt_digits widens only a value that would print as 0.00", {
+  expect_identical(
+    boundarylogic:::.fmt_digits(c(-0.0016, 0.004, 1.456, 0, 1e-9, 0.0004, NA)),
+    c(4L, 4L, 2L, 2L, 2L, 4L, 2L))
+})
+
+test_that(".fmt_fixed prints fixed notation, without -0.00", {
+  expect_identical(boundarylogic:::.fmt_fixed(-0.001, 2L), "0.00")
+  expect_identical(boundarylogic:::.fmt_fixed(36000000.123, 2L), "36000000.12")
+  expect_identical(boundarylogic:::.fmt_fixed(c(0.0484, -0.0016), 4L),
+                   c("0.0484", "-0.0016"))
+})
+
+test_that("the comparison table prints 2 dp, widening a row whose change would hide", {
+  cmp <- boundarylogic:::.cf_compare_table(
+    x_obs = c(12000, 0.05, 1e-5), cols = list(counterfactual = c(36000000.5, 0.0484, 2e-5)),
+    var_names = c("a", "b", "c"), scaling = NULL, constraints = NULL)
+  expect_identical(cmp$digits, c(2L, 4L, 2L))
+
+  tab <- boundarylogic:::.format_cf_table(cmp)
+  expect_identical(tab$observed,       c("12000.00", "0.0500", "0.00"))
+  expect_identical(tab$counterfactual, c("36000000.50", "0.0484", "0.00"))
+  expect_identical(tab$change,         c("35988000.50", "-0.0016", "0.00"))
+  txt <- paste(capture.output(print(tab)), collapse = "\n")
+  expect_no_match(txt, "[0-9]e[+-][0-9]")
 })
 
 test_that(".fixed_notes explains each outcome", {

@@ -4,11 +4,14 @@
 \alias{print.bl_counterfactual}
 \title{Print method for bl_counterfactual}
 \usage{
-\method{print}{bl_counterfactual}(x, ...)
+\method{print}{bl_counterfactual}(x, digits = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{"bl_counterfactual"} object (the \code{bl_counterfactual}
 field of a \code{"bl_local_result"}).}
+
+\item{digits}{Optional named integer vector of decimals per feature; by
+default 2, or more where a value would print as 0.00.}
 
 \item{...}{Currently ignored.}
 }

@@ -109,7 +109,10 @@ copied by `bl_assemble()` into `bl_result$scaling`, including the model-free `bl
 `bl_build_result()` returns for the exploratory biplot.
 
 **It is display-only:** the model, grid, and `predict_fn` still operate on the standardised
-data the package holds; only the plot methods consume `scaling`. At plot time each biplot
+data the package holds; only the plot methods consume `scaling`. New observations given in raw
+units (such as Step 16's applicant) are converted to the model's units with
+`bl_apply_scaling(data, bl_results_v2)` before they are passed to any function
+(`review_section9_to_15.md`, Step 16). At plot time each biplot
 method calls `.bl_rescale_biplot_axes(biplot_obj, scaling, var_names)`, which transforms only
 the biplotEZ `$means`/`$sd` (`means_new = means*scale + center`, `sd_new = sd*scale`; `$scaled`/
 `$center` forced TRUE) and leaves `$Z`/`$Lmat`/`$ax.one.unit` untouched -- so axis labels read

@@ -22,3 +22,8 @@ units. When the search moved a \code{"fixed"} feature, a note under the
 table explains why and whether the restored point was used (see
 \strong{Fixed constraints} in \code{\link{bl_find_local_cf}}).
 }
+\details{
+Numbers print in fixed notation with 2 decimals; a feature whose change
+would print as 0.00 gets more decimals (up to 4) in its row, and the Target
+and Counterfactual blocks use the same decimals as the table.
+}

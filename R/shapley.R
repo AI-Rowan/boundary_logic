@@ -331,7 +331,9 @@ plot.bl_shapley <- function(x, ...) {
 #' counterfactual values, the change, the \code{\link{set_filters}} constraint,
 #' the Shapley value and its \code{Contribute} class. Feature values are in
 #' original (raw) units when a scaling was set via \code{\link{bl_set_scaling}},
-#' otherwise in model units; Shapley values are in prediction units.
+#' otherwise in model units; Shapley values are in prediction units. Numbers
+#' print in fixed notation with 2 decimals, with more (up to 4) where a change
+#' or a Shapley value would otherwise print as 0.00.
 #'
 #' @param x A \code{"bl_shapley"} object.
 #' @param ... Currently ignored.
@@ -354,11 +356,13 @@ print.bl_shapley <- function(x, ...) {
                            bl_local$bl_result$scaling,
                            bl_local$set_filters$constraints)
   idx <- match(var_names, as.character(df$varnames))
-  cmp$table$shapley    <- round(df$shapley_cause[idx], 4L)
-  cmp$table$contribute <- df$Contribute[idx]
+  s   <- df$shapley_cause[idx]
+  tab <- .format_cf_table(cmp)
+  tab$shapley    <- .fmt_fixed(s, .fmt_digits(s))
+  tab$contribute <- df$Contribute[idx]
   cat(sprintf("\n  Observed vs counterfactual, with Shapley values (%s units):\n",
               cmp$units))
-  print(cmp$table)
+  print(tab)
   invisible(x)
 }
 
@@ -600,7 +604,10 @@ plot.bl_sparse_result <- function(x,
 #' when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
 #' units. Last, it prints the path \code{\link{bl_find_sparse_cf}} took: the
 #' feature changed at each step, its Shapley value, the prediction after the
-#' step, and whether the predicted class has flipped.
+#' step, and whether the predicted class has flipped. Numbers print in fixed
+#' notation with 2 decimals, with more (up to 4) where a change or Shapley value
+#' would otherwise print as 0.00, or where a prediction is within 0.005 of the
+#' cutoff.
 #'
 #' @param x A \code{"bl_sparse_result"} object.
 #' @param ... Currently ignored.
@@ -623,9 +630,10 @@ print.bl_sparse_result <- function(x, ...) {
   cmp <- .cf_compare_table(x_obs, list(counterfactual = B_x, sparse = x_sparse),
                            var_names, bl_local$bl_result$scaling,
                            bl_local$set_filters$constraints)
-  cmp$table$used <- df$used_in_sparse[match(var_names, as.character(df$varnames))]
+  tab      <- .format_cf_table(cmp)
+  tab$used <- df$used_in_sparse[match(var_names, as.character(df$varnames))]
   cat(sprintf("\n  Observed vs sparse counterfactual (%s units):\n", cmp$units))
-  print(cmp$table)
+  print(tab)
   cat("  (change = sparse - observed)\n")
 
   path <- x$sparse_path
@@ -634,8 +642,11 @@ print.bl_sparse_result <- function(x, ...) {
       cat("\n  Path: no \"Supports\" feature to change.\n")
     } else {
       cat("\n  Path (Supports features, largest Shapley value first):\n")
-      path$shapley <- round(path$shapley, 4L)
-      path$pred    <- round(path$pred, 4L)
+      # A prediction within 0.005 of the cutoff keeps enough decimals to
+      # show which side it is on.
+      cutoff       <- bl_local$bl_result$cutoff
+      path$shapley <- .fmt_fixed(path$shapley, .fmt_digits(path$shapley))
+      path$pred    <- .fmt_fixed(path$pred, .fmt_digits(path$pred - cutoff))
       print(path, row.names = FALSE)
     }
   }

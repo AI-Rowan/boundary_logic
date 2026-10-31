@@ -394,6 +394,73 @@ bl_set_scaling <- function(x, center, scale, method = "z-score") {
 }
 
 
+#' Convert new raw-unit data to the model's units
+#'
+#' [bl_set_scaling()] is display-only: the model, the projection and every
+#' search work in the units the model was fitted on (for example z-scores),
+#' and functions that take new data -- [bl_select_target()],
+#' [bl_project_points()], `plot(..., target_point = )` -- expect those units.
+#' `bl_apply_scaling()` applies the recorded transform
+#' `standardised = (raw - center) / scale` to new data given in original
+#' (raw) units, such as an external applicant, so it can be passed to them.
+#' It is the input-side counterpart of the raw-unit display.
+#'
+#' @param data      Data frame with every feature column in raw units. Other
+#'   columns (e.g. `class`) are returned unchanged.
+#' @param bl_result A `"bl_result"`, `"bl_data"` or `"bl_filter_result"`
+#'   object carrying a scaling recorded by [bl_set_scaling()].
+#'
+#' @return `data`, with each feature column replaced by
+#'   `(raw - center) / scale`.
+#'
+#' @examples
+#' df       <- datasets::iris
+#' df$class <- as.numeric(df$Species == "versicolor")
+#' df$Species <- NULL
+#' feats    <- setdiff(names(df), "class")
+#' z        <- scale(df[, feats])
+#' std      <- df
+#' std[, feats] <- z
+#' bl_dat   <- bl_wrap_data(std[1:100, ], std[101:150, ])
+#' bl_dat   <- bl_set_scaling(bl_dat,
+#'                            center = attr(z, "scaled:center"),
+#'                            scale  = attr(z, "scaled:scale"))
+#'
+#' # A new observation in raw units, converted to the model's units
+#' new_obs <- df[1, feats]
+#' bl_apply_scaling(new_obs, bl_dat)
+#' all.equal(unlist(bl_apply_scaling(new_obs, bl_dat)), unlist(std[1, feats]))
+#'
+#' @seealso [bl_set_scaling()], [bl_select_target()]
+#' @export
+bl_apply_scaling <- function(data, bl_result) {
+  stop_if_not_data_frame(data, "data")
+  if (!inherits(bl_result, c("bl_result", "bl_data", "bl_filter_result")))
+    stop("'bl_result' must be a 'bl_result', 'bl_data' or 'bl_filter_result' object.",
+         call. = FALSE)
+
+  scaling <- bl_result$scaling
+  if (is.null(scaling))
+    stop("No scaling is recorded on 'bl_result' (see bl_set_scaling()), so there ",
+         "is nothing to convert: the model already uses the data's own units.",
+         call. = FALSE)
+
+  var_names    <- bl_result$var_names
+  missing_vars <- setdiff(var_names, names(data))
+  if (length(missing_vars) > 0L)
+    stop(sprintf("'data' is missing feature columns: %s.",
+                 paste(missing_vars, collapse = ", ")), call. = FALSE)
+  non_num <- var_names[!vapply(data[var_names], is.numeric, logical(1L))]
+  if (length(non_num) > 0L)
+    stop(sprintf("Feature columns must be numeric: %s.",
+                 paste(non_num, collapse = ", ")), call. = FALSE)
+
+  for (v in var_names)
+    data[[v]] <- (data[[v]] - scaling$center[[v]]) / scaling$scale[[v]]
+  data
+}
+
+
 # --------------------------------------------------------------------------
 # S3 print method
 # --------------------------------------------------------------------------

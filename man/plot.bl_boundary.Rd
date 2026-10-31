@@ -33,6 +33,12 @@ absolute standardised distance.}
 distances (one row per obs, one column per variable).}
 \item{\code{distance}}{Character; the denominator used, \code{"mahalanobis"}
 (within-class SD) or \code{"euclidean"} (total SD).}
+\item{\code{mahalanobis_check}}{For \code{"mahalanobis"}, a list of squared
+distances summed across observations: \code{plotted} (the per-feature
+measure, \code{sum(vec_to_boundary_sd^2)}), \code{full} (\verb{v' W^\{-1\} v}),
+\code{difference} (\code{full - plotted}) and \code{pct} (the difference as a
+percentage of \code{full}). \code{NULL} for \code{"euclidean"} or when
+\code{bl_result$metric_inv} is missing.}
 }
 }
 \description{
@@ -72,9 +78,11 @@ standard deviation per feature. This is the diagonal of the
 Mahalanobis metric matrix stored on \code{bl_result$metric}. Features
 that are good class separators (large between-class variance, small
 within-class variance) are correctly \emph{amplified} in the importance
-measure. A cross-correlation diagnostic is printed to the console
-so users can judge whether the diagonal approximation captures
-enough of the full Mahalanobis distance for their data.}
+measure. A Mahalanobis check is printed to the console: it compares
+the squared length of the plotted per-feature distances,
+\verb{sum_j v_j^2 / W_jj}, with the full squared Mahalanobis distance
+\verb{v' W^\{-1\} v}, so users can judge how much the plot leaves out by
+ignoring the correlations in \code{W}.}
 \item{\code{"euclidean"}}{\code{X_sd} — total per-feature standard deviation
 (legacy behaviour). Conflates within- and between-class variance.}
 }

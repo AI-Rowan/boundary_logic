@@ -18,5 +18,7 @@ a \code{bl_local_result}: one row per feature with the observed and
 counterfactual values, the change, the \code{\link{set_filters}} constraint,
 the Shapley value and its \code{Contribute} class. Feature values are in
 original (raw) units when a scaling was set via \code{\link{bl_set_scaling}},
-otherwise in model units; Shapley values are in prediction units.
+otherwise in model units; Shapley values are in prediction units. Numbers
+print in fixed notation with 2 decimals, with more (up to 4) where a change
+or a Shapley value would otherwise print as 0.00.
 }
