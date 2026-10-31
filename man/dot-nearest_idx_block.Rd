@@ -14,7 +14,10 @@
 \item{block}{Integer; block size for Z (default 5000).}
 }
 \value{
-Integer vector of length n; row index of the nearest B row.
+Integer vector of length n; row index of the nearest B row. This
+is the exact nearest row (the first one on an exact tie), so the result
+is deterministic and uses no random numbers. See
+\code{documentation/nearest-vertex-tie-break.md}.
 }
 \description{
 Block-wise nearest-neighbour indices (no n x m distance matrix)

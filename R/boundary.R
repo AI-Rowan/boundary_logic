@@ -14,7 +14,10 @@
 #' @param B m x 2 matrix of candidate boundary points.
 #' @param block Integer; block size for Z (default 5000).
 #'
-#' @return Integer vector of length n; row index of the nearest B row.
+#' @return Integer vector of length n; row index of the nearest B row. This
+#'   is the exact nearest row (the first one on an exact tie), so the result
+#'   is deterministic and uses no random numbers. See
+#'   `documentation/nearest-vertex-tie-break.md`.
 #' @keywords internal
 .nearest_idx_block <- function(Z, B, block = 5000L) {
   Z <- as.matrix(Z); B <- as.matrix(B)
@@ -41,9 +44,13 @@
       dy <- outer(Zb[, 2L], Bb[, 2L], "-")
       d2 <- dx * dx + dy * dy
 
-      min_loc <- max.col(-d2)
+      # ties.method = "first": the exact minimum. The default "random" treats
+      # every entry within 1e-5 of the row's largest |entry| (the farthest
+      # vertex) as tied and draws one from the session's RNG.
+      min_loc <- max.col(-d2, ties.method = "first")
       d2_min  <- d2[cbind(seq_len(nrow(Zb)), min_loc)]
 
+      # Strict "<": an exact tie across B-blocks keeps the earlier block.
       upd <- d2_min < best_d2[from:to]
       if (any(upd)) {
         best_d2[from:to][upd]  <- d2_min[upd]
