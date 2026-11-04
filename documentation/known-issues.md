@@ -59,8 +59,9 @@ refitted on the four features kept after the global search: Pregnancies, Glucose
   per-pair record) and `R/local_cf.R:819` (`best_result`, which overwrites `Vr_rot`, `B_x` and
   the grid when a nearer pair is found).
 - **Effect on results.** None on the counterfactual. Two consequences:
-  - another pair's plane cannot be plotted without a second search pinned to it (Pima Figure 6(b)
-    needs run 5, `max_pairs = 1L`);
+  - another pair's plane cannot be plotted, or its counterfactual reported, without a second search
+    pinned to it (to get the TP target's counterfactual on pair (1,2), the Pima example needs a
+    second run, run 5, with `max_pairs = 1L`);
   - the `"fixed"` restore and the `"integer"` rounding are tried on the winning pair's point only,
     so a target can lose a counterfactual that another pair's point would have given
     (`fixed-constraint-restore.md` §8, third bullet).
@@ -133,7 +134,7 @@ refitted on the four features kept after the global search: Pregnancies, Glucose
 - **Where.** `R/local_cf.R:1110` (`.round_integers()`); `fixed-constraint-restore.md` §5.
 - **Effect on results.** In the Pima example, the TN target's run 1 search point has Pregnancies
   10.21 (√d²_M 0.14, prediction 0.500). Pregnancies 10 does not cross (0.487), so 11 is taken: √d²_M
-  rises to 0.42 and the prediction to 0.548. Run 5 behaves the same way (√d²_M 0.18 to 0.44). The
+  rises to 0.42 and the prediction to 0.548. Run 5 behaves the same way (√d²_M 0.17 to 0.44). The
   counterfactual distance is then mostly the cost of a whole pregnancy.
 - **Suggested fix.** When a whole value does not cross, hold it and run the follow-up search of
   §1.5 along the free features; keep the result if it is nearer than the other whole value.

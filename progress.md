@@ -16,10 +16,12 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **`main` was last merged and pushed on 2026-08-03.** `method_developments` is at `b7aee65`
   (pushed 2026-10-29). Merging `paper_nr1_changes` back, and the release tag the paper will pin,
   wait for the user's instruction after Gate 3.
-- **`paper_nr1_changes` is committed and pushed** (2026-11-04): `f2a076b` (session 1), `7aa1344`
+- **`paper_nr1_changes` is pushed up to `4ecdc8c`** (2026-11-04): `f2a076b` (session 1), `7aa1344`
   (session 2), `f4f3647` and `f0e3dd4` (session 3), `a89ff1f` (session 4), `49c9067` (session 5),
-  `67a1424` (session 6: the Gate 2 fixes and the documentation audit), and the session-7 commit
-  (Task D, CLAUDE.md, this file). Commit and push only when the user says so.
+  `67a1424` (session 6: the Gate 2 fixes and the documentation audit), `4ecdc8c` (session 7: Task D,
+  CLAUDE.md, this file). **Uncommitted since:** `documentation/known-issues.md` (§1.2 no longer
+  cites Pima Figure 6(b); §1.7 run 5 distance 0.17, not 0.18), `CLAUDE.md` (two lines, §5) and this
+  file. Commit and push only when the user says so.
 - **Tasks A–D are done; Gate 2 is closed.** Task E and Gate 3 remain.
 - **`scripts/` is gitignored** — the user's personal scratch playground, never published. The
   Paper 1 Pima example (Task C) lives in `scripts/paper1-pima/` (local only, by design): its plan
@@ -93,6 +95,11 @@ in `scripts/paper1-pima/pruned-model-issues-review.md`.
 4. **CLAUDE.md:** the note in §2; how to run the Pima example and how to get enough biplot ticks
    (§5); `bl_prepare_data()`'s split depends only on rows and seed (§6).
    `fixed-constraint-restore.md` §4 says its Pima example is the 7-feature run.
+5. **After `4ecdc8c` (the duplicate figure and run 5):** Figure 6(b) is removed (TP runs 4 and 5 give
+   the same point, now said in Figure 7(a)'s caption); Figure 6 is the per-pair dot chart, whose
+   (1,2) row is run 5's distance; Table 1 has a run 5 column ("pair (1,2) only"). Run 5 had been
+   specified only to draw Figure 6(b). Pima issue 14 (closed). CLAUDE.md §5 records what run 5 is
+   and how to quote the Pima numbers (a 0.18 for 0.1745 was corrected in the notes).
 
 **Files changed (package repo):** `documentation/known-issues.md` (new),
 `.claude/reference/known-issues-taskD-plan.md` (new), `CLAUDE.md`,
@@ -106,8 +113,8 @@ in `scripts/paper1-pima/pruned-model-issues-review.md`.
   19 of 313 training patients over 50.
 - **Integer rounding:** for the TN target, Pregnancies 10.21 -> 11 triples √d²_M (0.14 -> 0.42).
 - **The Mahalanobis check:** -35.2% on four features, against -27.4% on seven.
-- **Figure 7(a) shows the same point as Figure 6(b)** (TP runs 4 and 5 give the same counterfactual
-  on pair (1,2)).
+- **The pair search's gain** (run 1, all 6 pairs, against run 5, pair (1,2) only): √d²_M 1.50
+  against 1.92 for the TP target, 0.14 against 0.17 for the TN target.
 
 ### Test status
 
@@ -119,10 +126,11 @@ in `scripts/paper1-pima/pruned-model-issues-review.md`.
 ### Open points / blockers
 
 - **No blockers.**
-- **For the user:** Figure 6(b) and Figure 7(a) show the same counterfactual — drop one, or point
-  to it in the caption.
+- **Uncommitted since `4ecdc8c`:** see Standing items. Commit when the user asks.
 - **For the Task E plan:** on the 4-feature model only 6 pairs exist, so `max_pairs = 21` against
-  `10` measures nothing there; the max_pairs effect must be measured on the 7-feature model.
+  `10` measures nothing there; the max_pairs effect must be measured on the 7-feature model. On the
+  4-feature model, run 1 against run 5 (Table 1) already measures all pairs against pair (1,2)
+  only.
 - **Paper text for Task E:** open issues 5, 9, 11, 12, 13 (`issues.csv`), and Gate 2 issues 3
   and 6. Gate 2 issue 1 is removed and issue 10 is closed.
 - **The pkgdown site** (`docs/`) has not been rebuilt for sessions 2–7. Rebuild before a release
@@ -132,7 +140,8 @@ in `scripts/paper1-pima/pruned-model-issues-review.md`.
 
 ### Next session (exact next step)
 
-1. **Start planning Task E** (in plan mode): the methodology-changes note for the supervisor,
+1. **Start planning Task E** (in plan mode; the user starts it next session): the
+   methodology-changes note for the supervisor,
    `documentation/methodology-changes/methodology-changes.qmd` rendered to `.docx`. The full
    specification is in `.claude/plans/boundary-logic-fix-prompt.md` (Task E, Parts 1 and 2), with
    the working plan's Task E section. The plan must settle:
