@@ -16,19 +16,20 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **`main` was last merged and pushed on 2026-08-03.** `method_developments` is at `b7aee65`
   (pushed 2026-10-29). Merging `paper_nr1_changes` back, and the release tag the paper will pin,
   wait for the user's instruction after Gate 3.
-- **`paper_nr1_changes` state:**
-  - **Committed, not pushed:** `f2a076b` (session 1), `7aa1344` (session 2) and `f4f3647`
-    (session 3, Gate 2 fixes).
-  - **Uncommitted** in the working tree:
-    - session 3's Part B (nearest-vertex fix) and Part C (rotation folder);
-    - session 4's merge of the two notes;
-    - session 5's package changes (`max_pairs = 21`, the Mahalanobis check, the 2-dp print
-      format, `bl_apply_scaling()` and the Step 16 fix).
-  - **Staged:** the rename `documentation/mahalanobis_technical_note.md` →
-    `documentation/boundary-distance-and-robustness.md`, from `git mv`.
-  - Commit only when the user says so.
-- **`scripts/` is gitignored** — the user's personal scratch playground, never published. Task C
-  will write `scripts/paper1-pima/` there (local only, by design).
+- **`paper_nr1_changes` is committed and pushed** (2026-11-04): `f2a076b` (session 1), `7aa1344`
+  (session 2), `f4f3647` and `f0e3dd4` (session 3), `a89ff1f` (session 4), `49c9067` (session 5),
+  `67a1424` (session 6: the Gate 2 fixes and the documentation audit), and the session-7 commit
+  (Task D, CLAUDE.md, this file). Commit and push only when the user says so.
+- **Tasks A–D are done; Gate 2 is closed.** Task E and Gate 3 remain.
+- **`scripts/` is gitignored** — the user's personal scratch playground, never published. The
+  Paper 1 Pima example (Task C) lives in `scripts/paper1-pima/` (local only, by design): its plan
+  is `.claude/plans/paper1-pima-example.md`, its review page `scripts/paper1-pima/review.html`,
+  the issues `issues.csv` (the page shows the open ones). How to run it: CLAUDE.md §5.
+  - **Phases 1–2 use the 7-feature GAM. Phase 3 uses the GAM refitted on Pregnancies, Glucose,
+    Insulin and Age** (`02b_prune-refit.R`), after the global search ranked DiabetesPedigreeFunction,
+    SkinThickness and BMI lowest.
+- **Known issues** (Task D): `documentation/known-issues.md` (9 open, 8 resolved). The user does
+  not want any of them implemented for Paper 1.
 - **The boundary searches are deterministic** since 2026-10-30 (exact nearest vertex;
   `documentation/nearest-vertex-tie-break.md`).
 - **The rotation and pair selection are documented in one note:**
@@ -43,9 +44,10 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
   - **Phase 2 distances** are in `documentation/boundary-distance-and-robustness.md`.
   - **The plane under-determination** (§4.1) stays documented and deliberately not actioned. Do
     not "fix" it without an explicit instruction (CLAUDE.md §9).
-- **Deferred / future work** — see `CLAUDE.md` Section 9 (not duplicated here).
-- **Baseline test status: 348 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are pre-existing biplotEZ CVA
-  2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-10-31, session 5).
+- **Deferred / future work** — see `CLAUDE.md` Section 9 and `documentation/known-issues.md` (not
+  duplicated here).
+- **Baseline test status: 434 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are pre-existing biplotEZ CVA
+  2-class notices). **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-11-04).
 - **Verification:** run R as `.R` files via the PowerShell tool,
   `& "C:/Program Files/R/R-4.6.0/bin/Rscript.exe" <driver>.R`, with the driver calling
   `devtools::document(<pkg root>)` then `devtools::test(<pkg root>)`. The dev harness runs end to
@@ -57,124 +59,104 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
-## Session summary (2026-10-31, session 5, latest) — Step 16 raw units, `max_pairs = 21`, the Phase 2 check, 2-dp tables
+## Session summary (2026-11-04, session 7, latest) — the Pima review, the pruning and Task D
 
-**Plan:** `.claude/plans/step16-pairs-check-decimals.md` (approved, implemented). Archive it with
-session 4's plan (`.claude/plans/can-you-compare-the-nifty-flask.md`) in `.claude/reference/` when
-the user commits.
+**Plan:** `.claude/plans/i-have-reviewed-the-robust-rossum.md`, archived as
+`.claude/reference/known-issues-taskD-plan.md` with an implementation log. The user's decisions are
+in `scripts/paper1-pima/pruned-model-issues-review.md`.
 
-### What was done (the user's five requests)
+### What was done
 
-1. **PCA selector default: deferred** (documentation only).
-   - **The decision:** Paper 1 compares by Mahalanobis distance only, under CVA, where both
-     selectors are identical. The PCA default (`W_binary`) is revisited only once the rotation
-     problem is fully addressed.
-   - **Recorded in:** rotation note §4.4 and §6.2, and CLAUDE.md §6 and §9.
-2. **`max_pairs` default 10 → 21** (`bl_find_local_cf()`).
-   - **The user's choice:** 21, after being told that 15 never reaches component 7.
-   - **What it covers:** every pair for p ≤ 7, so Paper 1's Pima search (p = 7) tries all 21
-     pairs, including the thesis's (1,7). From p = 8 the cap still leaves pairs out.
-   - **Effect:** the loan harness (p = 4) is unchanged. The README Pima example (p = 6) now tries
-     all 15 pairs, and its result is unchanged.
-   - **Also updated:** the local plan files `boundary-logic-fix-prompt.md` (Task C set-up,
-     figure 6, a Task E note) and `commit-and-push-the-mutable-hearth.md`.
-3. **The Phase 2 Mahalanobis check now describes the plot** (`plot.bl_boundary()`).
-   - **The fix:** its "diagonal" is `sum(vec_to_boundary_sd^2)` (1/W_jj, as plotted), instead of
-     `diag(W^-1)`.
-   - **New output:** a renamed print, and a new `mahalanobis_check` return field.
-   - **Measured on the harness:**
-     - Step 7: +17.7% (the old diagnostic printed −42.6%, mostly the mismatch);
-     - Step 7b: +15.9%;
-     - neither reaches the 25% note.
-   - **Tests:** new `tests/testthat/test-boundary_plot.R`.
-4. **Fixed 2-dp print tables.**
-   - **Covered:** the comparison tables of `print(bl_local)`, `print(bl_shapley)` and
-     `print(bl_sparse)`, the Target/Counterfactual blocks, the Shapley column and the sparse path.
-   - **The format:**
-     - fixed notation with 2 decimals;
-     - widened per feature row (up to 4) where a change would print as 0.00;
-     - the sparse path's predictions keep 4 decimals within 0.005 of the cutoff.
-   - **Helpers:** `.fmt_digits()`, `.fmt_fixed()`, `.format_cf_table()`, `.print_values()`.
-   - `print.bl_target()` and `print.bl_counterfactual()` gain `digits = NULL`.
-   - **The cause of the scientific notation:** the old harness log had it only in Step 16, from
-     the raw-unit bug (a loan of 72 million).
-5. **Step 16 raw units fixed.**
-   - **New export:** `bl_apply_scaling(data, bl_result)` converts raw-unit data to the model's
-     units.
-   - **New warning:** `bl_select_target()` warns when a data-frame target lies outside
-     `train_ranges`, with a `bl_apply_scaling()` hint when the target looks like raw units.
-   - **The harness:** Step 16 converts the applicant.
-   - **The new result:**
-     - Z 0.0135 (was 115.76);
-     - the applicant is predicted 0.296, class 0 (was 0.787, class 1);
-     - pair (1,2) wins, at √d²_M 1.7026;
-     - the counterfactual's credit score is 489.44, at the training minimum (489).
-   - **The applicant still warns:** credit score 420 is below the training range (489–754).
+1. **The user's review of `review.html`** (scripts only, `scripts/paper1-pima/`):
+   - a paragraph before Figure 3: the biplot points are the 313 training rows; the targets come
+     from the 79 test rows;
+   - **pruning:** `02b_prune-refit.R` checks that DPF, SkinThickness and BMI are the three weakest
+     in the global search (48.68, 44.11, 40.05), re-splits the same rows (same split, checked) and
+     refits the GAM on four features. Phase 3 runs on it. Run 6 is Glucose and Insulin
+     `"decrease"`;
+   - **figures:** 3 = the 7-feature biplot; 4(a) = the importance boxplot ("global search"
+     subtitle); 4(b) = Figure 3 on four features. The old 4(a) and every mention of the arrow issue
+     are gone;
+   - every biplot axis shows at least 2 ticks (`ticks_v = 4L`, more per axis where needed);
+   - the Shapley subtitles give the target's and the counterfactual's predictions;
+   - the review page follows the workflow (Phase 3 after the pruning) and shows only open issues.
+2. **The user's decisions on the pruned model's issues:**
+   - 4(a): Figure 7 is TP run 4, TN run 1 and TN run 6;
+   - 5(b): run 2 is out of Table 1 (it equals run 1 for both targets);
+   - 9(b): the review page shows the Mahalanobis check for both models;
+   - 11, 12, 13: paper text; their package options go to Task D.
+3. **Task D:** `documentation/known-issues.md` — 9 open issues (the approximation gap, only the
+   winning pair's plane stored, `plot.bl_projection()`'s colours, the hard-coded `"fixed"`
+   tolerance, the follow-up searches for `"fixed"` and `"integer"`, the README constraint example,
+   the harness title) and 8 resolved ones with their commits. The arrow layer is left out (the
+   user's choice). CLAUDE.md §9 points to the note.
+4. **CLAUDE.md:** the note in §2; how to run the Pima example and how to get enough biplot ticks
+   (§5); `bl_prepare_data()`'s split depends only on rows and seed (§6).
+   `fixed-constraint-restore.md` §4 says its Pima example is the 7-feature run.
 
-**Documentation:**
-- NEWS (one Breaking-change bullet, one New-feature bullet, two Bug-fix bullets);
-- `2 implementation_summary.txt`;
-- `1 Foundation intro documents.txt` §10.7;
-- CLAUDE.md (§2, §3, §5, §6, §9);
-- both notes;
-- walkthroughs `review_section4_to_6.md`, `review_section7_to_8.md` and `review_section9_to_15.md`
-  (every quoted block refreshed from the harness).
+**Files changed (package repo):** `documentation/known-issues.md` (new),
+`.claude/reference/known-issues-taskD-plan.md` (new), `CLAUDE.md`,
+`documentation/fixed-constraint-restore.md` (in `67a1424`), `progress.md`.
 
-`review_section9_to_15.md` also had a stale sentence saying repeated calls can differ; it was
-replaced.
+**Key results (4-feature model):**
+- **Targets:** TP = test row 23 (prediction 0.963), TN = test row 25 (0.374).
+- **Runs without a counterfactual:** TP run 3 (no boundary point), TN runs 3 and 4 (the strict
+  restore fails: 0.475, 0.487).
+- **The TP counterfactual ages the patient** (Age 51 -> 59.58). The GAM's risk drops after 55, on
+  19 of 313 training patients over 50.
+- **Integer rounding:** for the TN target, Pregnancies 10.21 -> 11 triples √d²_M (0.14 -> 0.42).
+- **The Mahalanobis check:** -35.2% on four features, against -27.4% on seven.
+- **Figure 7(a) shows the same point as Figure 6(b)** (TP runs 4 and 5 give the same counterfactual
+  on pair (1,2)).
 
 ### Test status
 
-- **Tests:** 348 PASS / 0 FAIL / 4 WARN / 0 SKIP.
-- **`17_3`:** every assertion passes; reference values unchanged (1.147879 / 1.312277).
-- **Harness:** runs end to end; no scientific notation in the log.
-- **`R CMD check`:** 0 errors / 0 warnings / 0 notes.
+- **Tests:** 434 PASS / 0 FAIL / 4 WARN / 0 SKIP (re-run before the commit; no `R/` changes this
+  session).
+- **`R CMD check`:** 0 / 0 / 0 (2026-11-04).
+- **Pima `tests.R`:** 13 of 13 PASS (the new check 1b covers the pruning; 8a–8c are identical).
 
 ### Open points / blockers
 
 - **No blockers.**
-- **Parked by the user (2026-10-29), not to be raised again unless the user brings them up.** They
-  go into Task D's known-issues note:
-  - the README's Pima constraint example finds no counterfactual for its first predicted-diabetic
-    patient;
-  - the harness plot title says "Loan default (prior defaulters)".
-- **The vignette's external applicant** (raw units, no scaling, so correct) now gets the
-  target-range warning too: its credit score of 420 is below the training range.
-- 32 pre-existing non-ASCII characters remain in `R/` comments.
-- **The pkgdown site** (`docs/`) has not been rebuilt for sessions 2–5. Rebuild before a release
+- **For the user:** Figure 6(b) and Figure 7(a) show the same counterfactual — drop one, or point
+  to it in the caption.
+- **For the Task E plan:** on the 4-feature model only 6 pairs exist, so `max_pairs = 21` against
+  `10` measures nothing there; the max_pairs effect must be measured on the 7-feature model.
+- **Paper text for Task E:** open issues 5, 9, 11, 12, 13 (`issues.csv`), and Gate 2 issues 3
+  and 6. Gate 2 issue 1 is removed and issue 10 is closed.
+- **The pkgdown site** (`docs/`) has not been rebuilt for sessions 2–7. Rebuild before a release
   (CLAUDE.md §5).
+- **The Claude Doc copy of the Task C plan** (claude.ai artifact) is out of date; left alone.
+- 32 pre-existing non-ASCII characters remain in `R/` comments.
 
-### Next session (exact next steps)
+### Next session (exact next step)
 
-**0. Commit decision.** Sessions 3 (Parts B and C), 4 and 5 are uncommitted; the session-4 rename
-is staged. Ask the user. A natural split is five commits:
-
-- the nearest-vertex fix (code, test, note);
-- the rotation folder brought to the current state;
-- the note merge and Phase 2 note;
-- `max_pairs = 21`, together with the PCA deferral;
-- the Mahalanobis check, the 2-dp format, and `bl_apply_scaling()` with the Step 16 fix.
-
-Some files carry changes from several of these (NEWS, CLAUDE.md, the implementation summary, the
-walkthroughs), so splitting them needs `git add -p`, or fewer, larger commits.
-
-**1. The remaining rotation concerns.** The ranked list is in the rotation note §6.2. The first is
-cross-platform reproducibility (§4.1), which matters for Paper 1. The PCA selector waits for the
-rotation work.
-
-**2. Then Task C** (the Pima example in `scripts/paper1-pima/`, gitignored).
-
-- Read `.claude/plans/commit-and-push-the-mutable-hearth.md` and
-  `.claude/plans/boundary-logic-fix-prompt.md`; the Task C set-up now uses `max_pairs = 21L`.
-- Plan, wait for approval, and build to Gate 2.
-- The Task E pair-selector measurement: under CVA the two selectors are identical, so report the
-  identity. Paper 1 uses Mahalanobis comparisons only.
+1. **Start planning Task E** (in plan mode): the methodology-changes note for the supervisor,
+   `documentation/methodology-changes/methodology-changes.qmd` rendered to `.docx`. The full
+   specification is in `.claude/plans/boundary-logic-fix-prompt.md` (Task E, Parts 1 and 2), with
+   the working plan's Task E section. The plan must settle:
+   - which model the measurements run on (see the max_pairs point above);
+   - the measurement script in `scripts/paper1-pima/` and its `method-change-effects.csv`;
+   - the paper-text items above;
+   - the thesis's random tie-break (inherited from the PhD code) and the CVA distance identity.
+2. **Then Gate 3**, and after it the merge, the release tag, and the Pima scripts' move to the
+   paper repo (reinstall the package first).
 
 ---
 
 ## History (one line per session, newest first)
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
+
+- **2026-11-02 to 2026-11-04 (session 6)** — Task C (the Paper 1 Pima example, Gate 2: 10 issues),
+  then the Gate 2 fixes: `dist_mahalanobis` in `bl_find_boundary()`, strict `"fixed"`, the
+  `"integer"` constraint (`round_to` deprecated), `"observed -> counterfactual"` Shapley labels;
+  then a documentation audit. Committed as `67a1424` on 2026-11-04. 434 PASS.
+
+- **2026-10-31 (session 5)** — `bl_apply_scaling()` (Step 16 raw units), `max_pairs` default 21,
+  the Phase 2 Mahalanobis check describes the plot, fixed 2-dp print tables; plan
+  `step16-pairs-check-decimals-plan.md`. Committed as `f0e3dd4`, `a89ff1f`, `49c9067`. 348 PASS.
 
 - **2026-10-31 (session 4)** — the rotation and Mahalanobis notes were reconciled and merged
   (`biplot_rotation_and_pair_selection.md`, rewritten; plan `can-you-compare-the-nifty-flask.md`).
