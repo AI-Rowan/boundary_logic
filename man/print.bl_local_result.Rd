@@ -18,9 +18,14 @@ per-pair distances; and, when a solution was found, a table comparing the
 observed and counterfactual value of each feature with its change and its
 \code{\link{set_filters}} constraint. Values are in original (raw) units
 when a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
-units. When the search moved a \code{"fixed"} feature, a note under the
-table explains why and whether the restored point was used (see
-\strong{Fixed constraints} in \code{\link{bl_find_local_cf}}).
+units. When the search moved a \code{"fixed"} feature and the restored
+point is the counterfactual, a \code{Fixed restored} line and a note under
+the table explain why. When an \code{"integer"} feature was rounded, an
+\code{Integer rounded} line and a second note give the boundary value and
+the whole value chosen. When the restore or the rounding failed, no
+counterfactual is reported and the \code{Reason} line explains it (see
+\strong{Fixed constraints} and \strong{Integer features} in
+\code{\link{bl_find_local_cf}}).
 }
 \details{
 Numbers print in fixed notation with 2 decimals; a feature whose change

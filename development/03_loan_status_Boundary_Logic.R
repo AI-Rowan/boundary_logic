@@ -4,7 +4,8 @@
 # Dataset : inst/extdata/loan_data.csv
 #           45,000 observations, 14 columns (5 categorical), binary outcome
 #           Source: https://github.com/TSMathi/loan_approval_analysis/tree/main
-# Model   : SVM baseline (bl_fit_model) + XGBoost full analysis (bl_wrap_model)
+# Model   : XGBoost (bl_wrap_model); an SVM baseline via bl_fit_model() is
+#           left commented out in Step 5a
 # Biplot  : PCA (exploratory, Step 2) and CVA (model biplots, Steps 4-16)
 #
 # Iterative workflow:
@@ -24,8 +25,9 @@
 #                   in this workflow)
 #
 #   Phase 3 (Steps 9-16): Local interpretation of one target
-#     9. Inspect predictions and select target
-#    10. Set actionability constraints
+#     9. Inspect predictions, choose the target row, and view its global
+#        counterfactual (interactive bl_pick_point())
+#    10. Select the target and set actionability constraints
 #    11. Find local counterfactual via biplot rotation
 #    12. Local biplot plot
 #    13. Shapley contribution plot
@@ -284,7 +286,8 @@ names(loan_encoded)
   hist(bl_bnd$B_pred)
 
   plot(bl_results, points = test_pts)
-  # To inspect individual counterfactuals (bl_bnd rows are test_data rows):
+  # To inspect individual counterfactuals (bl_bnd rows are test_data rows;
+  # Step 9 runs this for the target):
   # bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)
 
   plot(bl_bnd)
@@ -408,15 +411,18 @@ names(loan_encoded)
 # PHASE 2 (second pass) — Global interpretations, reduced model
 # ===========================================================
 # person_age was pruned in "Prune least-important variables" (vars_to_drop),
-# so the plot arguments below do not name it. Each label_offset_dist / ticks_n vector pairs position
-# by position with its label_offset_var / ticks_var vector.
+# so the label and tick arguments of the later plots (Steps 8b, 9, 12, 14 and
+# 15) name only the four retained features. Each label_offset_dist / ticks_n
+# vector pairs position by position with its label_offset_var / ticks_var
+# vector.
 
 # ---- Step 7b: Boundary + distance-to-boundary plots (reduced model) ---
 {
   bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
   print(bl_bnd_v2)
   plot(bl_results_v2, points = test_pts_v2)
-  # To inspect individual counterfactuals (bl_bnd_v2 rows are test_data rows):
+  # To inspect individual counterfactuals (bl_bnd_v2 rows are test_data rows;
+  # Step 9 runs this for the target):
   # bl_pick_point(bl_results_v2, data = bl_results_v2$test_data, bl_boundary = bl_bnd_v2)
 
   plot(bl_bnd_v2)
@@ -461,15 +467,19 @@ names(loan_encoded)
 
 # ---- Step 9: Inspect predictions and select target --------------------
 # Review pred_summary to choose a target. False Negatives (predicted 0,
-# true 1) are most actionable: the applicant will default but the model
-# clears them — what would need to change to flag them correctly?
+# true 1) are often the most interesting: the applicant will default but the
+# model clears them -- what would need to change to flag them correctly?
+# Here tdp = 13 is a true negative (predicted 0.111, did not default): what
+# would make the model predict default?
 {
   pred_summary <- bl_predict(bl_results_v2)
 
   tdp <- 13
   
-  # Generate a subset of data to plot on the biplot. Use bl_project_points to convert a data.frame bl_results_v2$test_data[tdp,] into the format required for plotting on biplot
-  # Can be empty, or only the target data point to avoid unnecessary information on the biplot
+  # A subset of points for the biplot: bl_project_points() converts rows of a
+  # data frame (here test_data rows 13 down to 10) into the format plot()
+  # takes. With plot_points = FALSE below they are not drawn; their prediction
+  # summary is still printed.
   test_points <- bl_project_points(bl_results_v2$test_data[tdp:10,], bl_results_v2)
 
   target_value <- bl_results_v2$test_data[tdp, ]
@@ -477,7 +487,7 @@ names(loan_encoded)
 
   plot(
     bl_results_v2,
-    points       = test_points, # specify the points to plot. If emply, will plot the training data
+    points       = test_points, # the points to plot; if empty, the training data
     plot_points  = FALSE, # removes the points from the plot
     target_point = target_value,
     target_label = tdp,
@@ -489,6 +499,15 @@ names(loan_encoded)
     label_offset_dist = c(0,0.5,0,0),
     ticks_v = 3
   )
+
+  # Interactive: click the target (test_data row 13) to draw the arrow from it
+  # to its global counterfactual, the nearest boundary point of this biplot
+  # (bl_bnd_v2, Step 7b), and print the row. Press Esc to finish. bl_bnd_v2
+  # holds one row per test_data row, so pick from test_data too. Skipped when
+  # the script is source()d non-interactively.
+  if (interactive())
+    bl_pick_point(bl_results_v2, data = bl_results_v2$test_data,
+                  bl_boundary = bl_bnd_v2)
 }
 
 
@@ -502,8 +521,16 @@ names(loan_encoded)
 # Valid constraint types:
 #   "decrease"  — counterfactual value must be <= observed
 #   "increase"  — counterfactual value must be >= observed
-#   "fixed"     — constrained to ± 0.5 of observed; always reverts in sparse CF
-#   c(min, max) — counterfactual must lie within this absolute range
+#   "fixed"     — the search allows +/- 0.5 of observed, then restores the
+#                 observed value; if the restored point no longer crosses the
+#                 boundary or leaves the training ranges, no counterfactual is
+#                 reported
+#   c(min, max) — counterfactual must lie within this range, given in model
+#                 units (z-scores for bl_results_v2)
+#   "integer"   — the value must be a whole number in raw units (a count or a
+#                 score); combine it with a direction, c("increase", "integer"),
+#                 or a range, list(c(min, max), "integer"). Without it a
+#                 feature is continuous.
 {
   # bl_select_target() reads the target's features AND its true class
   # (tgt$class_obs) from the same row -- here test_data[tdp, ]. The local
@@ -518,10 +545,10 @@ names(loan_encoded)
 
   flt <- set_filters(
     tgt,
-    #loan_percent_income     = "fixed",       # 
+    #loan_percent_income     = "fixed",       #
     loan_amnt      = "fixed",    # make not actionable
     loan_int_rate  = "increase",        # set by the lender, not the applicant
-    credit_score = "increase"
+    credit_score = c("increase","integer")   # a whole-number score
   )
   print(flt)
 }
@@ -535,8 +562,11 @@ names(loan_encoded)
     bl_target   = tgt
     )
   # print(bl_local) ends with the observed vs counterfactual table (one row
-  # per feature, with its Step 10 constraint, in raw loan units) and a note
-  # explaining any "fixed" feature the search moved and whether it was restored.
+  # per feature, with its Step 10 constraint, in raw loan units) and notes
+  # explaining a "fixed" feature the search moved and restored, and an
+  # "integer" feature rounded to a whole value (credit_score here). When the
+  # restore or the rounding fails, no counterfactual is reported and the
+  # Reason line says why.
   print(bl_local)
 }
 
@@ -572,7 +602,7 @@ names(loan_encoded)
   bl_sparse <- bl_find_sparse_cf(bl_shapley_values)
   print(bl_sparse)
   plot(bl_sparse,
-       new_title = "xx",
+       new_title = "Sparse counterfactual, test row 13",
        label_offset_var  = c("loan_amnt",
                              "loan_int_rate",
                              "loan_percent_income",

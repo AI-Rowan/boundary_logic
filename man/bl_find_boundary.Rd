@@ -27,6 +27,11 @@ A list of class \code{"bl_boundary"} with components:
 in Z-space.}
 \item{\code{dist_x}}{Numeric vector; Euclidean distance obs to boundary
 in standardised X-space (each dimension divided by \code{X_sd}).}
+\item{\code{dist_mahalanobis}}{Numeric vector; squared Mahalanobis distance
+obs to boundary in X-space, \verb{v' W^-1 v} with \code{v = B_x - x_obs} (model
+units) and \code{W^-1 = bl_result$metric_inv}. Squared, as the field of the
+same name in \code{\link[=bl_find_local_cf]{bl_find_local_cf()}}; take \code{sqrt()} for the distance. \code{NA}
+(with a warning) when \code{bl_result$metric_inv} is missing.}
 \item{\code{Z_obs}}{n x 2 matrix; Z-space coordinates of each observation.}
 \item{\code{x_obs}}{Data frame; original observations (feature columns).}
 \item{\code{pred_obs}}{Numeric vector; model probability at each observation.}

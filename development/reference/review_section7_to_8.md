@@ -23,7 +23,7 @@ plot(bl_bnd)
 plot(bl_bnd, type = "boxplot")
 ```
 
-`print(bl_bnd)` is not called in Step 7; the reduced-model pass (Step 7b) prints it. In the harness run `bl_find_boundary()` also reports: "27 identified counterfactual(s) are outside the training feature ranges, but are retained."
+`print(bl_bnd)` is not called in Step 7; the reduced-model pass (Step 7b) prints it. In the harness run `bl_find_boundary()` also reports: "27 identified counterfactual(s) are outside the training feature ranges, but are retained." For the reduced model of Step 7b the same message reports 97.
 
 **Parameters (`bl_find_boundary()`):**
 
@@ -56,6 +56,7 @@ Parameters extracted from `bl_results`:
 | `ct` | `bl_results$biplot_grid$ct` | Pre-computed contour line segments at `cutoff ± b_margin` |
 | `polygon` | `bl_results$polygon` | Convex hull of training data in Z-space |
 | `train_ranges` | `bl_results$train_ranges` | Per-feature `c(min, max)` from training data |
+| `metric_inv` | `bl_results$metric_inv` | The inverse within-class metric `W^-1`, for `dist_mahalanobis` (Stage 9) |
 
 Input data defaults to `bl_results$test_data` (all rows, no `tdp` index).
 
@@ -174,7 +175,11 @@ B_pred  = .pred_function(model, model_type, B_x)     # predicted probability at 
 dist_z  = sqrt(rowSums((Z_obs - B_z)^2))              # Euclidean distance in Z-space
 diff_sd = (x_obs_mat - B_x_mat) / X_sd               # per-feature diff in SD units
 dist_x  = sqrt(rowSums(diff_sd^2))                    # Euclidean distance in standardised X-space
+v       = B_x_mat - x_obs_mat                         # the move to the boundary, model units
+dist_mahalanobis = rowSums((v %*% metric_inv) * v)    # squared Mahalanobis distance, v' W^-1 v
 ```
+
+`dist_mahalanobis` is squared, as the field of the same name in `bl_find_local_cf()` is; `sqrt()` gives the distance. It uses `W`, the within-class scatter of the features, because it measures an X-space move; `documentation/boundary-distance-and-robustness.md` explains why no rotation enters it.
 
 `B_pred` values should cluster near 0.5 (the cutoff). Larger deviations indicate the back-projection landed in a region where the nonlinear model's prediction does not match the contour's probability level.
 
@@ -189,6 +194,7 @@ dist_x  = sqrt(rowSums(diff_sd^2))                    # Euclidean distance in st
 | `B_pred` | numeric vector | n | Model probability at the counterfactual; should be ≈ 0.5. NA if prediction failed. |
 | `dist_z` | numeric vector | n | Euclidean distance (obs → boundary) in Z-space. |
 | `dist_x` | numeric vector | n | Euclidean distance (obs → boundary) in standardised X-space. |
+| `dist_mahalanobis` | numeric vector | n | Squared Mahalanobis distance (obs → boundary) in X-space, `v' W^-1 v`. NA where no boundary was found, or (with a warning) when `bl_result$metric_inv` is missing. |
 | `Z_obs` | numeric matrix | n × 2 | Z-space coordinates of each input observation. |
 | `x_obs` | data.frame | n × p | Original feature values of each input observation. |
 | `pred_obs` | numeric vector | n | Model probability at the observation (floor-rounded to 3 d.p.). |
@@ -205,15 +211,18 @@ dist_x  = sqrt(rowSums(diff_sd^2))                    # Euclidean distance in st
 
 **File:** `R/boundary.R` (S3 method `print.bl_boundary`)
 
-Prints to console:
+Prints to console. Step 7b's `print(bl_bnd_v2)` in the harness run:
 ```
 <bl_boundary>
-  Observations   : [n test rows]
-  Boundaries used: [nr_boundaries]
-  Dist Z (mean)  : [mean of dist_z, 4 d.p.]
-  Dist X (mean)  : [mean of dist_x, 4 d.p.]
-  B_pred range   : [min(B_pred), max(B_pred)]   (each 4 d.p.)
+  Observations   : 4429
+  Boundaries used: 12
+  Dist Z (mean)  : 0.0095
+  Dist X (mean)  : 1.8130
+  Dist M (mean)  : 1.9561 (sqrt of dist_mahalanobis)
+  B_pred range   : [0.2570, 0.8490]
 ```
+
+The lines are the number of rows, the surviving contour segments, the means of `dist_z`, `dist_x` and `sqrt(dist_mahalanobis)`, and the range of `B_pred`, each to 4 d.p. The `Dist M` line is left out when `dist_mahalanobis` is all NA.
 
 `B_pred range` is the diagnostic check: values should be close to 0.5. Wide range or values far from 0.5 indicate consistency issues.
 
@@ -379,7 +388,7 @@ Mahalanobis check (squared distances, summed across obs):
   plotted (per feature) = 9675.25 | full d_M^2 = 11754.70 | difference = 2079.45 (+17.7% of full)
 ```
 
-The check appears only for `distance = "mahalanobis"`. A note is added only when the difference is at least 25% of the full distance in absolute value. Here it is +17.7%: the correlations in W make the full distance about a sixth longer than the plotted per-feature distances, so the per-feature importance is a fair summary. For the four-feature model of Step 7b the check gives `plotted (per feature) = 7993.67 | full d_M^2 = 9509.20 | difference = 1515.54 (+15.9% of full)`.
+The check appears only for `distance = "mahalanobis"`. A note is added only when the difference is at least 25% of the full distance in absolute value. Here it is +17.7% of the full distance: the correlations in W make the full squared distance 21.5% larger than the plotted per-feature one (11754.70 against 9675.25), so the per-feature importance is a fair summary. For the four-feature model of Step 7b the check gives `plotted (per feature) = 7993.67 | full d_M^2 = 9509.20 | difference = 1515.54 (+15.9% of full)`.
 
 ---
 
@@ -494,8 +503,8 @@ The overall score equals the "Robustness (total distance)" line that `plot(bl_bn
 | `loan_int_rate` | 3929.71 | Kept: the strongest |
 
 The ranking guides the choice, and two judgements override it:
-- **`person_income` is redundant.** `loan_percent_income` is `loan_amnt / person_income` rounded to two decimals (it matches in 44,992 of the 45,000 raw rows, and differs by at most 0.005). With both loan variables kept, income adds little.
-- **`credit_score` is actionable.** The applicant can act on it: Step 10 constrains it to `"increase"`, and the local counterfactual in `review_section9_to_15.md` raises it.
+- **`person_income` is redundant.** `loan_percent_income` is `loan_amnt / person_income` rounded to two decimals (it matches in 44,992 of the 45,000 raw rows, and differs by at most 0.01; the harness driver prints both). With both loan variables kept, income adds little.
+- **`credit_score` is actionable.** The applicant can act on it: Step 10 constrains it to `c("increase", "integer")`, a whole-number score that may only rise, and the local counterfactual in `review_section9_to_15.md` raises it.
 
 **What it feeds.** `feature_cols_v2` keeps the `var_names` order: `loan_amnt`, `loan_int_rate`, `loan_percent_income`, `credit_score`. The refit, Steps 4b–6b, rebuilds the pipeline on these four features:
 - `bl_prepare_data()`, then z-scoring fitted on the training split and recorded with `bl_set_scaling()` (`review_section4_to_6.md`, "Optional: raw-unit biplot axes via `bl_set_scaling()`").
@@ -523,7 +532,7 @@ test_pts    [bl_points]           ← test data projected to Z-space
      │    .nearest_idx_block() → nearest vertex on each contour per obs
      │    select opposing-side contour per obs
      │    back-project B_z → B_x (n × p)
-     │    score B_x → B_pred; measure dist_z, dist_x
+     │    score B_x → B_pred; measure dist_z, dist_x, dist_mahalanobis
      ▼
 bl_bnd  [bl_boundary]
   ├── B_z          (n × 2, boundary in Z-space)
@@ -531,6 +540,7 @@ bl_bnd  [bl_boundary]
   ├── B_pred       (predicted probability at counterfactual, ≈ 0.5)
   ├── dist_z       (Z-space distance per obs)
   ├── dist_x       (standardised X-space distance per obs)
+  ├── dist_mahalanobis (squared Mahalanobis distance per obs)
   ├── Z_obs        (observation positions in Z-space)
   ├── x_obs        (observation feature values)
   ├── pred_obs     (predicted probability at obs)

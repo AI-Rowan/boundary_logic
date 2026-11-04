@@ -7,7 +7,7 @@
 # Bare column-name symbols referenced via NSE in plot.bl_shapley()'s
 # ggplot2::aes() calls -- declared so R CMD check does not flag them as
 # undefined globals.
-utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p"))
+utils::globalVariables(c("Contribute", "shapley_cause", "varnames_p", "shap_label"))
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,9 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
   pred_boundary <- bl_local_result$B_pred
   data_to_boundary <- end - start
 
-  # Ordering: class 0 -> decreasing (most negative first); class 1 -> ascending
+  # Ordering: class 0 -> ascending (most negative first); class 1 ->
+  # decreasing (most positive first). The plot draws the first row at the
+  # bottom, so the strongest supporter of the move sits at the top.
   dec_order  <- (pred_use == 1L)
   dist_order <- order(shap, decreasing = dec_order)
 
@@ -231,11 +233,11 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 
   df <- df[dist_order, , drop = FALSE]
   df$varnames   <- factor(df$varnames, levels = df$varnames)
-  df$varnames_p <- paste0(
-    df$varnames, ": ",
-    round(df$pred_data, 3), " -> ", round(df$data_to_boundary, 2)
-  )
-  df$varnames_p <- factor(df$varnames_p, levels = df$varnames_p)
+  # "observed -> counterfactual" in model units; plot.bl_shapley() rebuilds
+  # it in raw units when a scaling was recorded.
+  lbl <- .shapley_labels(as.character(df$varnames), df$pred_data,
+                         df$pred_data + df$data_to_boundary, scaling = NULL)
+  df$varnames_p <- factor(lbl, levels = lbl)
 
   structure(
     list(
@@ -251,13 +253,38 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 }
 
 
+#' Variable labels for the Shapley plot: "observed -> counterfactual"
+#'
+#' Both values are levels, converted to raw units when `scaling` is given.
+#' Each label uses the decimals of the comparison tables: 2, widened (up to 4)
+#' where the change would print as 0.00 (`.fmt_digits()`, `.fmt_fixed()`).
+#'
+#' @param var_names Feature names, in the order of `observed` and `cf`.
+#' @param observed  Observed values, model units.
+#' @param cf        Counterfactual values, model units.
+#' @param scaling   `bl_result$scaling`, or `NULL` for model units.
+#' @return Character vector, e.g. `"Glucose: 179.00 -> 170.63"`.
+#' @noRd
+.shapley_labels <- function(var_names, observed, cf, scaling = NULL) {
+  obs_d <- .scale_to_raw(observed, scaling, var_names, "level")
+  cf_d  <- .scale_to_raw(cf, scaling, var_names, "level")
+  d     <- .fmt_digits(cf_d - obs_d)
+  paste0(var_names, ": ", .fmt_fixed(obs_d, d), " -> ", .fmt_fixed(cf_d, d))
+}
+
+
 #' Plot Shapley contributions for a local counterfactual
 #'
 #' Returns a \pkg{ggplot2} bar chart showing each variable's Shapley
 #' contribution to the path from the observed point to the boundary.
 #' Variables are coloured by whether they \emph{support} or
 #' \emph{contradict} the prediction direction, or have \emph{no effect}
-#' (dark blue, light grey and mid grey).
+#' (dark blue, light grey and mid grey). Each variable is labelled
+#' \code{"variable: observed -> counterfactual"}, in original (raw) units when
+#' a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
+#' units. Feature values and the Shapley values on the bars print with the
+#' decimals of the comparison tables: 2, or more (up to 4) where a change or a
+#' Shapley value would otherwise print as 0.00.
 #'
 #' @param x   A \code{"bl_shapley"} object from \code{\link{bl_shapley}}.
 #' @param ... Currently ignored.
@@ -268,26 +295,24 @@ bl_shapley <- function(bl_local_result, exact_max_vars = 14L,
 #'
 #' @importFrom ggplot2 ggplot aes geom_col geom_label scale_fill_manual
 #' @importFrom ggplot2 scale_color_manual theme_bw theme labs
+#' @importFrom ggplot2 scale_x_continuous expansion
 #' @export
 plot.bl_shapley <- function(x, ...) {
   df        <- x$shapley_df
   row_label <- if (is.na(x$row_id)) "external" else as.character(x$row_id)
 
-  # Raw-unit relabel (display only): when a scaling was recorded, show each
-  # variable's observed and counterfactual value in original units instead of
-  # the default "observed -> change" in standardised units. Levels convert as
-  # value*scale + center; the counterfactual level is pred_data + data_to_boundary.
+  # Labels are rebuilt here (display only) so that a recorded scaling shows
+  # both levels in raw units; the sort order of shapley_df is kept.
   scaling <- x$bl_local_result$bl_result$scaling
-  y_title <- "Variable (observed value -> change required)"
-  if (!is.null(scaling)) {
-    vn      <- as.character(df$varnames)
-    obs_raw <- .scale_to_raw(df$pred_data, scaling, vn, "level")
-    cf_raw  <- .scale_to_raw(df$pred_data + df$data_to_boundary,
-                             scaling, vn, "level")
-    lbl     <- paste0(vn, ": ", round(obs_raw, 3), " -> ", round(cf_raw, 2))
-    df$varnames_p <- factor(lbl, levels = lbl)   # preserve existing sort order
-    y_title <- "Variable (observed -> counterfactual, raw units)"
-  }
+  vn      <- as.character(df$varnames)
+  raw     <- !is.null(scaling) && !anyNA(scaling$center[vn]) &&
+    !anyNA(scaling$scale[vn])
+  lbl     <- .shapley_labels(vn, df$pred_data, df$pred_data + df$data_to_boundary,
+                             if (raw) scaling else NULL)
+  df$varnames_p <- factor(lbl, levels = lbl)
+  df$shap_label <- .fmt_fixed(df$shapley_cause, .fmt_digits(df$shapley_cause))
+  y_title <- if (raw) "Variable (observed -> counterfactual, raw units)" else
+    "Variable (observed -> counterfactual)"
 
   ggplot2::ggplot(
     df,
@@ -307,12 +332,14 @@ plot.bl_shapley <- function(x, ...) {
     ggplot2::geom_col() +
     ggplot2::theme_bw() +
     ggplot2::geom_label(
-      ggplot2::aes(label = round(shapley_cause, 3L), x = shapley_cause),
+      ggplot2::aes(label = shap_label, x = shapley_cause),
       colour = "white", show.legend = FALSE
     ) +
+    # Room for the value labels, which are centred on the bar ends.
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.15)) +
     ggplot2::theme(legend.position = "bottom") +
     ggplot2::labs(
-      x        = "[-> change to reach boundary]: Impact on prediction",
+      x        = "Impact on prediction (Shapley value)",
       y        = y_title,
       title    = "Shapley Contribution Plot",
       subtitle = sprintf(
@@ -383,16 +410,19 @@ print.bl_shapley <- function(x, ...) {
 #' The selection follows the Shapley order, so it is not guaranteed to be the
 #' smallest possible subset: a smaller set outside that order may also cross.
 #'
+#' Each changed variable takes its counterfactual value, so a feature marked
+#' \code{"integer"} in \code{\link{set_filters}} keeps the whole value that
+#' \code{\link{bl_find_local_cf}} rounded it to.
+#'
 #' @param bl_shapley_result A \code{"bl_shapley"} object from
 #'   \code{\link{bl_shapley}}.
-#' @param round_to Positive numeric or \code{NULL}. If not \code{NULL}, rounds
-#'   each changed variable's value to the nearest multiple of this value (e.g.
-#'   \code{round_to = 0.5} rounds to the nearest 0.5; \code{round_to = 1}
-#'   rounds to the nearest integer). Rounding acts on the stored model-unit
-#'   values, which are z-scores for a standardised model, and constraints are
-#'   not re-checked afterwards; see
-#'   \file{documentation/sparse-counterfactual.md}. Default \code{NULL} (no
-#'   rounding).
+#' @param round_to Deprecated; must be \code{NULL} (the default). It rounded
+#'   the changed values in model units without re-checking the constraints.
+#'   Mark a whole-number feature \code{"integer"} in \code{\link{set_filters}}
+#'   instead: \code{\link{bl_find_local_cf}} then rounds the counterfactual in
+#'   raw units and re-checks it, and the sparse counterfactual takes its values
+#'   from that counterfactual. See
+#'   \file{documentation/sparse-counterfactual.md} section 3.
 #'
 #' @return A list of class \code{"bl_sparse_result"} with the following fields:
 #'   \describe{
@@ -417,6 +447,13 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   if (!inherits(bl_shapley_result, "bl_shapley"))
     stop("'bl_shapley_result' must be a 'bl_shapley' object from bl_shapley().",
          call. = FALSE)
+  if (!is.null(round_to))
+    stop(paste(
+      "'round_to' is no longer supported. Mark whole-number features",
+      "\"integer\" in set_filters(), e.g. set_filters(tgt, credit_score =",
+      "c(\"increase\", \"integer\")); bl_find_local_cf() then rounds the",
+      "counterfactual in raw units and re-checks it, and the sparse",
+      "counterfactual takes its values from it."), call. = FALSE)
 
   df        <- bl_shapley_result$shapley_df
   bl_local  <- bl_shapley_result$bl_local_result
@@ -432,13 +469,8 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   # "fixed"-constrained variables never change in the sparse CF, regardless
   # of Shapley classification (set_filters stored in bl_local_result).
   filters    <- bl_local$set_filters
-  fixed_vars <- character(0)
-  if (!is.null(filters) && length(filters$constraints) > 0L) {
-    for (nm in names(filters$constraints)) {
-      v <- filters$constraints[[nm]]
-      if (is.character(v) && v == "fixed") fixed_vars <- c(fixed_vars, nm)
-    }
-  }
+  fixed_vars <- if (!is.null(filters)) .fixed_vars(filters$constraints) else
+    character(0)
 
   # Candidates: "Supports" variables that are not fixed, largest |Shapley|
   # first ("Contradicts", "No effect" and "Unknown" stay at observed).
@@ -464,10 +496,8 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
   pred_sparse <- score(x_sparse)
   path_rows   <- list()
   for (k in seq_len(nrow(sup))) {
-    nm      <- as.character(sup$varnames[k])
-    new_val <- B_x[[nm]]
-    if (!is.null(round_to)) new_val <- round(new_val / round_to) * round_to
-    x_sparse[[nm]] <- new_val
+    nm <- as.character(sup$varnames[k])
+    x_sparse[[nm]] <- B_x[[nm]]
     pred_sparse    <- score(x_sparse)
     crosses        <- as.integer(pred_sparse >= bl_result$cutoff) != pred_class_target
     path_rows[[k]] <- data.frame(step = k, variable = nm,

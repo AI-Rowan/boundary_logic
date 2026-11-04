@@ -41,10 +41,10 @@ selection criterion} section above.}
 A list of class \code{"bl_local_result"} with the following fields:
 \describe{
 \item{B_z}{1 x 2 matrix; the counterfactual in rotated Z-space: the best
-boundary point, or the projection of the restored point when a
-\code{"fixed"} restore was applied (see \strong{Fixed constraints}).}
+boundary point, or the projection of the restored or rounded point
+(see \strong{Fixed constraints} and \strong{Integer features}).}
 \item{B_x}{Data frame (1 row); the counterfactual in X-space: the
-back-projected boundary point, or the restored point.}
+back-projected boundary point, or the restored or rounded point.}
 \item{B_pred}{Scalar predicted probability at the counterfactual.}
 \item{dist_z}{Euclidean distance from target to boundary in the rotated
 Z-space of \code{best_pair} only (per-pair values are in
@@ -71,7 +71,10 @@ or \code{"euclidean"}).}
 \item{all_distances_mahalanobis}{Named numeric vector; squared
 Mahalanobis distance per pair tried.}
 \item{solution_found}{Logical.}
-\item{blocking_constraint}{Character message if no solution, else NULL.}
+\item{blocking_constraint}{Character message if no solution, else NULL:
+why no boundary point satisfied the constraints, why the restored
+\code{"fixed"} point failed (see \strong{Fixed constraints}), or why
+no whole-number candidate was valid (see \strong{Integer features}).}
 \item{bl_target}{The \code{"bl_target"} object (the observed point).}
 \item{bl_counterfactual}{A \code{"bl_counterfactual"} object (the boundary
 point), or \code{NULL} when no solution was found. Mirrors
@@ -84,13 +87,23 @@ via \code{\link{bl_set_scaling}}.}
 \item{set_filters}{The \code{"bl_filters"} object passed in, or
 \code{NULL}. Stored so that \code{\link{bl_find_sparse_cf}} can identify
 \code{"fixed"} variables and revert them to their observed values.}
-\item{fixed_check}{\code{NULL} when no solution was found or the search
+\item{fixed_check}{\code{NULL} when the search found no boundary point or
 moved no \code{"fixed"} feature. Otherwise a list: \code{vars} (the
 fixed features the search moved), \code{applied} (\code{TRUE} when the
-restored point is the counterfactual), \code{pred_restored} (model
+restored point is the counterfactual; \code{FALSE} when it failed, and
+then \code{solution_found} is \code{FALSE}), \code{pred_restored} (model
 probability at the restored point), \code{in_range} (whether it lies
 within \code{train_ranges}), and \code{search_point} (the search's own
 \code{B_x}, \code{B_z}, \code{B_pred}).}
+\item{integer_check}{\code{NULL} when no \code{"integer"} feature needed
+rounding (none is set, none moved, or the values are already whole),
+or when the search or the restore found no counterfactual. Otherwise
+a list: \code{vars} (the features rounded), \code{applied}
+(\code{TRUE} when a valid whole-number candidate is the
+counterfactual; \code{FALSE} when none was valid, and then
+\code{solution_found} is \code{FALSE}), \code{n_candidates},
+\code{n_valid}, \code{pred_rounded} (the chosen point's prediction)
+and \code{search_point} (the point before rounding).}
 }
 }
 \description{
@@ -132,12 +145,35 @@ exactly its observed value. After the best pair is chosen, each fixed
 feature the search moved is set back to its observed value and the point is
 re-scored. If the restored point still crosses the decision boundary and
 lies within \code{train_ranges}, it becomes the counterfactual
-(\code{B_x}, \code{B_z}, \code{B_pred}); otherwise the search's point is
-kept. Either way \code{fixed_check} records what happened, and
-\code{print()} explains it. The restored point satisfies the fixed
-constraint exactly but lies off the 2D boundary, so it need not be the
-nearest valid point; the pair choice and the reported distances are those
-of the search.
+(\code{B_x}, \code{B_z}, \code{B_pred}). Otherwise no counterfactual holds
+the fixed features, and none is reported: \code{solution_found} is
+\code{FALSE}, and \code{blocking_constraint} gives the fixed values the
+search reached, why the restored point fails, and that changing the
+constraints on the actionable features may make a counterfactual possible.
+Either way \code{fixed_check} records what happened. The restored point
+satisfies the fixed constraint exactly but lies off the 2D boundary, so it
+need not be the nearest valid point; the pair choice and the reported
+distances are those of the search.
+}
+
+\section{Integer features}{
+
+A feature marked \code{"integer"} in \code{\link{set_filters}} is searched
+as a continuous value, and rounded after the fixed restore. For each such
+feature whose counterfactual value is not a whole number in raw units, the
+whole numbers just below and just above are tried, and every combination
+of them is a candidate. A candidate is valid when the model still scores
+it on the other side of the cutoff, it meets every \code{set_filters()}
+constraint and it lies within \code{train_ranges}. The valid candidate
+nearest the target, by the same selector as the pair search, is the
+counterfactual (\code{B_x}, \code{B_z}, \code{B_pred}); on a tie, the
+first. When no candidate is valid, no counterfactual is reported:
+\code{solution_found} is \code{FALSE}, and \code{blocking_constraint} says
+why and that changing the other constraints, or removing \code{"integer"},
+may make one possible. \code{integer_check} records what happened. Like a
+restored point, the rounded point lies off the 2D boundary; the reported
+distances are those of the search. Up to 12 integer features can be
+rounded together (\eqn{2^{12}} candidates).
 }
 
 \section{Cross-pair selection criterion}{

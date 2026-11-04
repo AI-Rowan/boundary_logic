@@ -182,15 +182,18 @@ test_that("Shapley plot label and prints convert to raw units", {
   shp    <- bl_shapley(p$loc, seed = 1L)
   sparse <- bl_find_sparse_cf(shp)
 
-  # Plot: y-axis title flips to the raw observed->counterfactual wording, and
-  # the label factor levels carry raw-scale numbers (not ~[-2,2] standardised).
-  g       <- plot(shp)
-  expect_match(g$labels$y, "raw units")
-  lvls    <- levels(g$data$varnames_p)
-  raw_obs <- as.numeric(shp$shapley_df$pred_data) *
-    p$d$scale[as.character(shp$shapley_df$varnames)] +
-    p$d$center[as.character(shp$shapley_df$varnames)]
-  expect_true(any(grepl(as.character(round(raw_obs[1L], 3)), lvls, fixed = TRUE)))
+  # Plot: the labels read "observed -> counterfactual" in raw units, with the
+  # comparison tables' decimals (2, widened where the change would hide).
+  g    <- plot(shp)
+  expect_match(g$labels$y, "observed -> counterfactual, raw units", fixed = TRUE)
+  lvls <- levels(g$data$varnames_p)
+  df   <- shp$shapley_df
+  vn   <- as.character(df$varnames)
+  obs  <- df$pred_data * p$d$scale[vn] + p$d$center[vn]
+  cf   <- (df$pred_data + df$data_to_boundary) * p$d$scale[vn] + p$d$center[vn]
+  d    <- boundarylogic:::.fmt_digits(cf - obs)
+  expect_identical(lvls, paste0(vn, ": ", boundarylogic:::.fmt_fixed(obs, d),
+                                " -> ", boundarylogic:::.fmt_fixed(cf, d)))
 
   # Prints carry the raw-units note.
   expect_match(paste(capture.output(print(shp)),    collapse = "\n"), "raw units")
@@ -202,8 +205,32 @@ test_that("no scaling -> Shapley displays unchanged (model units)", {
   skip_if_not(p$loc$solution_found, "no local CF found for this seed")
   shp <- bl_shapley(p$loc, seed = 1L)
   g   <- plot(shp)
-  expect_match(g$labels$y, "change required")          # original wording
+  expect_identical(g$labels$y, "Variable (observed -> counterfactual)")
+  # Without scaling the plot keeps the stored model-unit labels.
+  expect_identical(levels(g$data$varnames_p), levels(shp$shapley_df$varnames_p))
+  # The bar values use the same decimal rule.
+  s <- shp$shapley_df$shapley_cause
+  expect_identical(g$data$shap_label,
+                   boundarylogic:::.fmt_fixed(s, boundarylogic:::.fmt_digits(s)))
+  expect_identical(g$labels$x, "Impact on prediction (Shapley value)")
   expect_no_match(paste(capture.output(print(shp)), collapse = "\n"), "raw units")
+})
+
+
+test_that("an \"integer\" feature is rounded in raw units when a scaling is set", {
+  p   <- build_shap_pipeline(with_scaling = TRUE)
+  v   <- p$d$feats[1L]
+  flt <- do.call(set_filters, c(list(p$tgt), setNames(list("integer"), v)))
+  loc <- suppressMessages(
+    bl_find_local_cf(p$res, p$tgt, set_filters = flt, verbose = FALSE))
+  ic  <- loc$integer_check
+  skip_if(is.null(ic), "no rounding needed for this target")
+  if (ic$applied) {
+    raw <- loc$B_x[[v]] * p$d$scale[[v]] + p$d$center[[v]]
+    expect_equal(raw, round(raw), tolerance = 1e-8)
+  } else {
+    expect_false(loc$solution_found)
+  }
 })
 
 

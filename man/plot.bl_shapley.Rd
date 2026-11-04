@@ -21,5 +21,10 @@ Returns a \pkg{ggplot2} bar chart showing each variable's Shapley
 contribution to the path from the observed point to the boundary.
 Variables are coloured by whether they \emph{support} or
 \emph{contradict} the prediction direction, or have \emph{no effect}
-(dark blue, light grey and mid grey).
+(dark blue, light grey and mid grey). Each variable is labelled
+\code{"variable: observed -> counterfactual"}, in original (raw) units when
+a scaling was set via \code{\link{bl_set_scaling}}, otherwise in model
+units. Feature values and the Shapley values on the bars print with the
+decimals of the comparison tables: 2, or more (up to 4) where a change or a
+Shapley value would otherwise print as 0.00.
 }

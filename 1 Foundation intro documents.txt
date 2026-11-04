@@ -1,6 +1,7 @@
 Instruction Manual for the Boundary Logic R Package Project
 ============================================================
-Version 2 — Updated to reflect the implemented package (March 2026)
+Version 2 — Updated to reflect the implemented package (March 2026; last
+revised 2026-11-04)
 
 This document serves as the foundation reference for the Boundary Logic project.
 It is written as an internal project guide for future LLM coding agents and
@@ -42,8 +43,9 @@ The package is fully implemented across three phases:
            rotation, Shapley attribution, sparse counterfactual (COMPLETE)
 
 The package is installable via devtools::install_github() or devtools::load_all().
-Two vignettes cover the complete workflow using iris (Phase 1-3) and the Pima
-Indians Diabetes dataset (Phases 1-3 with clinical context).
+One vignette, Boundary_Logic_loan_default_workflow.Rmd, covers the complete
+workflow (Phases 1-3) on the bundled loan data; the README shows a shorter Pima
+example.
 
 
 ========================================================
@@ -210,7 +212,10 @@ D. Counterfactual Identification (R/boundary.R, R/local_cf.R)
 --------------------------------------------------------------
 bl_find_boundary(bl_result, data, tdp)
   - Global search: finds nearest boundary point for each observation
-  - Constrains counterfactuals to train_ranges (training feature envelope)
+  - Checks the counterfactuals against train_ranges after the search: those
+    outside the training feature envelope are counted in a message and kept
+  - Distances: dist_z (in the plane), dist_x (standardised X-space) and
+    dist_mahalanobis (squared, v' W^-1 v)
   - Returns: bl_boundary object
 
 bl_select_target(bl_result, target, data)
@@ -220,13 +225,19 @@ bl_select_target(bl_result, target, data)
 
 set_filters(bl_target, ...)
   - Encodes actionability constraints for the local counterfactual search
-  - Valid types: "decrease", "increase", "fixed", c(min, max)
+  - Valid types: "decrease", "increase", "fixed", c(min, max), "integer";
+    "integer" combines with the others: c("increase", "integer"),
+    list(c(min, max), "integer")
   - "fixed": search allows ±0.5 of observed (model units); then restored to
-    observed when the restored point still crosses the boundary; always
-    reverts in sparse CF
+    observed. If the restored point does not cross the boundary or leaves
+    train_ranges, no counterfactual is reported (a counterfactual never moves
+    a fixed feature); always at observed in the sparse CF
+  - "integer": a whole number in raw units; the counterfactual is rounded
+    after the search and re-checked (documentation/fixed-constraint-restore.md)
   - Returns: bl_filters object
 
-bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, verbose)
+bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, distance,
+                 verbose)
   - Local search: finds nearest boundary via biplot rotation
   - Tests up to max_pairs eigenvector pairs: (1,2),(1,3),(2,3),(1,4),...
   - For each pair: rotates biplot, builds local grid, applies constraints,
@@ -238,7 +249,7 @@ Key design decision — local CF hull rule:
   Rotation invalidates the original polygon coordinates. Only train_ranges
   and set_filters constrain the local search. This is intentional.
 
-E. Variable Contribution and Robustness Analysis (R/boundary.R)
+E. Variable Contribution and Robustness Analysis (R/boundary_plot.R)
 ---------------------------------------------------------------
 bl_robustness(bl_boundary)
   - Quantifies per-variable contribution to distance-to-boundary
@@ -261,18 +272,18 @@ bl_shapley(bl_local_result)
     (for p <= 14 variables; permutation approximation otherwise)
   - Classifies each variable as Supports (darkblue), Contradicts (grey), or
     No effect (mid grey; Shapley value 0)
-  - Y-axis labels: "variable: observed_value -> required_change" (3 d.p.)
+  - Y-axis labels: "variable: observed -> counterfactual", with the
+    comparison tables' decimals (documentation/scaling_axis_relabel_note.md)
   - Returns: bl_shapley object
 
-bl_find_sparse_cf(bl_shapley, round_to)
+bl_find_sparse_cf(bl_shapley)
   - Greedy: changes Supports variables one at a time, largest Shapley value
     first, re-scoring the model after each; stops once the boundary is crossed
   - Contradicts, No effect and "fixed" variables stay at observed values
-  - Optionally rounds the changed variables to nearest multiple (round_to,
-    in model units)
-  - round_to = NULL: keep exact CF values
-  - round_to = 0.5:  round to nearest 0.5 (recommended for clinical data)
-  - round_to = 1:    round to nearest integer
+  - Changed variables take their counterfactual values; a whole-number
+    feature (a count or a score) is marked "integer" in set_filters(), and
+    bl_find_local_cf() rounds the counterfactual in raw units and re-checks it
+    (round_to is deprecated)
   - solution_valid = TRUE: sparse CF still crosses the boundary
   - Returns: bl_sparse_result object
 
@@ -433,8 +444,8 @@ boundary_logic/
 │   ├── biplot_grid.R          ← bl_build_grid()
 │   ├── plot_biplot.R          ← plot_biplotEZ()
 │   ├── result.R               ← bl_build_result(), bl_assemble()
-│   ├── boundary.R             ← bl_find_boundary(), bl_robustness()
-│   ├── boundary_plot.R        ← plot.bl_boundary()
+│   ├── boundary.R             ← bl_find_boundary()
+│   ├── boundary_plot.R        ← plot.bl_boundary(), bl_robustness()
 │   ├── surrogate.R            ← bl_surrogate()
 │   ├── project_points.R       ← bl_project_points(), bl_predict()
 │   ├── local_cf.R             ← bl_select_target(), set_filters(),
@@ -443,17 +454,14 @@ boundary_logic/
 │
 ├── tests/testthat/
 │   ├── helper.R               ← Shared test fixtures
-│   ├── test-data_prepare.R
-│   ├── test-model_fit.R
-│   ├── test-projection.R
-│   ├── test-biplot_grid.R
-│   ├── test-result.R
-│   ├── test-predict_utils.R
-│   └── test-feasibility_utils.R
+│   ├── test-biplot_grid.R, test-boundary.R, test-boundary_plot.R
+│   ├── test-data_prepare.R, test-feasibility_utils.R, test-graphics_device.R
+│   ├── test-local_cf.R, test-model_fit.R, test-plot_helpers.R
+│   ├── test-predict_utils.R, test-projection.R, test-result.R
+│   └── test-set_scaling.R     ← 13 test files (2026-11-04)
 │
 ├── vignettes/
-│   ├── Boundary_Logic-workflow.Rmd          ← Iris dataset, Phases 1-3
-│   └── Boundary_Logic_Pima_diabetes_workflow.Rmd ← Pima dataset, Phases 1-3
+│   └── Boundary_Logic_loan_default_workflow.Rmd ← Loan data, Phases 1-3
 │
 ├── inst/extdata/
 │   └── pima_diabetes.csv      ← Bundled dataset for vignette
@@ -586,11 +594,13 @@ Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
 
 - Mathematical method vignette: derives the biplot projection, inverse
   projection, and counterfactual geometry from first principles
-- Mahalanobis distance-to-boundary: alternative to Euclidean distance
-  for distance-to-boundary reporting (see memory/future_mahalanobis_distance.md)
-- Unit tests for Phase 3 functions (bl_select_target, set_filters,
-  bl_find_local_cf, bl_shapley, bl_find_sparse_cf)
-- Unit tests for bl_build_result() and bl_assemble()
+- Unit tests for the values of the Phase 3 search (bl_find_local_cf's
+  boundary point) and of the Shapley values; bl_select_target, set_filters,
+  the fixed restore, the integer rounding and the sparse path are tested
+- Unit tests for bl_build_result() (bl_assemble() is tested)
+- (Implemented since: the Mahalanobis distance to the boundary, as
+  bl_find_boundary()$dist_mahalanobis and plot.bl_boundary(distance =
+  "mahalanobis"); see documentation/boundary-distance-and-robustness.md)
 - CRAN submission preparation: check(), vignette build, README badges
 
 

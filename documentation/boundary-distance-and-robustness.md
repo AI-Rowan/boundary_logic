@@ -119,20 +119,51 @@ For every observation, `bl_find_boundary()` finds the nearest point on the oppos
 - **`train_ranges`** are checked *after* selection and reported, not used to discard points. Discarding would pick
   a farther, geometrically wrong point (`2 implementation_summary.txt` §6.11).
 
-It returns two distances (`R/boundary.R:444-449`):
+It returns three distances (`R/boundary.R`, the "Distances" block of `bl_find_boundary()`):
 
 | field | definition |
 |---|---|
 | `dist_z` | Euclidean distance in the plane from the observation's projection `Z_obs` to the boundary point `B_z` |
 | `dist_x` | Euclidean distance in X-space from the **observation** `x_obs` to the back-projected boundary point `B_x`, each feature divided by its total SD `X_sd` |
+| `dist_mahalanobis` | the **squared** Mahalanobis distance of the same X-space move, $v'\mathbf{W}^{-1}v$ with $v = B_x - x_{obs}$ in model units and $\mathbf{W}^{-1}$ = `metric_inv` |
 
-**How the two differ.**
+`dist_mahalanobis` is squared, as the field of the same name in `bl_find_local_cf()` is, so the two can be compared
+directly; `sqrt()` gives the distance, and `print()` shows the mean of that. It is `NA` where no boundary point was
+found and, with a warning, when `metric_inv` is missing (an older `bl_result`, §5).
 
-- **`dist_x` includes the off-plane residual.** In the global plane an observation is not on the plane, so `dist_x`
-  measures from the observation itself.
+**How they differ.**
+
+- **`dist_x` and `dist_mahalanobis` include the off-plane residual.** In the global plane an observation is not on
+  the plane, so both measure from the observation itself. `dist_x` scales each feature by its total SD and ignores
+  correlations; `dist_mahalanobis` uses the within-class metric, correlations included.
 - **`dist_z` measures only the in-plane displacement.**
 - **Under CVA, `dist_z` is a Mahalanobis distance:** $(n-g)\cdot\texttt{dist\_z}^2$ is the squared Mahalanobis
-  distance of that in-plane displacement (§1.2).
+  distance of that in-plane displacement (§1.2). It equals `dist_mahalanobis` only when the observation lies in the
+  plane, which in the global biplot it rarely does.
+
+### 2.1 Why the distance uses $\mathbf{W}$, not a rotated $\mathbf{W}$
+
+The local search rotates the biplot for each eigenvector pair: pair $i$ has its own orthogonal rotation
+$\mathbf{A}_i$ ($\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$). It is natural to ask whether a distance should allow for
+that rotation, using a "rotated" metric. It need not, for three reasons.
+
+1. **The distance is measured in X-space.** Both `bl_find_boundary()` and `bl_find_local_cf()` measure the move
+   $v = B_x - x_{obs}$ between two points in the feature space. $\mathbf{W}$ is the within-class covariance of the
+   features. It is a property of the data, not of any biplot plane, so the same $\mathbf{W}^{-1}$ measures every
+   X-space move, whichever plane produced the boundary point.
+2. **The rotation acts only on the Z coordinates.** $\mathbf{A}_i$ decides *which* plane is searched, and so which
+   boundary point is found. It does not change how a move between two given X-space points is measured.
+   `bl_find_boundary()` works in the global plane and has no rotation at all.
+3. **A rotation would enter only if the distance were measured in Z.** For a move inside pair $i$'s plane, the
+   metric in Z coordinates is the one $\mathbf{W}$ induces through that pair's back-projection.
+   - **Under CVA it is $(n-g)\,\mathbf{I}$ for every pair:** $\mathbf{A}_i$ enters only as
+     $\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$ and cancels. The rotation note §3.4 proves this, so a Z-space and an
+     X-space measurement agree.
+   - **Under PCA it is not a multiple of the identity,** so a Z-space distance would depend on the rotation.
+     Measuring in X-space avoids that.
+
+So "allowing for $\mathbf{A}$" is either automatic (CVA: it cancels) or the wrong thing to do (PCA: it would make
+the distance depend on the plane chosen to display the move).
 
 ---
 
@@ -312,6 +343,7 @@ which mostly measured that mismatch.
    - **What `plot.bl_boundary()` / `bl_robustness()` do:** if `metric` is missing, they fall back to
      `"euclidean"`, with a warning to rebuild.
    - **What `bl_find_local_cf()` does:** the same, if `metric_inv` is missing.
+   - **What `bl_find_boundary()` does:** returns `dist_mahalanobis` as `NA`, with a warning to rebuild.
 4. **External targets.** No class information is needed when distances are computed: the metric was fixed when the
    projection was built.
 5. **Reproducing the thesis.** `distance = "euclidean"` reproduces the thesis's Phase 2 measure.
@@ -324,7 +356,7 @@ All paths are relative to this file.
 
 - [`../R/projection.R`](../R/projection.R): `.compute_metric_inverse()` and its call in `bl_build_projection()`.
 - [`../R/result.R`](../R/result.R): propagation through `bl_assemble()`.
-- [`../R/boundary.R`](../R/boundary.R): `bl_find_boundary()`, with `dist_z` and `dist_x`.
+- [`../R/boundary.R`](../R/boundary.R): `bl_find_boundary()`, with `dist_z`, `dist_x` and `dist_mahalanobis`.
 - [`../R/boundary_plot.R`](../R/boundary_plot.R): `plot.bl_boundary()`, `bl_robustness()`, the denominator and the
   Mahalanobis check.
 - `../2 implementation_summary.txt`:

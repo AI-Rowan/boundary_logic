@@ -10,14 +10,13 @@ bl_find_sparse_cf(bl_shapley_result, round_to = NULL)
 \item{bl_shapley_result}{A \code{"bl_shapley"} object from
 \code{\link{bl_shapley}}.}
 
-\item{round_to}{Positive numeric or \code{NULL}. If not \code{NULL}, rounds
-each changed variable's value to the nearest multiple of this value (e.g.
-\code{round_to = 0.5} rounds to the nearest 0.5; \code{round_to = 1}
-rounds to the nearest integer). Rounding acts on the stored model-unit
-values, which are z-scores for a standardised model, and constraints are
-not re-checked afterwards; see
-\file{documentation/sparse-counterfactual.md}. Default \code{NULL} (no
-rounding).}
+\item{round_to}{Deprecated; must be \code{NULL} (the default). It rounded
+the changed values in model units without re-checking the constraints.
+Mark a whole-number feature \code{"integer"} in \code{\link{set_filters}}
+instead: \code{\link{bl_find_local_cf}} then rounds the counterfactual in
+raw units and re-checks it, and the sparse counterfactual takes its values
+from that counterfactual. See
+\file{documentation/sparse-counterfactual.md} section 3.}
 }
 \value{
 A list of class \code{"bl_sparse_result"} with the following fields:
@@ -53,4 +52,8 @@ variable has been changed and \code{solution_valid} is \code{FALSE}.
 \details{
 The selection follows the Shapley order, so it is not guaranteed to be the
 smallest possible subset: a smaller set outside that order may also cross.
+
+Each changed variable takes its counterfactual value, so a feature marked
+\code{"integer"} in \code{\link{set_filters}} keeps the whole value that
+\code{\link{bl_find_local_cf}} rounded it to.
 }

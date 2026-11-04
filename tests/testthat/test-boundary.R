@@ -86,3 +86,32 @@ test_that("bl_find_boundary and bl_surrogate give the same answer under any RNG 
     expect_identical(surr[[k]]$surrogate_pred, surr[[1L]]$surrogate_pred)
   }
 })
+
+
+# ---- dist_mahalanobis -------------------------------------------------------------
+
+test_that("bl_find_boundary returns the squared Mahalanobis distance v' W^-1 v", {
+  bnd <- quiet(bl_find_boundary(bnd_res))
+  v   <- as.matrix(bnd$B_x) - as.matrix(bnd$x_obs)
+  ok  <- which(!is.na(bnd$B_x[[1L]]))
+  expect_gt(length(ok), 0L)
+  for (i in head(ok, 5L)) {
+    expect_equal(bnd$dist_mahalanobis[i],
+                 as.numeric(t(v[i, ]) %*% bnd_res$metric_inv %*% v[i, ]))
+  }
+  # A row without a counterfactual stays NA.
+  expect_identical(is.na(bnd$dist_mahalanobis), is.na(bnd$B_x[[1L]]))
+  # The print shows the mean of its square root.
+  txt <- paste(capture.output(print(bnd)), collapse = "\n")
+  expect_match(txt, sprintf("Dist M (mean)  : %.4f",
+                            mean(sqrt(bnd$dist_mahalanobis), na.rm = TRUE)),
+               fixed = TRUE)
+})
+
+test_that("bl_find_boundary gives NA dist_mahalanobis, with a warning, without metric_inv", {
+  old <- bnd_res
+  old$metric_inv <- NULL
+  expect_warning(bnd <- suppressMessages(bl_find_boundary(old)), "metric_inv not found")
+  expect_true(all(is.na(bnd$dist_mahalanobis)))
+  expect_no_match(paste(capture.output(print(bnd)), collapse = "\n"), "Dist M")
+})

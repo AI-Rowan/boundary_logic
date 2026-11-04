@@ -2,6 +2,24 @@
 
 ## Breaking changes
 
+* `bl_find_sparse_cf()`'s `round_to` is deprecated: a non-NULL value stops
+  with a message. It rounded in model units (z-scores for a standardised
+  model), one value for every feature, without re-checking the constraints,
+  and could reverse a move and invalidate the sparse counterfactual. Mark a
+  whole-number feature `"integer"` in `set_filters()` instead (see below).
+  `round_to = NULL` still runs.
+* A `"fixed"` constraint in `set_filters()` is now strict. When the restored
+  point (the search's boundary point with each moved fixed feature set back
+  to its observed value) no longer crosses the boundary, or leaves
+  `train_ranges`, `bl_find_local_cf()` reports no counterfactual:
+  `solution_found` is `FALSE`, `fixed_check` is kept with `applied = FALSE`,
+  and `blocking_constraint` (also given as a message) says where the search
+  moved the fixed feature, why the restored point fails, and that changing
+  the constraints on the actionable features may make a counterfactual
+  possible. Previously the search's point was kept, so a reported
+  counterfactual could move a "fixed" feature by up to 0.5 model units. A
+  reported counterfactual now always holds every fixed feature exactly. See
+  `documentation/fixed-constraint-restore.md`.
 * `bl_find_local_cf()`'s `max_pairs` default is now `21L` (was `10L`), so the
   search tries every eigenvector pair for up to 7 features, as the thesis
   does. Results change for models with 6 or more features: more pairs are
@@ -43,6 +61,25 @@
 
 ## New features
 
+* `set_filters()` accepts an `"integer"` constraint for a whole-number
+  feature (a count or a score): `"integer"` alone, with a direction,
+  `c("increase", "integer")`, or with a range, `list(c(min, max),
+  "integer")`. Without it a feature is continuous. `bl_find_local_cf()`
+  searches as before, then rounds the counterfactual: for each integer
+  feature it tries the whole values just below and above, in raw units when
+  a scaling is set, keeps the combinations that still cross the boundary and
+  meet every constraint and `train_ranges`, and takes the nearest by the
+  search's selector. When none is valid it reports no counterfactual, with
+  the reason. The Shapley values and the sparse counterfactual use the
+  rounded point. The new field `integer_check` records the outcome, and
+  `print()` explains it.
+* `bl_find_boundary()` gains a `dist_mahalanobis` field: the squared
+  Mahalanobis distance of each observation's move to its boundary point,
+  `v' W^-1 v` with `v = B_x - x_obs` and `W^-1 = bl_result$metric_inv`. It is
+  the same quantity as `bl_find_local_cf()`'s field of that name, so global
+  and local distances can be compared directly. `print()` shows the mean of
+  its square root. It is `NA`, with a warning, for a `bl_result` without
+  `metric_inv`. No search result changes.
 * New `bl_apply_scaling(data, bl_result)` converts new data given in raw
   units, such as an external applicant, to the model's units with the
   scaling recorded by `bl_set_scaling()`. `bl_set_scaling()` is
@@ -109,10 +146,20 @@
   needed stay at their observed values. The new field `sparse_path` records
   each step, and `print()` shows it. Previously every `"Supports"` feature
   was changed. See `documentation/sparse-counterfactual.md`, which also
-  records open questions about `round_to`.
+  records how `round_to` was used and the `"integer"` constraint that
+  replaced it.
 
 ## Bug fixes and other improvements
 
+* `plot.bl_shapley()` labels every variable `"variable: observed ->
+  counterfactual"`, with and without a recorded scaling. Without a scaling it
+  showed the observed value and the *change* (e.g. `"Age: 22 -> -0.88"`),
+  which read as a negative age. Observed and counterfactual now share the
+  decimals of the comparison tables (2, more where the change would print as
+  0.00), as do the Shapley values on the bars, which are no longer clipped at
+  the plot's edge. The x-axis reads "Impact on prediction (Shapley value)".
+  The display rules are written up in
+  `documentation/scaling_axis_relabel_note.md`.
 * The observed / counterfactual / change tables of `print()` for
   `bl_local_result`, `bl_shapley` and `bl_sparse_result`, the Target and
   Counterfactual blocks, and the sparse path now print in fixed notation with

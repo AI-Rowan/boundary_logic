@@ -87,16 +87,73 @@ biplot feature.
   var_names, kind)` (`R/data_prepare.R`). A **level** (observed, full CF, sparse,
   counterfactual) converts as `value * scale + center`; a **delta** (the Shapley
   `data_to_boundary` change) converts as `value * scale` only. The Shapley plot
-  label becomes `observed -> counterfactual` in raw units. Conversion is
+  label reads `observed -> counterfactual` in raw units. Conversion is
   display-only -- stored objects stay in model units, mirroring the axis relabel.
   Shapley *contributions* (`shapley_cause`) are in prediction-impact units, not
-  feature units, and are deliberately left unconverted.
+  feature units, and are deliberately left unconverted. The rules for how these
+  values print are in the next section.
 - **One affine method for all features.** `method` is a single label; each feature
   has its own `(center, scale)` but shares the transform family. Per-variable
   transform families (z-score / min-max / log / none mixed) are future work -- and
   non-affine inverses (e.g. log) would need biplotEZ's spline-calibrated axis path
   (`PCOaxes = "splines"`) since a linear biplot axis cannot render non-linear ticks
   exactly. See `CLAUDE.md` Section 9.
+
+## Display conventions
+
+This section is the one place for the rules that govern how feature values and
+Shapley values are displayed. The roxygen, the implementation summary, the
+walkthroughs and `CLAUDE.md` point here rather than restating them.
+
+**1. Units.** A displayed feature value is in raw units when `bl_result$scaling`
+is set, and in model units otherwise. The conversion is `.scale_to_raw()`
+(`R/data_prepare.R`):
+
+| quantity | `kind` | conversion |
+|---|---|---|
+| a level: an observed, counterfactual, sparse or target value | `"level"` | `value * scale + center` |
+| a delta: a change such as counterfactual minus observed | `"delta"` | `value * scale` |
+
+Stored objects always stay in model units. A scaling that does not cover every
+feature leaves the values in model units, with a warning. Shapley values are
+prediction units and are never converted.
+
+**2. Decimals.** Numbers print in fixed notation (never scientific, never
+`-0.00`) with 2 decimals. A feature whose change would print as 0.00 gets more
+decimals, 2 significant digits and at most 4, so that a small move such as a
+loan-to-income change of -0.0016 stays visible. The helpers are in
+`R/local_cf.R`:
+
+- `.fmt_digits(x)` returns the decimals for each value: 2, or more for a
+  non-zero value that rounds to 0 at 2;
+- `.fmt_fixed(x, d)` formats with those decimals;
+- `.cf_compare_table()` sets one number of decimals per feature row, from that
+  row's changes (counterfactual minus observed, in display units), and
+  `.format_cf_table()` applies it to every column of the row.
+
+The stored tables stay unrounded.
+
+**3. Where the rules apply.**
+
+- **The observed-versus-counterfactual tables** of `print()` for
+  `bl_local_result`, `bl_shapley` and `bl_sparse_result` (one builder,
+  `.cf_compare_table()`), the Target and Counterfactual blocks, which take the
+  table's row decimals, and the sparse path.
+- **The Shapley plot labels** (`plot.bl_shapley()`) read
+  `"variable: observed -> counterfactual"`, both values levels, for example
+  `"Glucose: 179.00 -> 170.63"`. Each label takes its decimals from its change,
+  as a table row does (`.shapley_labels()`, `R/shapley.R`). The same wording is
+  used with and without a scaling; the y-axis title adds ", raw units" when the
+  values are converted. `bl_shapley()` stores the labels in model units
+  (`shapley_df$varnames_p`), and `plot.bl_shapley()` rebuilds them in raw units
+  when a scaling is set.
+- **The Shapley values**, on the plot's bars and in the `shapley` column of
+  `print.bl_shapley()`, use `.fmt_fixed(s, .fmt_digits(s))`: 2 decimals, more
+  for a small non-zero value.
+- **Predictions** are a separate quantity: `.pred_function()` floors them to
+  3 decimals (`floor(x * 1000) / 1000`), and the headers of the print methods
+  show them to 4. The sparse path's `pred` column takes its decimals from
+  `pred - cutoff`, so a prediction just across the cutoff stays visible.
 
 ## See also
 

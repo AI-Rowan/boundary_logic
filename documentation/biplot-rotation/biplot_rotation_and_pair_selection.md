@@ -439,7 +439,7 @@ $p=7$ ($\binom{7}{2}=21$), so the Pima example's search matches the thesis's. It
 
 ### 3.3 The per-pair pipeline
 
-Inside `bl_find_local_cf()` (`R/local_cf.R:440`; the pair loop is lines 500–690), each pair goes through five
+Inside `bl_find_local_cf()` (`R/local_cf.R:590`; the pair loop is lines 650–840; line numbers as of 2026-11-04), each pair goes through five
 stages:
 
 1. **Rotate.** `.bl_rotate(x_target_st, V, pair)` (§3.1) gives `Vr_rot` / `tVr_rot`.
@@ -449,9 +449,10 @@ stages:
    - An $m\times m$ grid ($m=200$ by default) spans the training data's rotated range, plus 10% padding.
    - It is back-projected to X-space and scored through the model in chunks of 50,000 rows.
 4. **Extract and filter the boundary contour.** `grDevices::contourLines()` at $cutoff \pm b_{margin}$, then four
-   filters on the vertices (`R/local_cf.R:558-609`):
+   filters on the vertices (`R/local_cf.R:708-759`):
    - (a) **opposing class:** only contour segments on the class *opposite* the target's prediction;
-   - (b) **actionability:** the `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`, `c(min,max)`).
+   - (b) **actionability:** the `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`, `c(min,max)`;
+     `"integer"` is not applied here, but to the counterfactual after the search, §3.5).
      They run first because they are typically the most selective, so the loop can stop early
      (`if (!any(keep)) next`);
    - (c) **feasibility:** `train_ranges` (per-feature training min/max), applied to the survivors of (b);
@@ -468,7 +469,7 @@ stages:
 
 ### 3.4 The selector and its metric
 
-The winning pair is the one with the smallest **squared Mahalanobis distance** in X-space (`R/local_cf.R:633-638`):
+The winning pair is the one with the smallest **squared Mahalanobis distance** in X-space (`R/local_cf.R:781-788`):
 
 $$
 d_M^2(v) = v^{\mathsf T}\mathbf{W}^{-1}v, \qquad v = B_x - x_{obs}
@@ -541,7 +542,8 @@ Euclidean step (§3.3, stage 5) already finds the Mahalanobis-nearest vertex.
 1. **CVA:** under PCA, $\mathbf{V}'\mathbf{V}=\mathbf{I}$ instead (below).
 2. **The CVA's own $\mathbf{W}$:** the package builds `metric` from the same class factor it passes to `CVA()`.
 3. **A displacement in the drawn plane:** true for the search's point, because the rotation puts the target in the
-   plane and the boundary vertex is on it. False for a restored "fixed" counterfactual (§3.5, §4.6).
+   plane and the boundary vertex is on it. False for a restored "fixed" or a rounded "integer" counterfactual
+   (§3.5, §4.6).
 
 **It also holds for 2-group CVA.** biplotEZ then adds the second axis by `CVAlowdim(low.dim = "sample.opt")`,
 which builds `cbind(M[, 1], M[, -1] %*% <orthogonal matrix>)` and so keeps $\mathbf{M}'\mathbf{W}\mathbf{M} =
@@ -591,9 +593,9 @@ search, both pick (3,4). The thesis states the identity in prose (p.111, §2.5).
 | `"mahalanobis"` (default) | the thesis's criterion; identical to `"euclidean"` | `W_binary` Mahalanobis — a package choice; not the thesis's rule |
 | `"euclidean"` | identical to `"mahalanobis"` | standardised Euclidean — the thesis's rule (p.106) |
 
-### 3.5 Winner selection and the "fixed" restore
+### 3.5 Winner selection, the "fixed" restore and the "integer" rounding
 
-`R/local_cf.R:652-689` is a running minimum over the tested pairs:
+`R/local_cf.R:802-839` is a running minimum over the tested pairs:
 
 ```r
 selector <- if (distance == "mahalanobis") dist_mah else dist_z
@@ -621,17 +623,27 @@ if (is.finite(selector) && selector < best_selector) {
 - **No pair can be a winner by accident.** A pair with no surviving vertex is skipped (`next`); the research
   code's B = 0 defect (§2.6) has no counterpart.
 
-**After the search: the "fixed" restore** (`R/local_cf.R:727-752`, `.restore_fixed()` at 838).
+**After the search: the "fixed" restore** (the post-search block of `bl_find_local_cf()` and `.restore_fixed()`, `R/local_cf.R`).
 
 - **During the search:** a `"fixed"` constraint is a tolerance of 0.5 model units, because a vertex of the 2D
   contour rarely holds a feature at exactly its observed value.
 - **After the winner is chosen:** each fixed feature the search moved is set back to its observed value. If that
   point still crosses the boundary and is within `train_ranges`, it becomes the counterfactual (`B_x`, `B_pred`).
-  `fixed_check` records the outcome.
+  Otherwise no counterfactual is reported (strict, since 2026-11-04). `fixed_check` records the outcome.
 - **The restored point is generally not on the plane:**
   - `B_z` is its projection, which is what the local plot draws;
   - `dist_z`, `dist_mahalanobis` and the per-pair tables still describe the search's point.
-- Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md).
+- Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md) §1–§4.
+
+**Then the "integer" rounding** (`.round_integers()`, since 2026-11-04).
+
+- **What it does:** for each `"integer"` feature that is not fixed and has moved off a whole number, it tries the
+  whole values (raw units) just below and above. It keeps the combinations that still cross the boundary and
+  meet every constraint and `train_ranges`, and takes the nearest by the same selector as the pair search.
+- **Its result:** the chosen point replaces `B_x`, `B_z` (its projection, `.project_local()`) and `B_pred`. With
+  no valid combination no counterfactual is reported. `integer_check` records the outcome.
+- **Like the restored point, it lies off the plane,** and the distances still describe the search's point.
+- Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md) §5.
 
 ### 3.6 How the implementation differs from the original
 
@@ -642,7 +654,7 @@ if (is.finite(selector) && selector < best_selector) {
 | pairs tried | all $\binom{p}{2}$ | up to `max_pairs = 21L`: all pairs for $p \le 7$ (§3.2) |
 | grid built over | the target and the test data (research code) | the training data's rotated range |
 | plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | no hull in the local search (§3.3); no enclosure rule |
-| actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)` |
+| actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)`, `"integer"` (rounded after the search) |
 | feasibility | `train_ranges` | `train_ranges`, filter (c) |
 | nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
 | cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ by default, for both projections (§3.4) |
@@ -760,17 +772,18 @@ is more accurate to describe the search as *sampling $\binom{p}{2}$ planes throu
 
 ### 4.6 Off-plane counterfactuals
 
-Two counterfactuals leave the drawn plane:
+Three counterfactuals leave the drawn plane:
 
 - **The restored "fixed" counterfactual** (§3.5), which resets coordinates to the target's.
+- **The rounded "integer" counterfactual** (§3.5), which moves coordinates onto whole values.
 - **The sparse counterfactual** (`bl_find_sparse_cf()`), which mixes coordinates of the target and the
   counterfactual.
 
 **What follows:**
 
-- **On the plot:** both are drawn at their projections, which need not lie on the drawn boundary.
-- **In the output:** for a restored counterfactual, `dist_z` and `dist_mahalanobis` describe the search's point,
-  not the reported one.
+- **On the plot:** all three are drawn at their projections, which need not lie on the drawn boundary.
+- **In the output:** for a restored or rounded counterfactual, `dist_z` and `dist_mahalanobis` describe the
+  search's point, not the reported one.
 - **For the identity:** the §3.4 identity does not apply to them.
 
 ### 4.7 Only pair (1,2) can be forced, and `max_pairs` caps the search
@@ -1102,7 +1115,7 @@ Each item needs an explicit instruction (CLAUDE.md §9). Ranked as in §4:
   - that is test 5, and it is not yet measured.
 - **Downstream objects still inherit the plane.** Shapley attribution and sparse counterfactuals inherit whichever
   plane is drawn. The search makes that choice principled and reproducible; it does not remove the dependence.
-- **Off-plane points are unchanged.** Sparse and restored counterfactuals still leave the plane (§4.6).
+- **Off-plane points are unchanged.** Sparse, restored and rounded counterfactuals still leave the plane (§4.6).
 
 ---
 
@@ -1415,13 +1428,14 @@ The returned basis was bit-identical across five calls (`17_3` §3).
   - §4.3 (p.148): the conclusions;
   - §6.2 (p.172): the Grand Tour as future work.
 - **Package source:**
-  - `R/local_cf.R`: `.generate_pairs()`, `.bl_rotate()`, `bl_find_local_cf()`, `.restore_fixed()`;
+  - `R/local_cf.R`: `.generate_pairs()`, `.bl_rotate()`, `bl_find_local_cf()`, `.restore_fixed()`,
+    `.round_integers()`, `.project_local()`;
   - `R/projection.R`: `.compute_metric_inverse()`, `bl_build_projection()`.
 - **Companion and related notes:**
   - [`../boundary-distance-and-robustness.md`](../boundary-distance-and-robustness.md): $\mathbf{W}$, its Cholesky
     inverse, and Phase 2's distance and robustness measures;
   - [`../nearest-vertex-tie-break.md`](../nearest-vertex-tie-break.md): why the nearest vertex is the exact minimum;
-  - [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md): the post-search "fixed" restore (§3.5).
+  - [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md): the post-search "fixed" restore and "integer" rounding (§3.5).
 - **Design documents:**
   - `2 implementation_summary.txt` §4.2, §4.2.1 and §4.8: code mechanics;
   - `1 Foundation intro documents.txt` §10.3, §10.4 and §10.7: the CVA scatter-matrix requirement, hull

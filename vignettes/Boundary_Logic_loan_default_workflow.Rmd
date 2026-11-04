@@ -451,10 +451,16 @@ encodes the business constraints:
 -   **`"decrease"`** — counterfactual value must be ≤ observed.
 -   **`"increase"`** — counterfactual value must be ≥ observed.
 -   **`"fixed"`** — not actionable; the search allows ±0.5 of observed,
-    then restores the observed value when that point still crosses the
-    boundary, and the sparse counterfactual always reverts it.
+    then restores the observed value. If the restored point no longer
+    crosses the boundary, or leaves the training ranges, no counterfactual
+    is reported, so a reported counterfactual always holds the feature
+    exactly.
 -   **`c(min, max)`** — counterfactual must lie within this absolute
     range.
+-   **`"integer"`** — a whole number in raw units (a count or a score),
+    alone or combined: `c("increase", "integer")` or
+    `list(c(min, max), "integer")`. The counterfactual is rounded after
+    the search and re-checked; without it a feature is continuous.
 
 Here `person_age` is fixed (not actionable), while `loan_int_rate` and
 `credit_score` are constrained to increase. Only variables still in the
@@ -479,6 +485,9 @@ prediction grid, applies `train_ranges` and the actionability filters,
 and finds the nearest opposing-class boundary point — repeating across
 eigenvector pairs and keeping the pair whose counterfactual has the
 smallest squared Mahalanobis distance from the target in feature space.
+After the search it restores any `"fixed"` feature the search moved and,
+for an `"integer"` feature, rounds the counterfactual to whole values; the
+adjusted point is re-checked, and the print explains each step in a note.
 
 ```{r step13-local-cf}
 bl_local <- bl_find_local_cf(
@@ -517,7 +526,8 @@ plot(bl_local,
 into per-variable contributions. Each variable is classified as
 **Supports** (helps cross the boundary), **Contradicts** (works against
 it) or **No effect** (its change does not move the prediction). Y-axis
-labels read `variable: observed_value -> required_change`.
+labels read `variable: observed -> counterfactual`, in raw units when a
+scaling is set.
 
 ```{r step15-shapley}
 bl_shapley_values <- bl_shapley(bl_local)
@@ -537,7 +547,7 @@ many as it needs. `solution_valid = TRUE` confirms the sparse change still
 flips the prediction.
 
 ```{r step16-sparse}
-bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values)
 print(bl_sparse)
 plot(bl_sparse)
 ```
@@ -561,7 +571,7 @@ plot(bl_local_free,
      ticks_n = c(2, 4, 200, 200, 20))
 
 bl_shap_free   <- bl_shapley(bl_local_free)
-bl_sparse_free <- bl_find_sparse_cf(bl_shap_free, round_to = NULL)
+bl_sparse_free <- bl_find_sparse_cf(bl_shap_free)
 plot(bl_shap_free)
 plot(bl_sparse_free)
 ```
@@ -765,8 +775,8 @@ Put next to `plot(bl_shapley_values)` (Step 15), the contrast is sharp:
 |---|---|---|
 | What it explains | The predicted probability for this applicant | The path from this applicant to the boundary counterfactual |
 | Baseline | Mean training prediction | The applicant's observed feature values |
-| Reading | Each bar pushes the score up/down | Each bar **Supports** or **Contradicts** crossing the boundary |
-| Output | A number (the score decomposition) | An actionable change (`observed -> required`) |
+| Reading | Each bar pushes the score up/down | Each bar **Supports** or **Contradicts** crossing the boundary, or has **No effect** |
+| Output | A number (the score decomposition) | An actionable change (`observed -> counterfactual`) |
 | Constraints | None | Honours `set_filters()` actionability |
 
 SHAP tells you **why the model scored this applicant as it did**;

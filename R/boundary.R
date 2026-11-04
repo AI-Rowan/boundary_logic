@@ -143,6 +143,11 @@
 #'     in Z-space.}
 #'   \item{`dist_x`}{Numeric vector; Euclidean distance obs to boundary
 #'     in standardised X-space (each dimension divided by `X_sd`).}
+#'   \item{`dist_mahalanobis`}{Numeric vector; squared Mahalanobis distance
+#'     obs to boundary in X-space, `v' W^-1 v` with `v = B_x - x_obs` (model
+#'     units) and `W^-1 = bl_result$metric_inv`. Squared, as the field of the
+#'     same name in [bl_find_local_cf()]; take `sqrt()` for the distance. `NA`
+#'     (with a warning) when `bl_result$metric_inv` is missing.}
 #'   \item{`Z_obs`}{n x 2 matrix; Z-space coordinates of each observation.}
 #'   \item{`x_obs`}{Data frame; original observations (feature columns).}
 #'   \item{`pred_obs`}{Numeric vector; model probability at each observation.}
@@ -173,6 +178,7 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   var_names    <- bl_result$var_names
   polygon      <- bl_result$polygon
   train_ranges <- bl_result$train_ranges
+  metric_inv   <- bl_result$metric_inv
   ct           <- bl_result$biplot_grid$ct
 
   Vr  <- V[, proj_dims, drop = FALSE]   # p x 2
@@ -223,6 +229,7 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
       B_pred            = rep(NA_real_, n),
       dist_z            = rep(NA_real_, n),
       dist_x            = rep(NA_real_, n),
+      dist_mahalanobis  = rep(NA_real_, n),
       Z_obs             = Z_obs,
       x_obs             = data_sub[, var_names, drop = FALSE],
       pred_obs          = pred_obs,
@@ -448,6 +455,20 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   diff_x_std <- sweep(x_obs_mat - B_x_mat, 2L, X_sd, "/")
   dist_x     <- sqrt(rowSums(diff_x_std^2, na.rm = FALSE))
 
+  # Squared Mahalanobis distance in X-space, v' W^-1 v, as in
+  # bl_find_local_cf(). NA when metric_inv is unavailable (older bl_result).
+  if (!is.null(metric_inv)) {
+    v_x              <- B_x_mat - x_obs_mat
+    dist_mahalanobis <- rowSums((v_x %*% metric_inv) * v_x)
+  } else {
+    warning(
+      "bl_result$metric_inv not found; dist_mahalanobis is NA. ",
+      "Rebuild bl_result with the current package version to enable Mahalanobis.",
+      call. = FALSE
+    )
+    dist_mahalanobis <- rep(NA_real_, n)
+  }
+
   # ---- Return ------------------------------------------------------
   structure(
     list(
@@ -456,6 +477,7 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
       B_pred            = B_pred,
       dist_z            = dist_z,
       dist_x            = dist_x,
+      dist_mahalanobis  = dist_mahalanobis,
       Z_obs             = Z_obs,
       x_obs             = data_sub[, var_names, drop = FALSE],
       pred_obs          = pred_obs,
@@ -482,6 +504,9 @@ print.bl_boundary <- function(x, ...) {
   cat(sprintf("  Boundaries used: %d\n", x$nr_boundaries))
   cat(sprintf("  Dist Z (mean)  : %.4f\n", mean(x$dist_z, na.rm = TRUE)))
   cat(sprintf("  Dist X (mean)  : %.4f\n", mean(x$dist_x, na.rm = TRUE)))
+  if (!is.null(x$dist_mahalanobis) && any(!is.na(x$dist_mahalanobis)))
+    cat(sprintf("  Dist M (mean)  : %.4f (sqrt of dist_mahalanobis)\n",
+                mean(sqrt(x$dist_mahalanobis), na.rm = TRUE)))
   cat(sprintf("  B_pred range   : [%.4f, %.4f]\n",
               min(x$B_pred, na.rm = TRUE), max(x$B_pred, na.rm = TRUE)))
   invisible(x)

@@ -121,7 +121,7 @@ plot(bl_local)
 bl_shapley_values <- bl_shapley(bl_local)
 plot(bl_shapley_values)
 
-bl_sparse <- bl_find_sparse_cf(bl_shapley_values, round_to = NULL)
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values)
 print(bl_sparse)
 plot(bl_sparse)
 ```
@@ -197,14 +197,17 @@ bl_local_pima <- bl_find_local_cf(bl_results_pima, tgt_pima, set_filters = flt)
 
 Constraints are checked on the values the model sees (here raw clinical units).
 If the features were standardised before fitting, give `c(min, max)` ranges on
-that standardised scale, and read the `"fixed"` tolerance as ±0.5 of it.
+that standardised scale, and read the `"fixed"` tolerance as ±0.5 of it. The
+exception is `"integer"`: it rounds to whole numbers in raw units when a
+scaling was recorded with `bl_set_scaling()`.
 
 | Constraint | Meaning |
 |---|---|
 | `"decrease"` | Counterfactual value must be ≤ observed |
 | `"increase"` | Counterfactual value must be ≥ observed |
-| `"fixed"` | Search allows ±0.5, then restores the observed value when that point still crosses the boundary; always reverts to observed in sparse CF |
+| `"fixed"` | Search allows ±0.5, then restores the observed value; if the restored point does not cross the boundary or leaves the training ranges, no counterfactual is reported. Always at observed in the sparse CF |
 | `c(min, max)` | Counterfactual must lie within this absolute range |
+| `"integer"` | A whole number in raw units (a count or a score); combine as `c("increase", "integer")` or `list(c(min, max), "integer")`. The counterfactual is rounded after the search and re-checked |
 
 ---
 
