@@ -7,7 +7,7 @@
 \method{plot}{bl_boundary}(
   x,
   type = c("jitter", "boxplot"),
-  distance = c("mahalanobis", "euclidean"),
+  distance = c("auto", "mahalanobis", "euclidean"),
   ...
 )
 }
@@ -17,8 +17,9 @@
 \item{type}{Character; \code{"jitter"} (default) or \code{"boxplot"}.}
 
 \item{distance}{Character; per-feature standardisation metric. One of
-\code{"mahalanobis"} (default; uses \code{sqrt(diag(W))}) or \code{"euclidean"} (legacy;
-uses \code{X_sd}).}
+\code{"auto"} (default: \code{"euclidean"} for a PCA biplot, \code{"mahalanobis"} for a
+CVA biplot), \code{"mahalanobis"} (uses \code{sqrt(diag(W))}) or \code{"euclidean"}
+(uses \code{X_sd}).}
 
 \item{...}{Unused; for S3 compatibility.}
 }
@@ -32,7 +33,8 @@ absolute standardised distance.}
 \item{\code{vec_to_boundary_sd}}{n x p matrix of signed standardised
 distances (one row per obs, one column per variable).}
 \item{\code{distance}}{Character; the denominator used, \code{"mahalanobis"}
-(within-class SD) or \code{"euclidean"} (total SD).}
+(within-class SD) or \code{"euclidean"} (total SD), after \code{"auto"} is
+resolved.}
 \item{\code{mahalanobis_check}}{For \code{"mahalanobis"}, a list of squared
 distances summed across observations: \code{plotted} (the per-feature
 measure, \code{sum(vec_to_boundary_sd^2)}), \code{full} (\verb{v' W^\{-1\} v}),
@@ -71,9 +73,11 @@ predicted class 0 (blue).
 The distance vector per observation is computed in biplot Z-space
 (\code{Z_obs - Z_boundary}), back-projected to X-space via the 2 x p block
 of \code{tV}, then standardised so variables are comparable regardless of
-their original scale. The denominator depends on \code{distance}:
+their original scale. The denominator depends on \code{distance}. The default,
+\code{"auto"}, follows the thesis rule (section 3.9.1): \code{"euclidean"} for a PCA
+biplot and \code{"mahalanobis"} for a CVA biplot.
 \describe{
-\item{\code{"mahalanobis"} (default)}{\code{sqrt(diag(W))} — within-class
+\item{\code{"mahalanobis"} (CVA default)}{\code{sqrt(diag(W))} -- within-class
 standard deviation per feature. This is the diagonal of the
 Mahalanobis metric matrix stored on \code{bl_result$metric}. Features
 that are good class separators (large between-class variance, small
@@ -83,8 +87,9 @@ the squared length of the plotted per-feature distances,
 \verb{sum_j v_j^2 / W_jj}, with the full squared Mahalanobis distance
 \verb{v' W^\{-1\} v}, so users can judge how much the plot leaves out by
 ignoring the correlations in \code{W}.}
-\item{\code{"euclidean"}}{\code{X_sd} — total per-feature standard deviation
-(legacy behaviour). Conflates within- and between-class variance.}
+\item{\code{"euclidean"} (PCA default)}{\code{X_sd} -- total per-feature standard
+deviation, as the thesis standardises the variable importance
+(section 4.2.2). Conflates within- and between-class variance.}
 }
 If the projection was standardised (PCA with \code{standardise = TRUE}),
 the X-space vector is first unstandardised by multiplying by \code{X_sd}

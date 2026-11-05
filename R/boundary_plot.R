@@ -34,9 +34,11 @@ utils::globalVariables(c("values", "Variable"))
 #' The distance vector per observation is computed in biplot Z-space
 #' (`Z_obs - Z_boundary`), back-projected to X-space via the 2 x p block
 #' of `tV`, then standardised so variables are comparable regardless of
-#' their original scale. The denominator depends on `distance`:
+#' their original scale. The denominator depends on `distance`. The default,
+#' `"auto"`, follows the thesis rule (section 3.9.1): `"euclidean"` for a PCA
+#' biplot and `"mahalanobis"` for a CVA biplot.
 #' \describe{
-#'   \item{`"mahalanobis"` (default)}{`sqrt(diag(W))` — within-class
+#'   \item{`"mahalanobis"` (CVA default)}{`sqrt(diag(W))` -- within-class
 #'     standard deviation per feature. This is the diagonal of the
 #'     Mahalanobis metric matrix stored on `bl_result$metric`. Features
 #'     that are good class separators (large between-class variance, small
@@ -46,8 +48,9 @@ utils::globalVariables(c("values", "Variable"))
 #'     `sum_j v_j^2 / W_jj`, with the full squared Mahalanobis distance
 #'     `v' W^{-1} v`, so users can judge how much the plot leaves out by
 #'     ignoring the correlations in `W`.}
-#'   \item{`"euclidean"`}{`X_sd` — total per-feature standard deviation
-#'     (legacy behaviour). Conflates within- and between-class variance.}
+#'   \item{`"euclidean"` (PCA default)}{`X_sd` -- total per-feature standard
+#'     deviation, as the thesis standardises the variable importance
+#'     (section 4.2.2). Conflates within- and between-class variance.}
 #' }
 #' If the projection was standardised (PCA with `standardise = TRUE`),
 #' the X-space vector is first unstandardised by multiplying by `X_sd`
@@ -73,8 +76,9 @@ utils::globalVariables(c("values", "Variable"))
 #' @param x        A `"bl_boundary"` object from `bl_find_boundary()`.
 #' @param type     Character; `"jitter"` (default) or `"boxplot"`.
 #' @param distance Character; per-feature standardisation metric. One of
-#'   `"mahalanobis"` (default; uses `sqrt(diag(W))`) or `"euclidean"` (legacy;
-#'   uses `X_sd`).
+#'   `"auto"` (default: `"euclidean"` for a PCA biplot, `"mahalanobis"` for a
+#'   CVA biplot), `"mahalanobis"` (uses `sqrt(diag(W))`) or `"euclidean"`
+#'   (uses `X_sd`).
 #' @param ...      Unused; for S3 compatibility.
 #'
 #' @return Invisibly returns a named list with:
@@ -86,7 +90,8 @@ utils::globalVariables(c("values", "Variable"))
 #'   \item{`vec_to_boundary_sd`}{n x p matrix of signed standardised
 #'     distances (one row per obs, one column per variable).}
 #'   \item{`distance`}{Character; the denominator used, `"mahalanobis"`
-#'     (within-class SD) or `"euclidean"` (total SD).}
+#'     (within-class SD) or `"euclidean"` (total SD), after `"auto"` is
+#'     resolved.}
 #'   \item{`mahalanobis_check`}{For `"mahalanobis"`, a list of squared
 #'     distances summed across observations: `plotted` (the per-feature
 #'     measure, `sum(vec_to_boundary_sd^2)`), `full` (`v' W^{-1} v`),
@@ -100,12 +105,14 @@ utils::globalVariables(c("values", "Variable"))
 #' @importFrom ggplot2 element_text position_dodge
 #' @export
 plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
-                              distance = c("mahalanobis", "euclidean"), ...) {
+                              distance = c("auto", "mahalanobis", "euclidean"),
+                              ...) {
 
-  type     <- match.arg(type)
-  distance <- match.arg(distance)
+  type      <- match.arg(type)
+  bl_result <- x$bl_result
+  # "auto": total SD under PCA, within-class SD under CVA (the thesis rule)
+  distance  <- .resolve_distance(distance[1L], bl_result)
 
-  bl_result   <- x$bl_result
   var_names   <- bl_result$var_names
   proj_dims   <- bl_result$proj_dims
   tV          <- bl_result$tV
@@ -267,8 +274,9 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
 #'
 #' @param bl_boundary A `"bl_boundary"` object from `bl_find_boundary()`.
 #' @param distance    Character; per-feature standardisation metric. One of
-#'   `"mahalanobis"` (default; uses `sqrt(diag(W))` from
-#'   `bl_result$metric`) or `"euclidean"` (legacy; uses `X_sd`). See
+#'   `"auto"` (default: `"euclidean"` for a PCA biplot, `"mahalanobis"` for a
+#'   CVA biplot), `"mahalanobis"` (uses `sqrt(diag(W))` from
+#'   `bl_result$metric`) or `"euclidean"` (uses `X_sd`). See
 #'   [plot.bl_boundary()] for full details.
 #'
 #' @return Named list with:
@@ -280,14 +288,14 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
 #'
 #' @export
 bl_robustness <- function(bl_boundary,
-                           distance = c("mahalanobis", "euclidean")) {
+                           distance = c("auto", "mahalanobis", "euclidean")) {
 
   if (!inherits(bl_boundary, "bl_boundary"))
     stop("'bl_boundary' must be a 'bl_boundary' object from bl_find_boundary().",
          call. = FALSE)
-  distance <- match.arg(distance)
 
   bl_result   <- bl_boundary$bl_result
+  distance    <- .resolve_distance(distance[1L], bl_result)
   var_names   <- bl_result$var_names
   proj_dims   <- bl_result$proj_dims
   tV          <- bl_result$tV

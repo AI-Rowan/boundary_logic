@@ -13,7 +13,10 @@ distance and robustness measures are in a separate note,
 scripts here. **Last re-measured 2026-10-30**: all four scripts run end to end
 against the package on branch `paper_nr1_changes`, every assertion passes, and the
 note's numbers are taken from those runs. `17_3` §11 (the CVA identity) was added
-on 2026-10-31.
+on 2026-10-31. **2026-11-05:** the package's default pair selector became
+`distance = "auto"` (Euclidean in X-space under PCA, Mahalanobis under CVA). The
+scripts pin `distance = "mahalanobis"`, the selector the note measured, and
+re-running `17_1`-`17_3` reproduces every number in the note.
 
 ## Contents
 

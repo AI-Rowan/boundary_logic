@@ -15,14 +15,14 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
   `.claude/plans/commit-and-push-the-mutable-hearth.md`. Both are gitignored, local only.
 - **`main` was last merged and pushed on 2026-08-03.** `method_developments` is at `b7aee65`
   (pushed 2026-10-29). Merging `paper_nr1_changes` back, and the release tag the paper will pin,
-  wait for the user's instruction after Gate 3.
-- **`paper_nr1_changes` is pushed up to `4ecdc8c`** (2026-11-04): `f2a076b` (session 1), `7aa1344`
+  wait for the user's instruction (part of the hand-over, below).
+- **`paper_nr1_changes` is pushed up to `540f9ad`** (2026-11-04): `f2a076b` (session 1), `7aa1344`
   (session 2), `f4f3647` and `f0e3dd4` (session 3), `a89ff1f` (session 4), `49c9067` (session 5),
-  `67a1424` (session 6: the Gate 2 fixes and the documentation audit), `4ecdc8c` (session 7: Task D,
-  CLAUDE.md, this file). **Uncommitted since:** `documentation/known-issues.md` (§1.2 no longer
-  cites Pima Figure 6(b); §1.7 run 5 distance 0.17, not 0.18), `CLAUDE.md` (two lines, §5) and this
-  file. Commit and push only when the user says so.
-- **Tasks A–D are done; Gate 2 is closed.** Task E and Gate 3 remain.
+  `67a1424` (session 6: the Gate 2 fixes and the documentation audit), `4ecdc8c` and `540f9ad`
+  (session 7: Task D, run 5). Session 8 (Task E and the PCA distance rule) is committed and pushed
+  in the commit after `540f9ad` (2026-11-05). Commit and push only when the user says so.
+- **Tasks A–E are done (session 8), committed and pushed.** The next step is the hand-over back
+  to the paper writer (below).
 - **`scripts/` is gitignored** — the user's personal scratch playground, never published. The
   Paper 1 Pima example (Task C) lives in `scripts/paper1-pima/` (local only, by design): its plan
   is `.claude/plans/paper1-pima-example.md`, its review page `scripts/paper1-pima/review.html`,
@@ -61,102 +61,181 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
-## Session summary (2026-11-04, session 7, latest) — the Pima review, the pruning and Task D
+## Session summary (2026-11-04, session 8, latest): Task E, the methodology-changes note
 
-**Plan:** `.claude/plans/i-have-reviewed-the-robust-rossum.md`, archived as
-`.claude/reference/known-issues-taskD-plan.md` with an implementation log. The user's decisions are
-in `scripts/paper1-pima/pruned-model-issues-review.md`.
+**Plan:** `.claude/plans/please-start-planning-task-frolicking-rossum.md`, archived as
+`.claude/reference/methodology-changes-taskE-plan.md` with implementation notes.
 
 ### What was done
 
-1. **The user's review of `review.html`** (scripts only, `scripts/paper1-pima/`):
-   - a paragraph before Figure 3: the biplot points are the 313 training rows; the targets come
-     from the 79 test rows;
-   - **pruning:** `02b_prune-refit.R` checks that DPF, SkinThickness and BMI are the three weakest
-     in the global search (48.68, 44.11, 40.05), re-splits the same rows (same split, checked) and
-     refits the GAM on four features. Phase 3 runs on it. Run 6 is Glucose and Insulin
-     `"decrease"`;
-   - **figures:** 3 = the 7-feature biplot; 4(a) = the importance boxplot ("global search"
-     subtitle); 4(b) = Figure 3 on four features. The old 4(a) and every mention of the arrow issue
-     are gone;
-   - every biplot axis shows at least 2 ticks (`ticks_v = 4L`, more per axis where needed);
-   - the Shapley subtitles give the target's and the counterfactual's predictions;
-   - the review page follows the workflow (Phase 3 after the pruning) and shows only open issues.
-2. **The user's decisions on the pruned model's issues:**
-   - 4(a): Figure 7 is TP run 4, TN run 1 and TN run 6;
-   - 5(b): run 2 is out of Table 1 (it equals run 1 for both targets);
-   - 9(b): the review page shows the Mahalanobis check for both models;
-   - 11, 12, 13: paper text; their package options go to Task D.
-3. **Task D:** `documentation/known-issues.md` — 9 open issues (the approximation gap, only the
-   winning pair's plane stored, `plot.bl_projection()`'s colours, the hard-coded `"fixed"`
-   tolerance, the follow-up searches for `"fixed"` and `"integer"`, the README constraint example,
-   the harness title) and 8 resolved ones with their commits. The arrow layer is left out (the
-   user's choice). CLAUDE.md §9 points to the note.
-4. **CLAUDE.md:** the note in §2; how to run the Pima example and how to get enough biplot ticks
-   (§5); `bl_prepare_data()`'s split depends only on rows and seed (§6).
-   `fixed-constraint-restore.md` §4 says its Pima example is the 7-feature run.
-5. **After `4ecdc8c` (the duplicate figure and run 5):** Figure 6(b) is removed (TP runs 4 and 5 give
-   the same point, now said in Figure 7(a)'s caption); Figure 6 is the per-pair dot chart, whose
-   (1,2) row is run 5's distance; Table 1 has a run 5 column ("pair (1,2) only"). Run 5 had been
-   specified only to draw Figure 6(b). Pima issue 14 (closed). CLAUDE.md §5 records what run 5 is
-   and how to quote the Pima numbers (a 0.18 for 0.1745 was corrected in the notes).
+1. **Planning.** Three explorations were run: the thesis text, the PhD code against the package, and
+   the package history. They gave five findings:
+   - **Three baselines.** The thesis text, its Appendix A (pp.158-218), and the branch
+     `original_PhD_code`, committed **2026-03-09, after submission**. A and B differ: A uses `which.min`,
+     B the random `max.col()`; A builds the local hull from target + training data, B from target +
+     test data.
+   - **Cite the final PDF** (printed page = PDF page - 16). The rotation note and CLAUDE.md cite the
+     30 Sept 2025 draft, about 20 pages higher.
+   - **The (n-g) identity is not in the thesis**, whose W is the SSP (factor 1).
+   - **The thesis Pima example did use pair (1,7)** (p.118).
+   - **The package departs from the thesis text** on the local hull (p.117), on the global
+     training-range filter (p.93), and on the pair selector under PCA (p.86).
+2. **The user's structure (at plan review):**
+   - a history of changes;
+   - then the **core methodology** (11 changes + 2 unstated properties, one decision box each);
+   - then the **code improvements** summarised (one box);
+   - then future changes and interpretation points.
+3. **Decisions:**
+   - `max_pairs` is measured on the 4-feature model only (10 = 21);
+   - the pair selector is the CVA identity, confirmed on Pima;
+   - Pima issues 9, 12 and 13 go into their core entries; issues 5 and 11 go into Section 6.
+4. **The measurement script `scripts/paper1-pima/04_method-change-effects.R`** (local) writes
+   `documentation/methodology-changes/method-change-effects.csv` (511 rows, commit `540f9ad`). It has
+   five self-checks, all passing:
+   - the baseline reproduces `numbers.rds`;
+   - the derived CVA labels reproduce V;
+   - `max_pairs` 10 = 21;
+   - the ratio d2_M/dist_z^2 = n-g = 309;
+   - no empty values.
+5. **The note** is `documentation/methodology-changes/methodology-changes.qmd`, rendered to `.docx`
+   (about 6,300 words). Every measured number is an inline `r` call on the CSV, and a `claims` chunk
+   asserts the qualitative statements. The prose follows the academic-writing-style skill; the style
+   check is within range except the short-sentence share, inflated by "p." citations, and "This"
+   chains at about 8%.
+6. **§3.3 rewritten (the user's question, 2026-11-05).** It now gives the recorded reason for keeping
+   global CFs outside the training ranges (`ea6a12f`, prompted by PCA). The CF is a rank-2
+   back-projection (`B_z %*% tVr` sets the non-plotted components to their mean), so its features can
+   leave the ranges even inside the hull, and a pre-filter picked a farther point. The section also
+   adds:
+   - that the package first followed the text (`e42fa03`);
+   - that the commit's "CVA was unaffected" does not hold on Pima;
+   - the distances-against-feasibility choice for the supervisor;
+   - whether the targets' global CFs are within range (new CSV rows).
 
-**Files changed (package repo):** `documentation/known-issues.md` (new),
-`.claude/reference/known-issues-taskD-plan.md` (new), `CLAUDE.md`,
-`documentation/fixed-constraint-restore.md` (in `67a1424`), `progress.md`.
+   The same reason is now in the walkthrough (`review_section7_to_8.md` Stage 8) and the
+   implementation summary §6.11. Section 5 adds a per-row feasibility flag.
+7. **The thesis distance rule under PCA (2026-11-05, the user's request).** Plan:
+   `.claude/reference/pca-euclidean-distance-plan.md`.
+   - **The change:** `distance = "auto"` (the new default) applies the thesis's rule by projection, Euclidean in
+     X-space (each feature divided by its total SD) under PCA and Mahalanobis under CVA. It applies in:
+     - `bl_find_local_cf()` (the pair comparison and the `"integer"` rounding);
+     - `plot.bl_boundary()` / `bl_robustness()` (the total SD under PCA).
+   - **Helpers and fields:** new private `.resolve_distance()` (`R/utils.R`) and `.cf_sq_distance()`
+     (`R/local_cf.R`); new fields `dist_x` and `all_distances_x`, which the print and plot show.
+   - **An explicit `"euclidean"`** now means the X-space distance; it was the plane distance.
+   - **Paper 1 (CVA) is unchanged:**
+     - `numbers.rds` is identical;
+     - `tests.R` 13/13;
+     - the loan harness's numbers are identical to `HEAD`.
+   - **The rotation scripts** `17_1`-`17_3` pin `distance = "mahalanobis"` and reproduce the note's numbers.
+   - **All notes updated:**
+     - CLAUDE.md;
+     - the implementation summary;
+     - the Foundation document;
+     - NEWS;
+     - the rotation, boundary-distance and fixed-constraint notes, and the rotation folder's README;
+     - `known-issues.md`;
+     - the methodology note (§3.1, §3.5, the summary, Tables 1, 2 and 5; new M5-PCA / M1-PCA measurements:
+       57 of 79 Pima test rows choose a different pair under PCA);
+     - both walkthroughs (samples refreshed from the harness log).
+8. **Corrections:**
+   - CLAUDE.md §6: the thesis pages and the (n-g) factor;
+   - NEWS.md: the "No effect" entry (class-0 targets only);
+   - an erratum line in `.claude/reference/mahalanobis_implementation_plan.md`;
+   - the working plan's tie-break bullet;
+   - CLAUDE.md §2: pointers to the note and the archived plan.
 
-**Key results (4-feature model):**
-- **Targets:** TP = test row 23 (prediction 0.963), TN = test row 25 (0.374).
-- **Runs without a counterfactual:** TP run 3 (no boundary point), TN runs 3 and 4 (the strict
-  restore fails: 0.475, 0.487).
-- **The TP counterfactual ages the patient** (Age 51 -> 59.58). The GAM's risk drops after 55, on
-  19 of 313 training patients over 50.
-- **Integer rounding:** for the TN target, Pregnancies 10.21 -> 11 triples √d²_M (0.14 -> 0.42).
-- **The Mahalanobis check:** -35.2% on four features, against -27.4% on seven.
-- **The pair search's gain** (run 1, all 6 pairs, against run 5, pair (1,2) only): √d²_M 1.50
-  against 1.92 for the TP target, 0.14 against 0.17 for the TN target.
+**Key results (Pima):**
+- **M1:** the thesis's total-SD rule gives the same ranks and prunes the same three features.
+- **M3:** on the 4-feature model, 10/313 training and 5/79 test global CFs lie outside the training
+  ranges (kept).
+- **M4:** 10 = 21; all 6 pairs against (1,2): search distance TP 1.92 -> 1.50, TN 0.17 -> 0.14.
+- **M5:** the same pair and CF under both selectors.
+- **M10:** greedy is sparser by one variable for both targets.
+- **K1** (`b_margin` 0.01): small changes; the rule picks TP row 1.
+- **K2** (`outlie` 0.9): run 1 unchanged; the rule picks TN row 69.
+- **K3** (thesis group order): V changes by 5e-17, yet the TP pair moves (2,3) -> (1,3) and its
+  distance 1.42 -> 1.70. This is evidence of the plane's under-determination (§3.12).
+- **2.12(a):** on the 4-feature model p - K = 1, so component 4 is fixed up to sign. The TN
+  counterfactual uses pair (2,4).
+
+**Files changed:**
+- package repo:
+  - `documentation/methodology-changes/` (new: qmd, docx, csv);
+  - `development/reference/review_section7_to_8.md` (Stage 8);
+  - `2 implementation_summary.txt` (§6.11);
+  - `CLAUDE.md`;
+  - `NEWS.md`;
+  - `.claude/reference/mahalanobis_implementation_plan.md`;
+  - `.claude/reference/methodology-changes-taskE-plan.md` (new);
+  - `progress.md`;
+  - **the PCA distance rule (2026-11-05):**
+    - `R/utils.R`, `R/local_cf.R`, `R/boundary_plot.R`, `R/projection.R`, `R/result.R` and `man/`;
+    - `tests/testthat/test-distance_by_method.R` (new) and `test-local_cf.R`;
+    - `1 Foundation intro documents.txt`;
+    - `documentation/biplot-rotation/` (the note, its README, and `17_1`/`17_2`/`17_3` pinned);
+    - `documentation/boundary-distance-and-robustness.md`, `fixed-constraint-restore.md` and
+      `known-issues.md`;
+    - `development/reference/review_section9_to_15.md`;
+    - `.claude/reference/pca-euclidean-distance-plan.md` (new);
+- local only:
+  - `scripts/paper1-pima/04_method-change-effects.R`;
+  - the working plan `.claude/plans/commit-and-push-the-mutable-hearth.md`.
 
 ### Test status
 
-- **Tests:** 434 PASS / 0 FAIL / 4 WARN / 0 SKIP (re-run before the commit; no `R/` changes this
-  session).
-- **`R CMD check`:** 0 / 0 / 0 (2026-11-04).
-- **Pima `tests.R`:** 13 of 13 PASS (the new check 1b covers the pruning; 8a–8c are identical).
+- **Tests:** 465 PASS / 0 FAIL / 4 WARN / 0 SKIP, after the PCA distance rule (was 434).
+- **Pima:** `run_all.R` gives `numbers.rds` identical to before (meta excluded); `tests.R` 13/13;
+  `04_method-change-effects.R` passes all 6 self-checks.
+- **The loan harness and the rotation scripts:** numbers identical to the `HEAD` baseline.
 
 ### Open points / blockers
 
 - **No blockers.**
-- **Uncommitted since `4ecdc8c`:** see Standing items. Commit when the user asks.
-- **For the Task E plan:** on the 4-feature model only 6 pairs exist, so `max_pairs = 21` against
-  `10` measures nothing there; the max_pairs effect must be measured on the 7-feature model. On the
-  4-feature model, run 1 against run 5 (Table 1) already measures all pairs against pair (1,2)
-  only.
-- **Paper text for Task E:** open issues 5, 9, 11, 12, 13 (`issues.csv`), and Gate 2 issues 3
-  and 6. Gate 2 issue 1 is removed and issue 10 is closed.
-- **The pkgdown site** (`docs/`) has not been rebuilt for sessions 2–7. Rebuild before a release
-  (CLAUDE.md §5).
-- **The Claude Doc copy of the Task C plan** (claude.ai artifact) is out of date; left alone.
-- 32 pre-existing non-ASCII characters remain in `R/` comments.
+- **Committed and pushed** (2026-11-05): everything listed above, in one commit on
+  `paper_nr1_changes`.
+- **Local only, by design:** `scripts/paper1-pima/` (including `04_method-change-effects.R`) and
+  `.claude/plans/`.
+- **Not done, out of scope:** the rotation note's thesis citations stay on the 30 Sept 2025 draft (it
+  says so). The pkgdown site is still not rebuilt.
 
 ### Next session (exact next step)
 
-1. **Start planning Task E** (in plan mode; the user starts it next session): the
-   methodology-changes note for the supervisor,
-   `documentation/methodology-changes/methodology-changes.qmd` rendered to `.docx`. The full
-   specification is in `.claude/plans/boundary-logic-fix-prompt.md` (Task E, Parts 1 and 2), with
-   the working plan's Task E section. The plan must settle:
-   - which model the measurements run on (see the max_pairs point above);
-   - the measurement script in `scripts/paper1-pima/` and its `method-change-effects.csv`;
-   - the paper-text items above;
-   - the thesis's random tie-break (inherited from the PhD code) and the CVA distance identity.
-2. **Then Gate 3**, and after it the merge, the release tag, and the Pima scripts' move to the
-   paper repo (reinstall the package first).
+1. **Prepare the hand-over back to the paper writer** (the Paper 1 project,
+   `../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/`). Plan it first. It is
+   the report the task prompt asks for (`.claude/plans/boundary-logic-fix-prompt.md`, "A
+   recommendation, then your report"):
+   - the `devtools::test()` counts: 465 PASS / 0 FAIL / 4 WARN;
+   - the files changed;
+   - the Task C issues with the user's decision on each (`scripts/paper1-pima/issues.csv`);
+   - the paths of `scripts/paper1-pima/review.html` and
+     `documentation/methodology-changes/methodology-changes.docx`;
+   - the commit SHA;
+   - the reinstall command.
+
+   **Also for the paper writer:**
+   - the paper-text items: the methodology note's proposed sentences (issues 5, 9, 11, 12 and 13);
+   - the changes since the prompt that affect the paper: the `"integer"` constraint, strict
+     `"fixed"`, the pruned 4-feature Phase 3 model, and the 2026-11-05 PCA distance rule (no effect
+     on Paper 1, which uses CVA);
+   - how the Pima scripts move to the paper repo: the one `library(boundarylogic)` line in
+     `00_setup.R`; `04_method-change-effects.R` writes into this repo's `documentation/`, so it stays
+     here or takes `METHOD_CHANGES_OUT`.
+2. **On the user's instruction, as part of the hand-over:**
+   - merge `paper_nr1_changes` into `method_developments` (and `main`);
+   - tag the release the paper pins, `install_github("AI-Rowan/boundary_logic@<tag>")`;
+   - reinstall the package locally (the installed copy is stale);
+   - copy the Pima scripts to the paper repo and re-run them against the installed package.
+3. **The supervisor's decisions** on the methodology note (Gate 3) may come back with edits: apply
+   them to the `.qmd`, re-run `04_method-change-effects.R` if a measurement changes, and re-render.
 
 ---
 
 ## History (one line per session, newest first)
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
+
+- **2026-11-04 (session 7)** -- the user's review of the Pima page; pruning to four features (`02b_prune-refit.R`, Phase 3 on the 4-feature GAM); Task D (`documentation/known-issues.md`, 9 open / 8 resolved); figure 6(b) removed and run 5 added to Table 1. Committed as `4ecdc8c` and `540f9ad`, pushed. 434 PASS.
 
 - **2026-11-02 to 2026-11-04 (session 6)** — Task C (the Paper 1 Pima example, Gate 2: 10 issues),
   then the Gate 2 fixes: `dist_mahalanobis` in `bl_find_boundary()`, strict `"fixed"`, the

@@ -1,5 +1,5 @@
 ############################################################
-# Internal utilities: input validation and Gini calculation
+# Internal utilities: input validation, distance metric and Gini calculation
 ############################################################
 
 # --------------------------------------------------------------------------
@@ -54,6 +54,29 @@ stop_if_not_positive_integer <- function(x, arg_name) {
     stop(sprintf("'%s' must be a single positive integer.", arg_name),
          call. = FALSE)
   }
+}
+
+# --------------------------------------------------------------------------
+# Distance metric
+# The thesis measures distances by Euclidean distance under PCA and by
+# Mahalanobis distance under CVA (thesis section 3.9.1, p.86).
+# --------------------------------------------------------------------------
+
+#' Resolve the `distance` argument of a distance-measure function
+#'
+#' `"auto"` follows the thesis rule: `"euclidean"` for a PCA biplot and
+#' `"mahalanobis"` for a CVA biplot. A `bl_result` without `method` (built
+#' before the field existed) resolves to `"mahalanobis"`, the earlier default.
+#'
+#' @param distance  Character; `"auto"`, `"mahalanobis"` or `"euclidean"`.
+#' @param bl_result A `"bl_result"` object.
+#'
+#' @return `"mahalanobis"` or `"euclidean"`.
+#' @keywords internal
+.resolve_distance <- function(distance, bl_result) {
+  distance <- match.arg(distance, c("auto", "mahalanobis", "euclidean"))
+  if (distance != "auto") return(distance)
+  if (identical(bl_result$method, "PCA")) "euclidean" else "mahalanobis"
 }
 
 # --------------------------------------------------------------------------

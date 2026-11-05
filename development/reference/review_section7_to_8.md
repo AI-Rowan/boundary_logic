@@ -164,7 +164,7 @@ Column names set to `var_names`. This is the counterfactual in original feature 
 
 After selecting the nearest boundary, `train_ranges` are used to check whether the back-projected counterfactual falls within the observed range of each training feature. If any counterfactuals are out of range, a `message()` is printed (not a warning or error).
 
-**Why post-selection (not pre-filter):** Applying `train_ranges` *before* finding the nearest boundary point would filter out boundary segments that may be the geometrically correct nearest point. The correct approach is to find the true nearest point first, then report feasibility separately.
+**Why post-selection (not pre-filter):** the counterfactual is a point on the biplot plane mapped back to the p features through the two plotted components (`B_z %*% tVr`), so every component that is not plotted is set to its mean (a rank-2 reconstruction). Its feature values can fall outside the observed ranges even when the point lies well inside the convex hull, most often under PCA (the case that prompted the change, `ea6a12f`) but also under CVA. Applying `train_ranges` *before* finding the nearest boundary point would then discard the geometrically correct nearest point and select a farther one, changing the distances the variable importance and robustness aggregate. So the search finds the true nearest point first and reports feasibility separately, as a count only (no per-row flag). The thesis text filters by the ranges (§3.10 step 4, p.93); the departure is recorded for the supervisor in `documentation/methodology-changes/` §3.3.
 
 ---
 
@@ -282,7 +282,7 @@ Both calls render the same data in two different chart styles. The core computat
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
 | `type` | `"jitter"` | `"jitter"`, then `"boxplot"` | Chart style; the computation below is the same for both |
-| `distance` | `"mahalanobis"` | default | Per-feature denominator: `sqrt(diag(W))` (within-class SD), or `X_sd` (total SD) under `"euclidean"`. `"mahalanobis"` also prints the Mahalanobis check |
+| `distance` | `"auto"` | default | Per-feature denominator, by the thesis rule: under CVA (as here) `"mahalanobis"`, `sqrt(diag(W))` (within-class SD), which also prints the Mahalanobis check; under PCA `"euclidean"`, `X_sd` (total SD) |
 
 Full argument list: `?plot.bl_boundary`.
 
@@ -304,17 +304,17 @@ Because CVA has `standardise = FALSE`, no `X_sd` multiplication is needed here.
 
 Then standardise by dividing by a per-feature denominator so all features are on the same scale. The denominator depends on the `distance` argument:
 ```
-# distance = "mahalanobis" (default):
+# distance = "mahalanobis" (the default under CVA, used here):
 denom              = sqrt(diag(bl_results$metric))    # within-class SD per feature
 vec_to_boundary_sd = vec_to_boundary / denom          # n x p signed standardised distances
 
-# distance = "euclidean" (total-SD alternative):
+# distance = "euclidean" (the default under PCA; the thesis's total SD):
 vec_to_boundary_sd = vec_to_boundary / X_sd           # n x p, total SD denominator
 ```
 
 Each cell `[i, j]` is the **signed standardised distance** from observation `i` to its counterfactual in the direction of feature `j`. The sign indicates which side of the boundary the observation is on for that feature.
 
-**Why within-class SD (the default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
+**Why within-class SD (the CVA default).** `X_sd` mixes within-class noise with between-class signal. For a classification problem the relevant noise model is within-class, so dividing by `sqrt(diag(W))` correctly amplifies features that are good class separators (small within-class variance, large between-class variance). Phase 2 distance plots under the default emphasise the features that *actually matter* for the boundary, not those that simply happen to have a wide marginal spread.
 
 A Mahalanobis check is printed to the console when `distance = "mahalanobis"`. It compares the squared length of the plotted distances, `sum(vec_to_boundary_sd^2)` (that is, the sum of v_j^2 / W_jj), with the full squared Mahalanobis distance v' W^-1 v, both summed across observations. Their difference is what the per-feature plot leaves out by ignoring the correlations in W: positive means the plot understates the distance, negative that it overstates it. See `2 implementation_summary.txt` Section 4.6.1 for why the full Shapley decomposition is theoretically more correct but is not used (`O(n * 2^p)` cost).
 
@@ -421,7 +421,7 @@ Returns a list invisibly:
 | `sum_of_distance` | named numeric vector (length p) | Per-feature total absolute standardised distance |
 | `robustness` | numeric scalar | Sum of `sum_of_distance` across all features |
 | `vec_to_boundary_sd` | numeric matrix (n × p) | Full signed standardised distance matrix |
-| `distance` | character | The denominator used: `"mahalanobis"` (within-class SD) or `"euclidean"` (total SD) |
+| `distance` | character | The denominator used, after `"auto"` is resolved: `"mahalanobis"` (within-class SD) or `"euclidean"` (total SD) |
 | `mahalanobis_check` | list or `NULL` | `plotted`, `full`, `difference`, `pct`: the console check's numbers; `NULL` under `"euclidean"` |
 
 ---
@@ -450,7 +450,7 @@ cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
 
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
-| `distance` | `"mahalanobis"` | default | Per-feature denominator `sqrt(diag(W))`, the same as `plot(bl_bnd)`, so the totals match Step 7's console output |
+| `distance` | `"auto"` | default | Resolves to `"mahalanobis"` under CVA: per-feature denominator `sqrt(diag(W))`, the same as `plot(bl_bnd)`, so the totals match Step 7's console output |
 
 Full argument list: `?bl_robustness`.
 

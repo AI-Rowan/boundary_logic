@@ -71,7 +71,9 @@
 #'   \item{`biplot_obj`}{The biplotEZ object for Phase 2 plotting.}
 #'   \item{`metric`}{Within-class covariance matrix `W` (p x p), or total
 #'     covariance `Sigma` when no class info was available. Used as the
-#'     Mahalanobis metric in `bl_find_local_cf()` and `plot.bl_boundary()`.}
+#'     Mahalanobis metric in `bl_find_local_cf()` and `plot.bl_boundary()`
+#'     (their default under CVA; under PCA they default to Euclidean
+#'     distance).}
 #'   \item{`metric_inv`}{Inverse of `metric` via Cholesky (p x p).}
 #'   \item{`metric_type`}{`"W_cva"`, `"W_binary"`, or `"Sigma"`.}
 #'   \item{`polygon`}{Convex hull of the training data in the final biplot

@@ -10,6 +10,14 @@
 > This is the verbatim approved plan, preserved for future reference. The
 > technical note linked above explains *why* the change was made; this file
 > documents *what* was done and *how*.
+>
+> **Erratum (2026-11-04, Task E):** the description of the PhD code below is
+> wrong on two points. The branch `origin/original_PhD_code` takes `Wmat` from
+> biplotEZ (`Wmat <- biplot_input$biplot_out$Wmat`, `3.1 Biplot search - Train
+> data.r:189`), and inverts it with no divisor (`Wmat_inv <- solve(Wmat)`,
+> `4.3 Different Eigenvalues.R:62`); biplotEZ's `Wmat` is the within-groups SSP.
+> The division by (n - g) is the package's own. See
+> `documentation/methodology-changes/methodology-changes.qmd` §3.2.
 
 ---
 

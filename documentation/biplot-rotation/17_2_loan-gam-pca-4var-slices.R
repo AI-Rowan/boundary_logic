@@ -128,9 +128,11 @@
 # ----------------------------------------------------------------------------
 # TERMINOLOGY DISCIPLINE
 #
-# "Optimal" and "best" refer ONLY to what bl_find_local_cf() measures: the
+# "Optimal" and "best" refer ONLY to what bl_find_local_cf() measures here: the
 # smallest squared Mahalanobis distance from the target to its counterfactual,
-# under the inverse pooled within-class covariance. How steeply a plane is tilted,
+# under the inverse pooled within-class covariance. (This script pins
+# distance = "mahalanobis", the selector the rotation note measured; since
+# 2026-11-05 the PCA default is the X-space Euclidean distance.) How steeply a plane is tilted,
 # how much variance a basis retains, and how readable a figure is are NOT criteria
 # the package optimises, and they can point the opposite way (see finding 2 above,
 # where the basis that keeps more variance is the one that breaks the geometry).
@@ -261,8 +263,9 @@ if (is.null(metric_inv))
 # It is the only supported way to force a plane, and it is what makes a
 # pinned-versus-selected comparison possible at all.
 tgt    <- bl_select_target(bl_res, target = bl_res$train_data[i, ])
-loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, verbose = FALSE)
-loc_op <- bl_find_local_cf(bl_res, tgt, verbose = FALSE)
+loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, distance = "mahalanobis",
+                           verbose = FALSE)
+loc_op <- bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE)
 
 if (!isTRUE(loc_12$solution_found) || !isTRUE(loc_op$solution_found))
   stop("bl_find_local_cf() found no counterfactual; every section from 12 on needs ",
@@ -298,7 +301,8 @@ if (ang_BC[2] < 5)
 # Reproducibility check (note Appendix A.2): the package's local search is
 # deterministic, so five repeat calls must agree. A disagreement is a regression.
 reps <- replicate(5L, paste(as.integer(
-  bl_find_local_cf(bl_res, tgt, verbose = FALSE)$best_pair), collapse = ","))
+  bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE)$best_pair),
+  collapse = ","))
 cat(sprintf("best_pair across 5 identical calls: %s\n",
             paste(unique(reps), collapse = " | ")))
 if (length(unique(reps)) > 1L)

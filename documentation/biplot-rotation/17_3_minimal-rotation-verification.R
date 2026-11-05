@@ -120,8 +120,10 @@ cat(sprintf("  p = 4, target row %d | p = 3, target row %d\n", S4$i, S3$i))
 
 # The package's own answer for each setup. The local search is deterministic
 # (sections 5 and 8b assert it), so the call order does not matter.
-pkg_ref4 <- bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)$dist_mahalanobis
-pkg_ref3 <- bl_find_local_cf(S3$bl_res, S3$tgt, verbose = FALSE)$dist_mahalanobis
+pkg_ref4 <- bl_find_local_cf(S4$bl_res, S4$tgt, distance = "mahalanobis",
+                             verbose = FALSE)$dist_mahalanobis
+pkg_ref3 <- bl_find_local_cf(S3$bl_res, S3$tgt, distance = "mahalanobis",
+                             verbose = FALSE)$dist_mahalanobis
 cat(sprintf("  package reference: p = 4 %.6f | p = 3 %.6f\n",
             pkg_ref4, pkg_ref3))          # expect 1.147879 and 1.312277
 
@@ -239,9 +241,11 @@ cat("\n=== 4) Dimension of the planes-through-the-target family (p = 4) ===\n")
 # the nearest-vertex step made these differ; see the note's A.2.)
 cat("\n=== 5) The package's local search: one pair, one answer (p = 4) ===\n")
 {
-  l12a <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, verbose = FALSE)
-  lop  <- bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)
-  l12b <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, verbose = FALSE)
+  l12a <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, distance = "mahalanobis",
+                           verbose = FALSE)
+  lop  <- bl_find_local_cf(S4$bl_res, S4$tgt, distance = "mahalanobis", verbose = FALSE)
+  l12b <- bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L, distance = "mahalanobis",
+                           verbose = FALSE)
   a <- l12a$dist_mahalanobis
   b <- as.numeric(lop$all_distances_mahalanobis[["(1,2)"]])
   cat(sprintf("  pinned (1,2), squared mah      = %.6f\n", a))   # expect 1.208670
@@ -391,9 +395,10 @@ cat("\n=== 8) p = 4 family lattice (200 points) ===\n")
 # tie-break in the nearest-vertex step.)
 cat("\n=== 8b) The package's local search: any call order (p = 4, row 49) ===\n")
 {
-  full <- function() bl_find_local_cf(S4$bl_res, S4$tgt, verbose = FALSE)
-  pin  <- function() bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L,
+  full <- function() bl_find_local_cf(S4$bl_res, S4$tgt, distance = "mahalanobis",
                                       verbose = FALSE)
+  pin  <- function() bl_find_local_cf(S4$bl_res, S4$tgt, max_pairs = 1L,
+                                      distance = "mahalanobis", verbose = FALSE)
   seqn <- list("full" = full, "pin" = pin, "full" = full, "full" = full,
                "pin" = pin, "full" = full, "full" = full)
   seen <- list(full = numeric(0), pin = numeric(0))
@@ -419,7 +424,7 @@ cat("\n=== 8b) The package's local search: any call order (p = 4, row 49) ===\n"
 cat("\n=== 9) Cost (reported, not asserted -- wall clock is machine-dependent) ===\n")
 {
   t0 <- proc.time()[["elapsed"]]
-  invisible(bl_find_local_cf(S3$bl_res, S3$tgt, verbose = FALSE))
+  invisible(bl_find_local_cf(S3$bl_res, S3$tgt, distance = "mahalanobis", verbose = FALSE))
   t_pkg <- proc.time()[["elapsed"]] - t0
 
   # Batched: every plane's every ray in ONE predict call per step.
@@ -570,19 +575,21 @@ cat("\n=== 11) The CVA identity: one in-plane step, every pair (iris) ===\n")
             all(abs(tab[, "ratio"] / n_g - 1) < 1e-8),   # one ratio, n - g, every pair
             diff(range(tab[, "eucl"])) > 1)              # though dx differs between pairs
 
-  # The package's own search: both selectors, one ratio
+  # The package's own search: the Mahalanobis selector against the plane
+  # distance, one ratio. (Since 2026-11-05 distance = "euclidean" measures in
+  # X-space, so the plane-distance ranking is read from all_distances.)
   tg   <- bl_select_target(r_cva, target = 1L)
-  lo_m <- quiet(bl_find_local_cf(r_cva, tg, verbose = FALSE))
-  lo_e <- quiet(bl_find_local_cf(r_cva, tg, distance = "euclidean", verbose = FALSE))
+  lo_m <- quiet(bl_find_local_cf(r_cva, tg, distance = "mahalanobis", verbose = FALSE))
   rt   <- lo_m$all_distances_mahalanobis / lo_m$all_distances^2
   rt   <- rt[is.finite(rt)]
   cat(sprintf("  package search, target 1: %d pairs | d2_M / dist_z^2 in [%.6f, %.6f]\n",
               length(rt), min(rt), max(rt)))             # expect 6 pairs, 146 and 146
-  cat(sprintf("  best pair: distance = \"mahalanobis\" (%s) | \"euclidean\" (%s)\n",
-              paste(lo_m$best_pair, collapse = ","),
-              paste(lo_e$best_pair, collapse = ",")))    # expect (3,4) | (3,4)
+  best_m <- paste(lo_m$best_pair, collapse = ",")
+  best_z <- gsub("[()]", "", names(which.min(lo_m$all_distances)))
+  cat(sprintf("  best pair: by Mahalanobis (%s) | by plane distance (%s)\n",
+              best_m, best_z))                           # expect (3,4) | (3,4)
   stopifnot(length(rt) >= 2L, all(abs(rt / n_g - 1) < 1e-8),
-            identical(lo_m$best_pair, lo_e$best_pair))
+            identical(best_m, best_z))
 
   # 2-group CVA: biplotEZ adds the second axis by CVAlowdim("sample.opt"),
   # cbind(M[, 1], M[, -1] %*% <orthogonal>), which keeps M'WM = I.
@@ -602,7 +609,7 @@ cat("\n=== 11) The CVA identity: one in-plane step, every pair (iris) ===\n")
   # selectors are different criteria and can pick different pairs.
   r_pca <- quiet(bl_build_result(d_ir, m_ir, method = "PCA"))
   lo_p  <- quiet(bl_find_local_cf(r_pca, bl_select_target(r_pca, target = 1L),
-                                  verbose = FALSE))
+                                  distance = "mahalanobis", verbose = FALSE))
   rt_p  <- lo_p$all_distances_mahalanobis / lo_p$all_distances^2
   rt_p  <- rt_p[is.finite(rt_p)]
   cat(sprintf("  PCA (reported): ratio in [%.6f, %.6f] | best by Z %s, by Mahalanobis %s\n",

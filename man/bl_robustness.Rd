@@ -4,14 +4,15 @@
 \alias{bl_robustness}
 \title{Global robustness score: total distance to boundary}
 \usage{
-bl_robustness(bl_boundary, distance = c("mahalanobis", "euclidean"))
+bl_robustness(bl_boundary, distance = c("auto", "mahalanobis", "euclidean"))
 }
 \arguments{
 \item{bl_boundary}{A \code{"bl_boundary"} object from \code{bl_find_boundary()}.}
 
 \item{distance}{Character; per-feature standardisation metric. One of
-\code{"mahalanobis"} (default; uses \code{sqrt(diag(W))} from
-\code{bl_result$metric}) or \code{"euclidean"} (legacy; uses \code{X_sd}). See
+\code{"auto"} (default: \code{"euclidean"} for a PCA biplot, \code{"mahalanobis"} for a
+CVA biplot), \code{"mahalanobis"} (uses \code{sqrt(diag(W))} from
+\code{bl_result$metric}) or \code{"euclidean"} (uses \code{X_sd}). See
 \code{\link[=plot.bl_boundary]{plot.bl_boundary()}} for full details.}
 }
 \value{

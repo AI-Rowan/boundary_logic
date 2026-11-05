@@ -299,8 +299,10 @@ if (CHECK_PKG) {
 #                  where metric_inv is the inverse POOLED WITHIN-CLASS covariance.
 #                  NOTE: this is the SQUARED Mahalanobis distance -- no sqrt. The
 #                  package's own summary prints sqrt() of it.
-#   7. SELECTION   argmin over pairs of dist_mah (distance = "mahalanobis", the
-#                  default), else of dist_z.
+#   7. SELECTION   argmin over pairs of dist_mah (distance = "mahalanobis"; this
+#                  script pins it, the selector the rotation note measured --
+#                  since 2026-11-05 the PCA default is "euclidean", the X-space
+#                  distance, which equals dist_z under a standardised PCA).
 #   8. RESTORE     after selection, a "fixed" feature the search moved is set back
 #                  to its observed value when that point still crosses the
 #                  boundary. No set_filters are used here, so it never applies.
@@ -519,8 +521,8 @@ third_axis <- function(Vr) {
 V_A <- V_full
 if (CHECK_PKG) {
   tgt    <- bl_select_target(bl_res, target = bl_res$train_data[i, ])
-  loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, verbose = FALSE)  # pinned to (1,2)
-  loc_op <- bl_find_local_cf(bl_res, tgt, verbose = FALSE)                  # full search
+  loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, distance = "mahalanobis", verbose = FALSE)  # pinned to (1,2)
+  loc_op <- bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE)                  # full search
   stopifnot(identical(as.integer(loc_12$best_pair), c(1L, 2L)),
             isTRUE(loc_12$solution_found), isTRUE(loc_op$solution_found))
   pkg_pair <- as.integer(loc_op$best_pair)

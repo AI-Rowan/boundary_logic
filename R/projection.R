@@ -13,7 +13,9 @@
 #' Returns the metric matrix M and its inverse M_inv for use by
 #' \code{bl_find_local_cf()} (cross-pair selection) and
 #' \code{plot.bl_boundary()} / \code{bl_robustness()} (per-variable
-#' standardisation). Priority order for choosing M:
+#' standardisation) when \code{distance = "mahalanobis"}, the default under
+#' CVA; under PCA those functions default to Euclidean distance. Priority
+#' order for choosing M:
 #'   1. \code{W} from \code{cva_classes} (CVA-consistent)
 #'   2. \code{W} from binary 0/1 class column (PCA with classification)
 #'   3. \code{Sigma = cov(X)} (no class info; PCA exploratory)
@@ -134,7 +136,8 @@
 #'   \item{`metric`}{Numeric matrix (p x p); the within-class covariance
 #'     `W` (or total covariance `Sigma` when no class info is supplied) used
 #'     as the Mahalanobis metric by `bl_find_local_cf()` and
-#'     `plot.bl_boundary()`.}
+#'     `plot.bl_boundary()` (their default under CVA; under PCA they default
+#'     to Euclidean distance).}
 #'   \item{`metric_inv`}{Numeric matrix (p x p); `solve(metric)` computed via
 #'     `chol2inv(chol(.))` for numerical stability on SPD matrices, with
 #'     ridge fallback when singular.}

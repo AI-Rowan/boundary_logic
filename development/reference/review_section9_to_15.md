@@ -351,7 +351,7 @@ bl_local <- bl_find_local_cf(
 | `set_filters` | `NULL` | `flt` | Actionability constraints (Step 10b); `NULL` searches without constraints (Step 15) |
 | `max_pairs` | `21L` | default | Eigenvector pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
 | `m` | `200L` | default | Grid resolution per pair |
-| `distance` | `"mahalanobis"` | default | Cross-pair selector: squared Mahalanobis distance in X-space, or Z-space distance under `"euclidean"` |
+| `distance` | `"auto"` | default | Cross-pair selector, by the thesis rule: under CVA (as here) `"mahalanobis"`, the squared Mahalanobis distance in X-space; under PCA `"euclidean"`, the X-space Euclidean distance with each feature divided by its total SD |
 | `verbose` | `TRUE` | default | Prints progress messages |
 
 Full argument list: `?bl_find_local_cf`.
@@ -462,28 +462,29 @@ All surviving contour rows are combined into `all_Mi`. The nearest to `Z_target`
 
 #### Stage G — Update best result
 
-For every pair (whether or not it wins), the back-projection from `B_z_local` to `B_x` is computed and the **squared Mahalanobis distance in X-space** is calculated:
+For every pair (whether or not it wins), the back-projection from `B_z_local` to `B_x` is computed, and two X-space distances are calculated, the **squared Mahalanobis distance** and the **Euclidean distance on the total-SD scale**:
 
 ```
 v        = B_x - x_obs                              # 1 x p in X-space
 dist_mah = as.numeric(t(v) %*% metric_inv %*% v)    # scalar squared Mahalanobis
+dist_x   = sqrt(sum((v / X_sd)^2))                  # .cf_sq_distance(v, "euclidean", ...)
 ```
 
-where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance matrix stored on `bl_result$metric_inv`. The Cholesky decomposition is used for the inversion -- see `2 implementation_summary.txt` Section 4.2.1 for the maths and singularity safeguards.
+where `metric_inv = W^{-1}` is the inverse of the pooled within-class covariance matrix stored on `bl_result$metric_inv`, and `X_sd` the total SD of each feature. The Cholesky decomposition is used for the inversion -- see `2 implementation_summary.txt` Section 4.2.1 for the maths and singularity safeguards.
 
-The pair selector then depends on the `distance` argument of `bl_find_local_cf()`:
+The pair selector then depends on the `distance` argument of `bl_find_local_cf()`. Its default, `"auto"`, follows the thesis rule (§3.9.1): `"mahalanobis"` under CVA, `"euclidean"` under PCA.
 
-- `distance = "mahalanobis"` (default): pair selected by minimum `dist_mah`. This is the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` criterion.
-- `distance = "euclidean"`: pair selected by minimum `dist_z`.
+- `distance = "mahalanobis"` (the CVA default, used here): pair selected by minimum `dist_mah`. This is the PhD's `pc.distz <- v %*% Wmat_inv %*% t(v)` criterion.
+- `distance = "euclidean"` (the PCA default): pair selected by minimum `dist_x`.
 
-**Under CVA, as here, the two are the same criterion.**
+**Under CVA, as here, the Mahalanobis selector ranks the pairs as the plane distance does.**
 
 - **The identity:** biplotEZ's CVA loadings satisfy `V'WV = I/(n-g)`, and every rotated basis inherits it, so for the search's in-plane point `dist_mah = (n - g) * dist_z^2` for every pair.
-- **On `bl_results_v2`:** the ratio `all_distances_mahalanobis / all_distances^2` is 15992 (n = 15996, g = 4) for every pair. That holds in the Step 11 search, Step 15's unconstrained search and Step 16's external search. The two options pick the same pair.
+- **On `bl_results_v2`:** the ratio `all_distances_mahalanobis / all_distances^2` is 15992 (n = 15996, g = 4) for every pair. That holds in the Step 11 search, Step 15's unconstrained search and Step 16's external search. The Mahalanobis choice is the pair with the smallest `dist_z`.
 
-They differ only under PCA, where `dist_z` is standardised Euclidean distance and `W` is the binary-class covariance. The derivation is in `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §3.4.
+Under a standardised PCA the rotated loadings are orthonormal, so `dist_x` equals `dist_z` at the search point; `W` (the binary-class covariance) is used there only when `distance = "mahalanobis"` is passed. Under CVA `dist_x` is a different metric from `dist_z`, as the harness's per-pair table shows. The derivation is in `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §3.4.
 
-If the chosen selector for this pair beats the running `best_selector`, save everything for this pair as the new best result. The loop continues through all configured pairs, keeping the global minimum. Both `dist_z` and `dist_mah` are reported for the winning pair, plus per-pair tables `all_distances` and `all_distances_mahalanobis`.
+If the chosen selector for this pair beats the running `best_selector`, save everything for this pair as the new best result. The loop continues through all configured pairs, keeping the global minimum. `dist_z`, `dist_x` and `dist_mah` are reported for the winning pair, plus per-pair tables `all_distances`, `all_distances_x` and `all_distances_mahalanobis`.
 
 #### Stage H — Restore fixed features and round integer features (after the loop)
 
@@ -501,7 +502,7 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
 **The rounding step.** The private `.round_integers()` then handles every `"integer"` feature that is not fixed:
 1. A feature whose value moved and is not a whole number in raw units gets two candidates, the whole numbers just below and above. Every combination over the rounded features is a candidate point.
 2. Each candidate is re-scored and checked: it must still cross the boundary, meet every `set_filters()` constraint and lie within `train_ranges`.
-3. The valid candidate nearest the target, by the same selector as the pair search (here the squared Mahalanobis distance), replaces `B_x`, `B_z` and `B_pred`. On a tie, the first. If none is valid, no counterfactual is reported. The rule and why it tries both neighbours are in `documentation/fixed-constraint-restore.md` §5.
+3. The valid candidate nearest the target in X-space, by the same distance as the pair search (`.cf_sq_distance()`; here the squared Mahalanobis distance), replaces `B_x`, `B_z` and `B_pred`. On a tie, the first. If none is valid, no counterfactual is reported. The rule and why it tries both neighbours are in `documentation/fixed-constraint-restore.md` §5.
 4. `integer_check` records `vars`, `applied`, `n_candidates`, `n_valid`, `pred_rounded` and the point before rounding (`search_point`).
 
 In the harness run the restored point has `credit_score` at 634.2206. Both 634 and 635 still cross the boundary at 0.547 (the credit score crosses no split of the model here) and meet `"increase"`. The Mahalanobis rule keeps 635: its distance from the target is 0.5914 against 0.5949 for 634, because `W` correlates the credit score with the features that move. So the selector can choose a whole value further from the observed one, when the correlations make that move shorter in the metric.
@@ -517,7 +518,8 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 | `B_pred` | numeric scalar | Model probability at the counterfactual (≈ 0.5 on the boundary) |
 | `dist_z` | numeric scalar | Z-space distance from target to boundary, for the winning pair |
 | `dist_mahalanobis` | numeric scalar | Squared Mahalanobis distance in X-space, for the winning pair |
-| `distance` | character | The selector used (`"mahalanobis"` here) |
+| `dist_x` | numeric scalar | X-space Euclidean distance (each feature divided by its total SD), for the winning pair |
+| `distance` | character | The selector used, after `"auto"` is resolved (`"mahalanobis"` here) |
 | `Z_target` | matrix (1 × 2) | Target position in rotated Z-space |
 | `best_pair` | integer (length 2) | Winning eigenvector pair, e.g. `c(1L, 2L)` |
 | `Vr_rot` | matrix (p × 2) | Rotated loading matrix for best pair |
@@ -530,6 +532,7 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 | `xseq`, `yseq` | numeric (m) | Grid axis sequences |
 | `min_val`, `max_val` | numeric | Grid axis limits |
 | `all_distances` | named numeric | Best Z-distance per pair tried (NA if no solution) |
+| `all_distances_x` | named numeric | X-space Euclidean distance per pair tried (NA if no solution) |
 | `all_distances_mahalanobis` | named numeric | Squared Mahalanobis distance per pair tried (NA if no solution) |
 | `solution_found` | logical | `TRUE` if at least one valid boundary was found |
 | `blocking_constraint` | character or NULL | Reason message if no solution found: no boundary point met the constraints, or the fixed restore or the integer rounding failed (Stage H) |
@@ -547,6 +550,7 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
   Best pair      : (3, 4)
   Selector       : mahalanobis
   Distance (Z)   : 0.0046
+  Euclidean (X)  : 0.4862 (total-SD scale)
   Mahalanobis    : 0.5838 (sqrt of squared d_M^2 = 0.3408)
   Boundary pred  : 0.5470
   Fixed restored : loan_amnt
@@ -570,13 +574,13 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
            12000.00               14.15              0.0484              635.00 
 
   Per-pair distances:
-  pair      dist_z dist_mahalanobis
- (1,2) 0.028309256       12.8162127
- (1,3) 0.027807716       12.3661193
- (2,3) 0.028326778       12.8320826
- (1,4) 0.015557768        3.8707700
- (2,4) 0.027625664       12.2047315
- (3,4) 0.004616263        0.3407877
+  pair      dist_z    dist_x dist_mahalanobis
+ (1,2) 0.028309256 2.2489005       12.8162127
+ (1,3) 0.027807716 2.1554967       12.3661193
+ (2,3) 0.028326778 2.2510873       12.8320826
+ (1,4) 0.015557768 1.2202560        3.8707700
+ (2,4) 0.027625664 2.2367562       12.2047315
+ (3,4) 0.004616263 0.4862133        0.3407877
 
   Observed vs counterfactual (raw units):
                     observed counterfactual  change        constraint
@@ -658,7 +662,7 @@ units. After the SVD rotation has patched `Z`/`Lmat`/`ax.one.unit`,
 The relabel transforms only the biplotEZ `$means`/`$sd`, which are **rotation-invariant**, so it
 composes cleanly with the local rotation and leaves the plotted geometry untouched. The same
 applies to `plot.bl_surrogate()` and, by pass-through, `plot.bl_sparse_result()` (Step 14).
-In the console output, distances (`dist_z`, `dist_mahalanobis`) and Shapley contributions stay in
+In the console output, distances (`dist_z`, `dist_x`, `dist_mahalanobis`) and Shapley contributions stay in
 model units, while feature values (target, counterfactual, sparse CF) print in raw units.
 
 **Base-graphics title-error note:** `new_title` is written straight to `biplot_plot$Title` (no validation, matching `plot_biplotEZ()`), and biplotEZ forwards that field to `graphics::title(main = ...)` at plot-flush time. A length-1 character string (or `NA` to keep the default) is the intended contract. `title()` is tolerant: it coerces most atomic and even recursive inputs (numeric, multi-element character vectors, lists, data.frames) to a label via `as.character()`, so those do *not* error — they just produce an odd/recycled title. The error case is a value base R cannot coerce to a character vector at all — a **function/closure** or an **environment** — which raises `"cannot coerce type 'closure' to vector of type 'character'"` from *inside* the biplotEZ `plot()` call, not from the plot function's own argument handling. A length-1 character is the safe, intended input.
@@ -711,6 +715,7 @@ This means the axes, variable label positions, and tick marks are all recalculat
   Best pair      : (3, 4)
   Selector       : mahalanobis
   Distance (Z)   : 0.0046
+  Euclidean (X)  : 0.4862
   Mahalanobis    : 0.5838 (sqrt)
   Boundary pred  : 0.5470
 ------------------------
@@ -1101,7 +1106,7 @@ flt  [bl_filters]
      │    extract contour lines → ct_local
      │    filter: opposing class, set_filters, train_ranges, consistency
      │    .nearest_idx_block() → nearest boundary vertex
-     │    update best if dist_mah improves (the default selector)
+     │    update best if dist_mah improves (the default selector under CVA)
      │  [after the loop]: .restore_fixed() → loan_amnt back to 12,000, still 0.547 → used
      │                    .round_integers() → credit_score 634.22 → 635 (nearest valid), 0.547 → used
      ▼
@@ -1111,10 +1116,10 @@ bl_local  [bl_local_result]
   ├── B_pred    (0.547)
   ├── fixed_check (vars = loan_amnt, applied = TRUE, search_point)
   ├── integer_check (vars = credit_score, applied = TRUE, 2 candidates, 2 valid, search_point)
-  ├── dist_z, dist_mahalanobis, distance
+  ├── dist_z, dist_x, dist_mahalanobis, distance
   ├── Z_target, best_pair = (3, 4), Vr_rot, tVr_rot
   ├── Z_train_rot, Zgrid, grid_prob, col_value, ct_local
-  ├── all_distances, all_distances_mahalanobis, solution_found
+  ├── all_distances, all_distances_x, all_distances_mahalanobis, solution_found
   ├── bl_target = tgt
   ├── bl_counterfactual  (the boundary point, printed in raw units)
   ├── bl_result = bl_results_v2

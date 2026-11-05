@@ -82,7 +82,9 @@ for the 2D projection plane.}
 \item{\code{biplot_obj}}{The biplotEZ object for Phase 2 plotting.}
 \item{\code{metric}}{Within-class covariance matrix \code{W} (p x p), or total
 covariance \code{Sigma} when no class info was available. Used as the
-Mahalanobis metric in \code{bl_find_local_cf()} and \code{plot.bl_boundary()}.}
+Mahalanobis metric in \code{bl_find_local_cf()} and \code{plot.bl_boundary()}
+(their default under CVA; under PCA they default to Euclidean
+distance).}
 \item{\code{metric_inv}}{Inverse of \code{metric} via Cholesky (p x p).}
 \item{\code{metric_type}}{\code{"W_cva"}, \code{"W_binary"}, or \code{"Sigma"}.}
 \item{\code{polygon}}{Convex hull of the training data in the final biplot

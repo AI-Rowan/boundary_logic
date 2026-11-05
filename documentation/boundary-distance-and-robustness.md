@@ -160,7 +160,9 @@ that rotation, using a "rotated" metric. It need not, for three reasons.
      $\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$ and cancels. The rotation note §3.4 proves this, so a Z-space and an
      X-space measurement agree.
    - **Under PCA it is not a multiple of the identity,** so a Z-space distance would depend on the rotation.
-     Measuring in X-space avoids that.
+     Measuring in X-space avoids that. (Under PCA `bl_find_local_cf()` compares the pairs by the Euclidean
+     distance in X-space by default, `dist_x`, since 2026-11-05; this point applies when `"mahalanobis"` is
+     passed.)
 
 So "allowing for $\mathbf{A}$" is either automatic (CVA: it cancels) or the wrong thing to do (PCA: it would make
 the distance depend on the plane chosen to display the move).
@@ -217,14 +219,16 @@ sum_of_distance    <- colSums(abs(vec_to_boundary_sd), na.rm = TRUE)
   `sum_of_distance` ($T_j$).
 - **The robustness score:** `bl_robustness()` returns the same totals and their sum, `robustness`. The score is
   computed on the rows the boundary was found on: by default `test_data`, where the thesis used the training data.
-- **The denominator** is set by `distance`:
+- **The denominator** is set by `distance`. The default, `"auto"` (since 2026-11-05), follows the thesis's rule by
+  projection: the total SD for a PCA biplot, the within-class SD for a CVA biplot. Before, `"mahalanobis"` was the
+  default for both.
 
 | `distance` | denominator | |
 |---|---|---|
-| `"mahalanobis"` (default) | $\sqrt{\mathbf{W}_{jj}}$, the within-class SD | the package's choice (2026-05) |
-| `"euclidean"` | `X_sd`, the total SD | the thesis's rule |
+| `"mahalanobis"` (CVA default) | $\sqrt{\mathbf{W}_{jj}}$, the within-class SD | the package's choice (2026-05) |
+| `"euclidean"` (PCA default) | `X_sd`, the total SD | the thesis's rule |
 
-### 3.3 Why the default is the within-class SD
+### 3.3 Why the CVA default is the within-class SD
 
 **The decomposition.** For each feature, the total variance splits into within-class and between-class parts:
 
@@ -247,7 +251,9 @@ $$
 - per-feature totals on the plot's axis;
 - a scalar robustness.
 
-Only the denominator differs from the thesis.
+Only the denominator differs from the thesis. Under PCA the default keeps the thesis's total SD (since
+2026-11-05), so the departure applies to CVA biplots, where $\mathbf{W}$ is the metric the projection is built on.
+Under PCA $\mathbf{W}$ comes from the 0/1 class (`W_binary`), which the PCA axes do not use.
 
 ---
 
@@ -346,7 +352,8 @@ which mostly measured that mismatch.
    - **What `bl_find_boundary()` does:** returns `dist_mahalanobis` as `NA`, with a warning to rebuild.
 4. **External targets.** No class information is needed when distances are computed: the metric was fixed when the
    projection was built.
-5. **Reproducing the thesis.** `distance = "euclidean"` reproduces the thesis's Phase 2 measure.
+5. **Reproducing the thesis.** `distance = "euclidean"` reproduces the thesis's Phase 2 measure; it is the default
+   for a PCA biplot (`"auto"`, since 2026-11-05).
 
 ---
 

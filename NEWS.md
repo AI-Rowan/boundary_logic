@@ -2,6 +2,26 @@
 
 ## Breaking changes
 
+* The distance now follows the thesis rule by projection (thesis section
+  3.9.1): Euclidean distance for a PCA biplot, Mahalanobis distance for a CVA
+  biplot. The new default `distance = "auto"` resolves it in
+  `bl_find_local_cf()` (the pair comparison and the `"integer"` rounding) and
+  in `plot.bl_boundary()` / `bl_robustness()` (the variable-importance
+  standardisation). Under PCA the defaults change: the pairs are compared by
+  Euclidean distance in X-space, and the importance divides by the total
+  standard deviation (`X_sd`), as in the thesis; pass
+  `distance = "mahalanobis"` to reproduce earlier PCA results. Under CVA
+  nothing changes. Made on explicit instruction (2026-11-05); it resolves the
+  deferred PCA selector question (rotation note §4.4).
+* `bl_find_local_cf(distance = "euclidean")` now measures in X-space, each
+  feature divided by its total standard deviation, as `bl_find_boundary()`'s
+  `dist_x` (it was the distance on the rotated 2D plane). Under a
+  standardised PCA the two are equal at the search's point, since the rotated
+  loadings are orthonormal; the X-space distance also measures the
+  `"integer"` candidates correctly, which lie off the plane. Under CVA an
+  explicit `"euclidean"` is a different metric from the plane distance, whose
+  ranking equals the Mahalanobis one. `bl_find_local_cf()` returns the new
+  fields `dist_x` and `all_distances_x`, and its print shows them.
 * `bl_find_sparse_cf()`'s `round_to` is deprecated: a non-NULL value stops
   with a message. It rounded in model units (z-scores for a standardised
   model), one value for every feature, without re-checking the constraints,
@@ -136,8 +156,9 @@
   `bl_sparse_result` uses the same table layout, with `sparse` and `used`
   columns.
 * `bl_shapley()` adds a `"No effect"` class for a Shapley value of 0 (the
-  feature's change never moves the prediction). Such a feature was previously
-  labelled `"Supports"` and changed in the sparse counterfactual.
+  feature's change never moves the prediction). For a class-0 target such a
+  feature was previously labelled `"Supports"` and changed in the sparse
+  counterfactual; for a class-1 target it was labelled `"Contradicts"`.
   `print()` of a `bl_shapley` uses the same comparison-table layout, with
   `shapley` and `contribute` columns and the Shapley sum.
 * `bl_find_sparse_cf()` now selects features greedily: it changes the

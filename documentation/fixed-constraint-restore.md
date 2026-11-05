@@ -156,9 +156,11 @@ as continuous, and the counterfactual it finds is then put onto whole values.
 3. **The checks.** Each candidate is re-scored and kept only when its predicted
    class differs from the target's, it meets every `set_filters()` constraint
    (directions, ranges, `"fixed"`) and it lies within `train_ranges`.
-4. **The choice.** The valid candidate nearest the target by the search's own
-   selector (squared Mahalanobis distance in X-space, or Euclidean distance in
-   the rotated plane for `distance = "euclidean"`); on a tie, the first.
+4. **The choice.** The valid candidate nearest the target in X-space by the
+   search's own distance (`.cf_sq_distance()`: squared Mahalanobis, or for
+   `distance = "euclidean"`, the default under PCA, the Euclidean distance
+   with each feature divided by its total SD; until 2026-11-05 the latter was
+   measured in the rotated plane); on a tie, the first.
 5. **No valid candidate.** No counterfactual is reported, as for a failed
    restore (§4). `blocking_constraint` gives the boundary values, says that none
    of the combinations crosses the boundary within the constraints, and that

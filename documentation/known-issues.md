@@ -175,12 +175,13 @@ before it was written.
 | `rotate_deg` is not applied to the sparse counterfactual's cross | `rotate_deg` was removed from the local plots, whose orientation the optimal rotation fixes. | `f4f3647` |
 | `xgboost::xgboost()` models fail in prediction | `.pred_function()` accepts them. | `f4f3647` |
 | An empty outcome group breaks four-group CVA | `bl_build_projection()` drops empty groups, with a message. | `f4f3647` |
+| The PCA pair-selector default (`W_binary` Mahalanobis) departs from the thesis's Euclidean rule (rotation note §4.4) | `distance = "auto"` (2026-11-05): Euclidean in X-space on the total-SD scale under PCA, Mahalanobis under CVA, in `bl_find_local_cf()` and in Phase 2's `plot.bl_boundary()` / `bl_robustness()`. Paper 1 (CVA) is unchanged. | uncommitted |
 | `used_in_sparse` is `TRUE` for a fixed feature after the restore | The flag is `FALSE` for fixed features, matching what the sparse counterfactual does. | `7aa1344` |
 | Stale documentation: `dist_z`, the sparse colours and the Shapley `seed` in roxygen; the README; the "stratified" split; the walkthrough's `set_filters(person_age = "fixed")` examples after `person_age` was pruned | Corrected in the documentation sweep and the walkthrough review, and re-checked in the documentation audit of 2026-11-04. | `f2a076b`, `7aa1344` |
 
 ## 3. Other future work
 
 The methodological future work is in `../CLAUDE.md` §9 and is not repeated here: the minimal
-Givens rotation with a plane-family search (rotation note §5 and §6), the PCA pair-selector default,
-the full-Mahalanobis Shapley decomposition in Phase 2, per-variable standardisation methods, and
+Givens rotation with a plane-family search (rotation note §5 and §6), the full-Mahalanobis Shapley
+decomposition in Phase 2, per-variable standardisation methods, and
 LDA multi-class biplots.

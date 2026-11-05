@@ -298,10 +298,11 @@ ri_fixture <- function(pf, x_obs, B_x, cons,
   )
 }
 
-run_round <- function(f, distance = "mahalanobis") {
+run_round <- function(f, distance = "mahalanobis", X_sd = c(1, 1)) {
   boundarylogic:::.round_integers(f$best_result, f$x_obs, f$var_names, f$filters,
                                   f$bl_result, f$bl_target, sv = c(1, 1),
-                                  distance = distance, metric_inv = diag(2))
+                                  distance = distance, metric_inv = diag(2),
+                                  X_sd = X_sd)
 }
 
 pf_a  <- function(m, nd) stats::plogis(4 * (nd$a - 0.5))
@@ -320,10 +321,21 @@ test_that(".round_integers keeps the nearest whole-number point that still cross
   expect_equal(ic$pred_rounded, r$best_result$B_pred)
   expect_equal(as.numeric(r$best_result$B_z), c(1, 0.1))
   expect_equal(ic$search_point$B_x$a, 0.6)
-  # The Euclidean selector picks the same point here (B_z = x, Z_target = x_obs).
+  # The Euclidean selector (X-space, X_sd = 1, W = I) picks the same point.
   r_e <- run_round(ri_fixture(pf_a, c(-0.2, -0.3), data.frame(a = 0.6, b = 0.1),
                               list(a = "integer")), distance = "euclidean")
   expect_identical(r_e$best_result$B_x, r$best_result$B_x)
+})
+
+test_that("the Euclidean integer rounding measures in X-space on the total-SD scale", {
+  # Features a and b are integer; three whole-number combinations cross.
+  # The scale of each feature (X_sd) decides which is nearest.
+  B <- data.frame(a = 0.4, b = 0.4)
+  f <- ri_fixture(pf_ab, c(-0.2, -0.3), B, list(a = "integer", b = "integer"))
+  expect_equal(unlist(run_round(f, "euclidean", X_sd = c(1, 10))$best_result$B_x),
+               c(a = 0, b = 1))
+  expect_equal(unlist(run_round(f, "euclidean", X_sd = c(10, 1))$best_result$B_x),
+               c(a = 1, b = 0))
 })
 
 test_that(".round_integers re-checks the constraints and the training ranges", {

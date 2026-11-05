@@ -10,7 +10,7 @@ bl_find_local_cf(
   set_filters = NULL,
   max_pairs = 21L,
   m = 200L,
-  distance = c("mahalanobis", "euclidean"),
+  distance = c("auto", "mahalanobis", "euclidean"),
   verbose = TRUE
 )
 }
@@ -32,8 +32,10 @@ highest components are left out.}
 \code{200L}.}
 
 \item{distance}{Character; cross-pair selection metric. One of
-\code{"mahalanobis"} (default) or \code{"euclidean"}. See \strong{Cross-pair
-selection criterion} section above.}
+\code{"auto"} (default: \code{"euclidean"} for a PCA biplot,
+\code{"mahalanobis"} for a CVA biplot), \code{"mahalanobis"} or
+\code{"euclidean"}. See \strong{Cross-pair selection criterion} section
+above.}
 
 \item{verbose}{Logical; print progress messages. Default \code{TRUE}.}
 }
@@ -48,14 +50,18 @@ back-projected boundary point, or the restored or rounded point.}
 \item{B_pred}{Scalar predicted probability at the counterfactual.}
 \item{dist_z}{Euclidean distance from target to boundary in the rotated
 Z-space of \code{best_pair} only (per-pair values are in
-\code{all_distances}). It is the selection criterion only when
+\code{all_distances}). \code{NA} when no solution is found.}
+\item{dist_x}{Euclidean distance from target to boundary in X-space,
+each feature divided by its total standard deviation, for
+\code{best_pair} only (per-pair values are in
+\code{all_distances_x}). The selection criterion when
 \code{distance = "euclidean"}. \code{NA} when no solution is found.}
 \item{dist_mahalanobis}{Squared Mahalanobis distance from target to
 boundary in X-space, for \code{best_pair} only (per-pair values are in
 \code{all_distances_mahalanobis}). The selection criterion when
 \code{distance = "mahalanobis"}. \code{NA} when no solution is found.}
 \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
-or \code{"euclidean"}).}
+or \code{"euclidean"}), after \code{"auto"} is resolved.}
 \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
 \item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
 \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
@@ -68,6 +74,8 @@ or \code{"euclidean"}).}
 \item{xseq, yseq}{Grid axis sequences.}
 \item{min_val, max_val}{Grid axis limits.}
 \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
+\item{all_distances_x}{Named numeric vector; X-space Euclidean distance
+(total-SD scale) per pair tried.}
 \item{all_distances_mahalanobis}{Named numeric vector; squared
 Mahalanobis distance per pair tried.}
 \item{solution_found}{Logical.}
@@ -165,7 +173,8 @@ whole numbers just below and just above are tried, and every combination
 of them is a candidate. A candidate is valid when the model still scores
 it on the other side of the cutoff, it meets every \code{set_filters()}
 constraint and it lies within \code{train_ranges}. The valid candidate
-nearest the target, by the same selector as the pair search, is the
+nearest the target in X-space, by the same distance as the pair search
+(Mahalanobis, or Euclidean on the total-SD scale), is the
 counterfactual (\code{B_x}, \code{B_z}, \code{B_pred}); on a tie, the
 first. When no candidate is valid, no counterfactual is reported:
 \code{solution_found} is \code{FALSE}, and \code{blocking_constraint} says
@@ -179,23 +188,29 @@ rounded together (\eqn{2^{12}} candidates).
 \section{Cross-pair selection criterion}{
 
 The best eigenvector pair is selected by minimum distance from the target
-to the nearest valid boundary vertex. Two distance metrics are available:
+to the nearest valid boundary vertex, measured in X-space with
+\eqn{v = B_x - x_{obs}}. Two distance metrics are available:
 \describe{
-\item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
-original X-space using the within-class covariance matrix \eqn{W} stored
-on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
-\eqn{v = B_x - x_{obs}}. This is the PhD's cross-pair criterion.}
-\item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
-Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}.}
+\item{\code{"mahalanobis"}}{Squared Mahalanobis distance using the
+within-class covariance matrix \eqn{W} stored on
+\code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v}.}
+\item{\code{"euclidean"}}{Euclidean distance with each feature divided by
+its total standard deviation (\code{bl_result$X_sd}):
+\eqn{d_x = \sqrt{\sum_j (v_j / sd_j)^2}}, as \code{dist_x} in
+\code{\link{bl_find_boundary}}.}
 }
-Under CVA the two give the same pair: the CVA loadings satisfy
+The default, \code{"auto"}, follows the thesis rule (section 3.9.1):
+Euclidean distance for a PCA biplot and Mahalanobis distance for a CVA
+biplot. Under a standardised PCA the rotated loadings are orthonormal, so
+for the search's point on the plane \eqn{d_x} equals the 2D distance
+\eqn{d_z = ||Z_{target} - B_z||_2}. Under CVA the loadings satisfy
 \eqn{V^T W V = I / (n - g)}, every rotated basis inherits this, and so
-\eqn{d_M^2 = (n - g) d_z^2} for every pair. Under PCA they are different
-metrics (standardised Euclidean versus the binary-class \eqn{W}) and can
-pick different pairs; the thesis's rule for PCA is the Euclidean one.
-Within-pair selection (the nearest valid contour vertex) always uses 2D
-Euclidean distance in the rotated Z-space; only the cross-pair comparison
-is affected by \code{distance}. See
+\eqn{d_M^2 = (n - g) d_z^2} for every pair: the Mahalanobis rule ranks
+the pairs as the 2D distance does. The two metrics measure the same way
+after the \code{"fixed"} restore and the \code{"integer"} rounding move the
+point off the plane. Within-pair selection (the nearest valid contour
+vertex) always uses 2D Euclidean distance in the rotated Z-space; only the
+cross-pair comparison and the integer rounding use \code{distance}. See
 \code{documentation/biplot-rotation/biplot_rotation_and_pair_selection.md}
 section 3.4 in the package repository.
 }

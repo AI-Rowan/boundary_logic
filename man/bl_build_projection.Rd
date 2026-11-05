@@ -66,7 +66,8 @@ data, used as the feasibility check in the counterfactual searches.}
 \item{\code{metric}}{Numeric matrix (p x p); the within-class covariance
 \code{W} (or total covariance \code{Sigma} when no class info is supplied) used
 as the Mahalanobis metric by \code{bl_find_local_cf()} and
-\code{plot.bl_boundary()}.}
+\code{plot.bl_boundary()} (their default under CVA; under PCA they default
+to Euclidean distance).}
 \item{\code{metric_inv}}{Numeric matrix (p x p); \code{solve(metric)} computed via
 \code{chol2inv(chol(.))} for numerical stability on SPD matrices, with
 ridge fallback when singular.}

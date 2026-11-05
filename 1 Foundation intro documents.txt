@@ -242,6 +242,9 @@ bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, distance,
   - Tests up to max_pairs eigenvector pairs: (1,2),(1,3),(2,3),(1,4),...
   - For each pair: rotates biplot, builds local grid, applies constraints,
     finds nearest opposing-class boundary point
+  - Compares the pairs by distance = "auto" (the thesis rule, section
+    3.9.1): Euclidean distance in X-space (each feature divided by its
+    total SD) for a PCA biplot, Mahalanobis distance for a CVA biplot
   - Returns: bl_local_result object
 
 Key design decision — local CF hull rule:
@@ -251,8 +254,10 @@ Key design decision — local CF hull rule:
 
 E. Variable Contribution and Robustness Analysis (R/boundary_plot.R)
 ---------------------------------------------------------------
-bl_robustness(bl_boundary)
+bl_robustness(bl_boundary, distance)
   - Quantifies per-variable contribution to distance-to-boundary
+  - Standardises by distance = "auto": the total SD for a PCA biplot
+    (as the thesis), the within-class SD for a CVA biplot
   - Returns: named vector of per-variable totals + overall scalar
   - Note: plot(bl_boundary) already prints this to the console; call
     bl_robustness() separately only for programmatic access

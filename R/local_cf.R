@@ -66,6 +66,27 @@
 }
 
 
+#' Squared X-space distance of change vectors, by the selection metric
+#'
+#' The distance the pair search and the integer rounding compare.
+#' \code{"mahalanobis"}: \eqn{v' W^{-1} v} with the stored within-class
+#' metric. \code{"euclidean"}: \eqn{\sum_j (v_j / sd_j)^2}, each feature
+#' divided by its total standard deviation \code{X_sd}, as
+#' \code{bl_find_boundary()}'s \code{dist_x}.
+#'
+#' @param v          n x p numeric matrix of change vectors (\code{B_x - x_obs}).
+#' @param distance   \code{"mahalanobis"} or \code{"euclidean"} (resolved).
+#' @param metric_inv p x p inverse metric \eqn{W^{-1}}; used for Mahalanobis.
+#' @param X_sd       Numeric vector (length p) of total standard deviations.
+#' @return Numeric vector of length \code{nrow(v)}.
+#' @noRd
+.cf_sq_distance <- function(v, distance, metric_inv, X_sd) {
+  v <- as.matrix(v)
+  if (distance == "mahalanobis") rowSums((v %*% metric_inv) * v)
+  else rowSums(sweep(v, 2L, X_sd, "/")^2)
+}
+
+
 # Search tolerance for a "fixed" constraint, in model units. A vertex of the
 # 2D boundary contour rarely holds a feature at exactly its observed value,
 # so the search accepts a change of up to this much; .restore_fixed() then
@@ -468,7 +489,8 @@ set_filters <- function(bl_target, ...) {
 #' of them is a candidate. A candidate is valid when the model still scores
 #' it on the other side of the cutoff, it meets every \code{set_filters()}
 #' constraint and it lies within \code{train_ranges}. The valid candidate
-#' nearest the target, by the same selector as the pair search, is the
+#' nearest the target in X-space, by the same distance as the pair search
+#' (Mahalanobis, or Euclidean on the total-SD scale), is the
 #' counterfactual (\code{B_x}, \code{B_z}, \code{B_pred}); on a tie, the
 #' first. When no candidate is valid, no counterfactual is reported:
 #' \code{solution_found} is \code{FALSE}, and \code{blocking_constraint} says
@@ -480,23 +502,29 @@ set_filters <- function(bl_target, ...) {
 #'
 #' @section Cross-pair selection criterion:
 #' The best eigenvector pair is selected by minimum distance from the target
-#' to the nearest valid boundary vertex. Two distance metrics are available:
+#' to the nearest valid boundary vertex, measured in X-space with
+#' \eqn{v = B_x - x_{obs}}. Two distance metrics are available:
 #' \describe{
-#'   \item{\code{"mahalanobis"} (default)}{Squared Mahalanobis distance in the
-#'     original X-space using the within-class covariance matrix \eqn{W} stored
-#'     on \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v} where
-#'     \eqn{v = B_x - x_{obs}}. This is the PhD's cross-pair criterion.}
-#'   \item{\code{"euclidean"}}{Plain Euclidean distance in the rotated 2D
-#'     Z-space: \eqn{d_z = ||Z_{target} - B_z||_2}.}
+#'   \item{\code{"mahalanobis"}}{Squared Mahalanobis distance using the
+#'     within-class covariance matrix \eqn{W} stored on
+#'     \code{bl_result$metric_inv}: \eqn{d_M^2 = v^T W^{-1} v}.}
+#'   \item{\code{"euclidean"}}{Euclidean distance with each feature divided by
+#'     its total standard deviation (\code{bl_result$X_sd}):
+#'     \eqn{d_x = \sqrt{\sum_j (v_j / sd_j)^2}}, as \code{dist_x} in
+#'     \code{\link{bl_find_boundary}}.}
 #' }
-#' Under CVA the two give the same pair: the CVA loadings satisfy
+#' The default, \code{"auto"}, follows the thesis rule (section 3.9.1):
+#' Euclidean distance for a PCA biplot and Mahalanobis distance for a CVA
+#' biplot. Under a standardised PCA the rotated loadings are orthonormal, so
+#' for the search's point on the plane \eqn{d_x} equals the 2D distance
+#' \eqn{d_z = ||Z_{target} - B_z||_2}. Under CVA the loadings satisfy
 #' \eqn{V^T W V = I / (n - g)}, every rotated basis inherits this, and so
-#' \eqn{d_M^2 = (n - g) d_z^2} for every pair. Under PCA they are different
-#' metrics (standardised Euclidean versus the binary-class \eqn{W}) and can
-#' pick different pairs; the thesis's rule for PCA is the Euclidean one.
-#' Within-pair selection (the nearest valid contour vertex) always uses 2D
-#' Euclidean distance in the rotated Z-space; only the cross-pair comparison
-#' is affected by \code{distance}. See
+#' \eqn{d_M^2 = (n - g) d_z^2} for every pair: the Mahalanobis rule ranks
+#' the pairs as the 2D distance does. The two metrics measure the same way
+#' after the \code{"fixed"} restore and the \code{"integer"} rounding move the
+#' point off the plane. Within-pair selection (the nearest valid contour
+#' vertex) always uses 2D Euclidean distance in the rotated Z-space; only the
+#' cross-pair comparison and the integer rounding use \code{distance}. See
 #' \code{documentation/biplot-rotation/biplot_rotation_and_pair_selection.md}
 #' section 3.4 in the package repository.
 #'
@@ -512,8 +540,10 @@ set_filters <- function(bl_target, ...) {
 #' @param m           Integer; grid resolution along each axis. Default
 #'   \code{200L}.
 #' @param distance    Character; cross-pair selection metric. One of
-#'   \code{"mahalanobis"} (default) or \code{"euclidean"}. See \strong{Cross-pair
-#'   selection criterion} section above.
+#'   \code{"auto"} (default: \code{"euclidean"} for a PCA biplot,
+#'   \code{"mahalanobis"} for a CVA biplot), \code{"mahalanobis"} or
+#'   \code{"euclidean"}. See \strong{Cross-pair selection criterion} section
+#'   above.
 #' @param verbose     Logical; print progress messages. Default \code{TRUE}.
 #'
 #' @return A list of class \code{"bl_local_result"} with the following fields:
@@ -526,14 +556,18 @@ set_filters <- function(bl_target, ...) {
 #'     \item{B_pred}{Scalar predicted probability at the counterfactual.}
 #'     \item{dist_z}{Euclidean distance from target to boundary in the rotated
 #'       Z-space of \code{best_pair} only (per-pair values are in
-#'       \code{all_distances}). It is the selection criterion only when
+#'       \code{all_distances}). \code{NA} when no solution is found.}
+#'     \item{dist_x}{Euclidean distance from target to boundary in X-space,
+#'       each feature divided by its total standard deviation, for
+#'       \code{best_pair} only (per-pair values are in
+#'       \code{all_distances_x}). The selection criterion when
 #'       \code{distance = "euclidean"}. \code{NA} when no solution is found.}
 #'     \item{dist_mahalanobis}{Squared Mahalanobis distance from target to
 #'       boundary in X-space, for \code{best_pair} only (per-pair values are in
 #'       \code{all_distances_mahalanobis}). The selection criterion when
 #'       \code{distance = "mahalanobis"}. \code{NA} when no solution is found.}
 #'     \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
-#'       or \code{"euclidean"}).}
+#'       or \code{"euclidean"}), after \code{"auto"} is resolved.}
 #'     \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
 #'     \item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
 #'     \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
@@ -546,6 +580,8 @@ set_filters <- function(bl_target, ...) {
 #'     \item{xseq, yseq}{Grid axis sequences.}
 #'     \item{min_val, max_val}{Grid axis limits.}
 #'     \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
+#'     \item{all_distances_x}{Named numeric vector; X-space Euclidean distance
+#'       (total-SD scale) per pair tried.}
 #'     \item{all_distances_mahalanobis}{Named numeric vector; squared
 #'       Mahalanobis distance per pair tried.}
 #'     \item{solution_found}{Logical.}
@@ -591,7 +627,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
                                    set_filters = NULL,
                                    max_pairs   = 21L,
                                    m           = 200L,
-                                   distance    = c("mahalanobis", "euclidean"),
+                                   distance    = c("auto", "mahalanobis", "euclidean"),
                                    verbose     = TRUE) {
 
   if (!inherits(bl_result, "bl_result"))
@@ -602,7 +638,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
   if (!is.null(set_filters) && !inherits(set_filters, "bl_filters"))
     stop("'set_filters' must be a 'bl_filters' object from set_filters() or NULL.",
          call. = FALSE)
-  distance <- match.arg(distance)
+  # "auto": Euclidean under PCA, Mahalanobis under CVA (thesis section 3.9.1)
+  distance <- .resolve_distance(distance[1L], bl_result)
 
   V            <- bl_result$V
   X_center     <- bl_result$X_center
@@ -643,6 +680,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
   pair_names                <- apply(pairs, 1L, function(r) paste0("(", r[1], ",", r[2], ")"))
   all_distances             <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
+  all_distances_x           <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
   all_distances_mahalanobis <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
   best_selector             <- Inf
   best_result               <- NULL
@@ -770,8 +808,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
     B_z_local <- all_Mi[idx[[1L]], , drop = FALSE]
     dist_z    <- sqrt(sum((Z_target - B_z_local)^2))
 
-    # Back-project counterfactual to X-space (needed for every pair when
-    # distance = "mahalanobis", since the selector uses X-space coordinates).
+    # Back-project counterfactual to X-space (needed for every pair: both
+    # selectors measure in X-space).
     B_x_mat <- B_z_local %*% tVr_rot
     if (isTRUE(standardise)) B_x_mat <- sweep(B_x_mat, 2L, X_sd, "*")
     B_x_mat <- sweep(B_x_mat, 2L, X_center, "+")
@@ -787,7 +825,14 @@ bl_find_local_cf <- function(bl_result, bl_target,
       NA_real_
     }
 
+    # Euclidean distance in X-space, each feature divided by its total SD
+    # (the thesis's PCA rule; equals dist_z under a standardised PCA).
+    dist_x <- sqrt(.cf_sq_distance(
+      matrix(as.numeric(B_x[1L, var_names]) - x_obs, nrow = 1L),
+      "euclidean", metric_inv, X_sd))
+
     all_distances[pair_names[k]]             <- dist_z
+    all_distances_x[pair_names[k]]           <- dist_x
     all_distances_mahalanobis[pair_names[k]] <- dist_mah
 
     if (isTRUE(verbose)) {
@@ -795,11 +840,12 @@ bl_find_local_cf <- function(bl_result, bl_target,
         message(sprintf("    Distance: %.4f Z  |  %.4f Mahalanobis (sqrt)",
                         dist_z, sqrt(dist_mah)))
       } else {
-        message(sprintf("    Distance: %.4f Z", dist_z))
+        message(sprintf("    Distance: %.4f Z  |  %.4f Euclidean (X)",
+                        dist_z, dist_x))
       }
     }
 
-    selector <- if (distance == "mahalanobis") dist_mah else dist_z
+    selector <- if (distance == "mahalanobis") dist_mah else dist_x
     if (is.finite(selector) && selector < best_selector) {
       best_selector <- selector
 
@@ -821,6 +867,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
         B_x              = B_x,
         B_pred           = B_pred[[1L]],
         dist_z           = dist_z,
+        dist_x           = dist_x,
         dist_mahalanobis = dist_mah,
         Z_target         = Z_target,
         best_pair        = pair,
@@ -866,10 +913,11 @@ bl_find_local_cf <- function(bl_result, bl_target,
           sqrt(best_result$dist_mahalanobis), best_result$dist_z
         ))
       } else {
-        message(sprintf("Best pair: (%d, %d) | Distance (Z): %.4f",
-                        best_result$best_pair[1L],
-                        best_result$best_pair[2L],
-                        best_result$dist_z))
+        message(sprintf(
+          "Best pair: (%d, %d) | Selector: Euclidean (X) = %.4f | Z = %.4f",
+          best_result$best_pair[1L], best_result$best_pair[2L],
+          best_result$dist_x, best_result$dist_z
+        ))
       }
     }
   }
@@ -907,7 +955,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
   integer_check <- NULL
   if (solution_found) {
     ri <- .round_integers(best_result, x_obs, var_names, set_filters,
-                          bl_result, bl_target, sv, distance, metric_inv)
+                          bl_result, bl_target, sv, distance, metric_inv, X_sd)
     if (!is.null(ri)) {
       integer_check <- ri$integer_check
       if (integer_check$applied) {
@@ -930,7 +978,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
   null_pair_fields <- list(
     B_z = NULL, B_x = NULL, B_pred = NA_real_,
-    dist_z = NA_real_, dist_mahalanobis = NA_real_,
+    dist_z = NA_real_, dist_x = NA_real_, dist_mahalanobis = NA_real_,
     Z_target = NULL, best_pair = NA_integer_, Vr_rot = NULL,
     tVr_rot = NULL, Z_train_rot = NULL, Zgrid = NULL,
     grid_prob = NULL, col_value = NULL, ct_local = NULL,
@@ -942,6 +990,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
       if (solution_found) best_result else null_pair_fields,
       list(
         all_distances             = all_distances,
+        all_distances_x           = all_distances_x,
         all_distances_mahalanobis = all_distances_mahalanobis,
         distance                  = distance,
         solution_found            = solution_found,
@@ -1094,13 +1143,15 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' whole numbers just below and just above; every combination is a candidate.
 #' A candidate is valid when it still crosses the boundary, meets every
 #' `set_filters()` constraint and lies within `train_ranges`. The valid
-#' candidate nearest the target by the search's selector (squared Mahalanobis
-#' in X-space, or Euclidean distance to `Z_target` in the rotated plane) is
-#' kept; on a tie, the first.
+#' candidate nearest the target in X-space by the search's selector (squared
+#' Mahalanobis, or squared Euclidean on the total-SD scale; `.cf_sq_distance()`)
+#' is kept; on a tie, the first.
 #'
 #' @inheritParams .restore_fixed
 #' @param distance   The search's selector, `"mahalanobis"` or `"euclidean"`.
 #' @param metric_inv `bl_result$metric_inv`, or `NULL`.
+#' @param X_sd       Total standard deviations (`bl_result$X_sd`), the scale of
+#'   the Euclidean selector.
 #' @return `NULL` when no integer feature needs rounding; otherwise a list
 #'   with `best_result` (updated when a valid candidate exists) and
 #'   `integer_check`: `vars` (the features rounded), `applied`,
@@ -1108,7 +1159,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #'   `NA` when none is valid) and `search_point` (the point before rounding).
 #' @noRd
 .round_integers <- function(best_result, x_obs, var_names, set_filters,
-                            bl_result, bl_target, sv, distance, metric_inv) {
+                            bl_result, bl_target, sv, distance, metric_inv,
+                            X_sd = bl_result$X_sd) {
   cons  <- if (!is.null(set_filters)) set_filters$constraints else NULL
   ivars <- .integer_vars(cons)
   if (length(ivars) == 0L) return(NULL)
@@ -1179,12 +1231,13 @@ bl_find_local_cf <- function(bl_result, bl_target,
     return(list(best_result = best_result, integer_check = integer_check))
 
   B_z_c <- .project_local(cand, var_names, bl_result, sv, best_result)
-  sel <- if (distance == "mahalanobis" && !is.null(metric_inv)) {
-    v <- sweep(as.matrix(cand), 2L, x_obs, "-")
-    rowSums((v %*% metric_inv) * v)
-  } else {
-    rowSums(sweep(B_z_c, 2L, as.numeric(best_result$Z_target), "-")^2)
-  }
+  # The candidates lie off the rotated plane, so both selectors measure in
+  # X-space (as the pair search does).
+  v   <- sweep(as.matrix(cand), 2L, x_obs, "-")
+  sel <- .cf_sq_distance(
+    v, if (distance == "mahalanobis" && !is.null(metric_inv)) "mahalanobis"
+       else "euclidean",
+    metric_inv, X_sd)
   sel[!valid] <- Inf
   i <- which.min(sel)
 
@@ -1754,6 +1807,8 @@ plot.bl_local_result <- function(x,
     cat(sprintf("  Selector       : %s\n",
                 if (!is.null(x$distance)) x$distance else "euclidean"))
     cat(sprintf("  Distance (Z)   : %.4f\n",       x$dist_z))
+    if (!is.null(x$dist_x) && !is.na(x$dist_x))
+      cat(sprintf("  Euclidean (X)  : %.4f\n",     x$dist_x))
     if (!is.na(x$dist_mahalanobis))
       cat(sprintf("  Mahalanobis    : %.4f (sqrt)\n", sqrt(x$dist_mahalanobis)))
     cat(sprintf("  Boundary pred  : %.4f\n",       x$B_pred))
@@ -1797,6 +1852,8 @@ print.bl_local_result <- function(x, ...) {
     cat(sprintf("  Selector       : %s\n",
                 if (!is.null(x$distance)) x$distance else "euclidean"))
     cat(sprintf("  Distance (Z)   : %.4f\n", x$dist_z))
+    if (!is.null(x$dist_x) && !is.na(x$dist_x))
+      cat(sprintf("  Euclidean (X)  : %.4f (total-SD scale)\n", x$dist_x))
     if (!is.na(x$dist_mahalanobis))
       cat(sprintf("  Mahalanobis    : %.4f (sqrt of squared d_M^2 = %.4f)\n",
                   sqrt(x$dist_mahalanobis), x$dist_mahalanobis))
@@ -1836,6 +1893,8 @@ print.bl_local_result <- function(x, ...) {
   df <- data.frame(
     pair             = names(x$all_distances),
     dist_z           = x$all_distances,
+    dist_x           = if (!is.null(x$all_distances_x)) x$all_distances_x
+                       else NA_real_,
     dist_mahalanobis = x$all_distances_mahalanobis,
     row.names        = NULL,
     stringsAsFactors = FALSE

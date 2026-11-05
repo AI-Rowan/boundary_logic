@@ -24,7 +24,8 @@ rest of the distance machinery:
 - Phase 2's distance to the boundary;
 - the per-variable robustness measures.
 
-This note uses $\mathbf{W}$ only to choose the plane (§3.4).
+This note uses $\mathbf{W}$ only to choose the plane under CVA, or under PCA with `distance = "mahalanobis"`
+(§3.4).
 
 **Sources:**
 
@@ -51,6 +52,9 @@ the details. In brief:
   `development/…` and `documentation/…` refer to the package repository.
 - **When measured:** all numbers were measured on 2026-10-30, and the iris and loan figures in §3.4 on 2026-10-31,
   against the package on branch `paper_nr1_changes` (R 4.6.0).
+- **Which selector:** the measurements use the Mahalanobis pair selector, the package's default for both projections
+  until 2026-11-05. Since then the default follows the thesis by projection (§3.4, §4.4), and the scripts pin
+  `distance = "mahalanobis"` so that every number here is reproduced unchanged (re-run on 2026-11-05).
 
 ---
 
@@ -280,7 +284,7 @@ The thesis fixes the cross-plane criterion **by projection**:
 **The two halves of the "dual approach" are one quantity under CVA.** The thesis's own p.111 statement says so, and
 §3.4 proves it for every rotated plane. The in-plane $L_2$ step therefore already finds the Mahalanobis-nearest
 point, and the cross-plane comparison ranks planes by the same measure. **Under PCA** the thesis's rule is
-Euclidean throughout.
+Euclidean throughout; it is the package's default since 2026-11-05 (§3.4).
 
 ### 2.6 The research code (`origin/original_PhD_code`)
 
@@ -469,11 +473,15 @@ stages:
 
 ### 3.4 The selector and its metric
 
-The winning pair is the one with the smallest **squared Mahalanobis distance** in X-space (`R/local_cf.R:781-788`):
+The winning pair is the one with the smallest distance in X-space, by `distance`. The default, `"auto"` (since
+2026-11-05), follows the thesis rule (§2.5): the **squared Mahalanobis distance** under CVA and the **Euclidean
+distance on the total-SD scale** under PCA (the pair loop of `bl_find_local_cf()`, `R/local_cf.R`):
 
 $$
-d_M^2(v) = v^{\mathsf T}\mathbf{W}^{-1}v, \qquad v = B_x - x_{obs}
+d_M^2(v) = v^{\mathsf T}\mathbf{W}^{-1}v, \qquad d_x(v) = \Big(\sum_j (v_j / s_j)^2\Big)^{1/2}, \qquad v = B_x - x_{obs}
 $$
+
+where $s_j$ is the total standard deviation of feature $j$ (`X_sd`), as in `bl_find_boundary()`'s `dist_x`.
 
 ```r
 dist_mah <- if (!is.null(metric_inv)) {
@@ -482,6 +490,9 @@ dist_mah <- if (!is.null(metric_inv)) {
 } else {
   NA_real_
 }
+dist_x <- sqrt(.cf_sq_distance(
+  matrix(as.numeric(B_x[1L, var_names]) - x_obs, nrow = 1L),
+  "euclidean", metric_inv, X_sd))
 ```
 
 **The metric.** `metric_inv` is $\mathbf{W}^{-1}$, computed once in `bl_build_projection()` and reused for every
@@ -492,8 +503,9 @@ pair and every target.
   case).
 - **How it is inverted:** by Cholesky, with a ridge fallback.
 
-The companion note has the definition and the inversion. `distance = "euclidean"` selects by the in-plane distance
-`dist_z` instead. Both distances are stored for every pair (`all_distances`, `all_distances_mahalanobis`).
+The companion note has the definition and the inversion. `distance = "euclidean"` selects by `dist_x`; until
+2026-11-05 it selected by the in-plane distance `dist_z`. All three distances are stored for every pair
+(`all_distances`, `all_distances_x`, `all_distances_mahalanobis`).
 
 #### Under CVA the in-plane distance *is* the Mahalanobis distance, for every pair
 
@@ -570,41 +582,47 @@ The same in-plane step $\Delta z = (0.7, -0.4)$, sent through each pair's predic
 | (2,4) | 20.649 | 202.9754 | 94.9 | 146 |
 | (3,4) | 13.099 | 239.3651 | 94.9 | 146 |
 
-In the package's own search on that target, both `distance` options pick pair (3,4); on the loan harness's free
-search, both pick (3,4). The thesis states the identity in prose (p.111, §2.5).
+In the package's own search on that target, the Mahalanobis selector and the smallest in-plane distance both pick
+pair (3,4); on the loan harness's free search, both pick (3,4). The thesis states the identity in prose (p.111, §2.5).
 
 #### Under PCA they are different metrics
 
 - **The in-plane distance:** $\mathbf{V}$ is orthonormal in the (standardised) feature space, and so is every
   rotated basis. For in-plane points, `dist_z` is the Euclidean distance between the standardised feature
-  vectors. That is comparable across pairs; it is the thesis's PCA criterion (§2.5).
-- **The default selector:** the package's default uses $\mathbf{W}$ = `W_binary`, the within-class covariance by
-  the 0/1 class on unstandardised features. That is a different metric, and the ratio varies by pair: 1.30 to 1.58
-  on iris (`17_3` §11).
+  vectors. That is comparable across pairs; it is the thesis's PCA criterion (§2.5). The X-space distance `dist_x`
+  divides each feature by the same total SD that standardised the PCA, so for the search's point
+  `dist_x` = `dist_z` (`tests/testthat/test-distance_by_method.R`); `dist_x` also measures the off-plane
+  `"integer"` candidates (§3.5).
+- **The Mahalanobis selector:** it uses $\mathbf{W}$ = `W_binary`, the within-class covariance by the 0/1 class on
+  unstandardised features. That is a different metric, and the ratio varies by pair: 1.30 to 1.58 on iris
+  (`17_3` §11). It was the PCA default until 2026-11-05.
 - **How often they disagree:**
   - over the 221 rows of `17_1`'s PCA set-up, the two selectors pick different pairs on 51 (23%);
   - in the standardised-iris fixture of `tests/testthat/test-boundary.R` (PCA, target 1), Z-distance would pick
     (1,4) and Mahalanobis (3,4).
 
-**So, by projection:**
+**So, by projection** (since 2026-11-05):
 
 | `distance` | CVA | PCA |
 |---|---|---|
-| `"mahalanobis"` (default) | the thesis's criterion; identical to `"euclidean"` | `W_binary` Mahalanobis — a package choice; not the thesis's rule |
-| `"euclidean"` | identical to `"mahalanobis"` | standardised Euclidean — the thesis's rule (p.106) |
+| `"auto"` (default) | `"mahalanobis"` | `"euclidean"` |
+| `"mahalanobis"` | the thesis's criterion; ranks the pairs as the in-plane distance does | `W_binary` Mahalanobis; the PCA default until 2026-11-05, not the thesis's rule |
+| `"euclidean"` | Euclidean in X-space on the total-SD scale; a different metric, not the thesis's CVA rule | Euclidean in X-space on the total-SD scale, equal to the in-plane distance at the search point; the thesis's rule (p.106) |
+
+Until 2026-11-05 `"euclidean"` was the in-plane distance itself, identical to `"mahalanobis"` under CVA.
 
 ### 3.5 Winner selection, the "fixed" restore and the "integer" rounding
 
-`R/local_cf.R:802-839` is a running minimum over the tested pairs:
+The pair loop of `bl_find_local_cf()` keeps a running minimum over the tested pairs:
 
 ```r
-selector <- if (distance == "mahalanobis") dist_mah else dist_z
+selector <- if (distance == "mahalanobis") dist_mah else dist_x
 if (is.finite(selector) && selector < best_selector) {
   best_selector <- selector
   ...
   best_result <- list(
     B_z = B_z_local, B_x = B_x, B_pred = B_pred[[1L]],
-    dist_z = dist_z, dist_mahalanobis = dist_mah,
+    dist_z = dist_z, dist_x = dist_x, dist_mahalanobis = dist_mah,
     Z_target = Z_target, best_pair = pair,
     Vr_rot = Vr_rot, tVr_rot = tVr_rot,
     Z_train_rot = Z_train_rot, Zgrid = Zgrid, grid_prob = grid_prob,
@@ -616,8 +634,8 @@ if (is.finite(selector) && selector < best_selector) {
 
 **What is reported:**
 
-- **Every pair's distances** are kept, winners or not: `dist_z` and `dist_mahalanobis` (`all_distances`,
-  `all_distances_mahalanobis`).
+- **Every pair's distances** are kept, winners or not: `dist_z`, `dist_x` and `dist_mahalanobis`
+  (`all_distances`, `all_distances_x`, `all_distances_mahalanobis`).
 - **The winning pair's objects** are what the result reports and plots: its rotated loading matrices, grid,
   contour and boundary point (`best_pair`, `B_x`, `B_z`, …).
 - **No pair can be a winner by accident.** A pair with no surviving vertex is skipped (`next`); the research
@@ -632,14 +650,15 @@ if (is.finite(selector) && selector < best_selector) {
   Otherwise no counterfactual is reported (strict, since 2026-11-04). `fixed_check` records the outcome.
 - **The restored point is generally not on the plane:**
   - `B_z` is its projection, which is what the local plot draws;
-  - `dist_z`, `dist_mahalanobis` and the per-pair tables still describe the search's point.
+  - `dist_z`, `dist_x`, `dist_mahalanobis` and the per-pair tables still describe the search's point.
 - Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md) §1–§4.
 
 **Then the "integer" rounding** (`.round_integers()`, since 2026-11-04).
 
 - **What it does:** for each `"integer"` feature that is not fixed and has moved off a whole number, it tries the
   whole values (raw units) just below and above. It keeps the combinations that still cross the boundary and
-  meet every constraint and `train_ranges`, and takes the nearest by the same selector as the pair search.
+  meet every constraint and `train_ranges`, and takes the nearest in X-space by the same distance as the pair
+  search (`.cf_sq_distance()`; until 2026-11-05 the Euclidean option measured the projections on the plane).
 - **Its result:** the chosen point replaces `B_x`, `B_z` (its projection, `.project_local()`) and `B_pred`. With
   no valid combination no counterfactual is reported. `integer_check` records the outcome.
 - **Like the restored point, it lies off the plane,** and the distances still describe the search's point.
@@ -657,12 +676,12 @@ if (is.finite(selector) && selector < best_selector) {
 | actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)`, `"integer"` (rounded after the search) |
 | feasibility | `train_ranges` | `train_ranges`, filter (c) |
 | nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
-| cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ by default, for both projections (§3.4) |
+| cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | by `distance = "auto"`: $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ under CVA; total-SD Euclidean in X-space under PCA (since 2026-11-05; before, Mahalanobis for both) (§3.4) |
 | a pair with no boundary point | B = 0, kept with a spurious distance | skipped |
 | the explanation used downstream | the research code's default flow is unrotated (§2.6) | always the rotated winner |
 
 The divisor $n-g$ scales every distance by the same constant, so it never changes the winner. Under CVA the package
-selects exactly as the thesis does; under PCA the default does not (§4.4).
+selects exactly as the thesis does, and under PCA it does so by default since 2026-11-05 (§4.4).
 
 ---
 
@@ -739,20 +758,21 @@ is more accurate to describe the search as *sampling $\binom{p}{2}$ planes throu
 - **No user correction is possible.** `rotate_deg` has been removed from the local plots, since the orientation
   belongs to the method. §5.2 proposes a frame convention that fixes it.
 
-### 4.4 The metric: one selector under CVA, a departure from the thesis under PCA
+### 4.4 The metric: one selector under CVA; the PCA default (resolved 2026-11-05)
 
-- **Under CVA there is one selector, presented as two.**
-  - The documentation and the `distance` argument suggest two selectors. They are one: the in-plane distance
-    already measures the Mahalanobis distance, so the option cannot change the result (§3.4).
-  - This is a documentation and API-clarity problem, not a methodological error.
+- **Under CVA there was one selector, presented as two.**
+  - Until 2026-11-05 `distance = "euclidean"` selected by the in-plane distance, which already measures the
+    Mahalanobis distance, so the option could not change the result (§3.4).
+  - Since then `"euclidean"` is the X-space Euclidean distance on the total-SD scale: under CVA a different metric,
+    and not the thesis's rule. The default, `"auto"`, is Mahalanobis under CVA.
   - Before 2026-10-31 the package's documentation claimed the opposite (that Z-distances are not comparable across
     pairs).
-- **Under PCA the default departs from the thesis.**
-  - The thesis's rule is standardised Euclidean (p.106). The default is `W_binary` Mahalanobis, which selects a
-    different pair on 23% of `17_1`'s rows (§3.4).
-  - The package also mixes metrics: within a plane the nearest vertex is chosen by standardised Euclidean distance,
-    across planes by `W_binary` Mahalanobis. The point judged "nearest" is not nearest in the measure that judges
-    the "best" plane.
+- **Under PCA the default departed from the thesis (resolved 2026-11-05).**
+  - The thesis's rule is standardised Euclidean (p.106). Until 2026-11-05 the default was `W_binary` Mahalanobis,
+    which selects a different pair on 23% of `17_1`'s rows (§3.4).
+  - That default also mixed metrics: within a plane the nearest vertex is chosen by standardised Euclidean
+    distance, across planes by `W_binary` Mahalanobis. The point judged "nearest" was not nearest in the measure
+    that judged the "best" plane.
 
 **Decision (2026-10-31): the PCA default is deferred.**
 
@@ -760,6 +780,17 @@ is more accurate to describe the search as *sampling $\binom{p}{2}$ planes throu
   distance (§3.4). The PCA departure does not touch its results.
 - **The PCA default (`W_binary`) stays as it is** until the rotation problem (§4.1) is fully addressed (§5). The
   choice of metric under PCA (§5.4) is taken then, not before.
+
+**Resolution (2026-11-05, on the user's instruction).** The default became `distance = "auto"`, the thesis's rule by
+projection, before the rotation problem was addressed:
+
+- **Under PCA:** the pairs are compared by the Euclidean distance in X-space, each feature divided by its total SD.
+  It equals the in-plane distance at the search point, so one metric now acts within and across planes.
+- **Under CVA:** Mahalanobis, as before.
+- **Phase 2's variable importance** follows the same rule (total SD under PCA).
+
+Paper 1 (CVA) is unchanged. The measurements in this note use the Mahalanobis selector, which `17_1`–`17_3` now
+pin.
 
 ### 4.5 Constraints are applied after contouring
 
@@ -782,8 +813,8 @@ Three counterfactuals leave the drawn plane:
 **What follows:**
 
 - **On the plot:** all three are drawn at their projections, which need not lie on the drawn boundary.
-- **In the output:** for a restored or rounded counterfactual, `dist_z` and `dist_mahalanobis` describe the
-  search's point, not the reported one.
+- **In the output:** for a restored or rounded counterfactual, `dist_z`, `dist_x` and `dist_mahalanobis` describe
+  the search's point, not the reported one.
 - **For the identity:** the §3.4 identity does not apply to them.
 
 ### 4.7 Only pair (1,2) can be forced, and `max_pairs` caps the search
@@ -1024,7 +1055,8 @@ At $p=3$, pinning to (1,2) lands within 0.05% of the *worst* plane in the family
 
 ### 5.4 One metric end to end, and feasibility as a constraint
 
-1. **One metric, chosen by projection** (resolving §4.4).
+1. **One metric, chosen by projection** (resolving §4.4; **the default was adopted on 2026-11-05**: the thesis's
+   standardised Euclidean under PCA, Mahalanobis under CVA).
    - **Under CVA** there is already one metric, because the in-plane distance is Mahalanobis (§3.4). The
      `distance` option can be documented as having no effect, or removed for CVA.
    - **Under PCA**, choose one metric and use it both within and across planes:
@@ -1032,7 +1064,7 @@ At $p=3$, pinning to (1,2) lands within 0.05% of the *worst* plane in the family
      - or `W_binary` Mahalanobis within the plane as well. The vertices are already back-projected for filter (d),
        so this costs no extra model evaluations.
 
-     Which one is a methodological decision for the user. The thesis's rule is the default candidate.
+     Which one was a methodological decision for the user, who chose the thesis's rule (2026-11-05).
 2. **Feasibility as a constraint, not a filter** (resolving §4.5).
    - Restrict the grid and contour extraction to the feasible region, so the search seeks the nearest *feasible*
      point.
@@ -1092,9 +1124,8 @@ Each item needs an explicit instruction (CLAUDE.md §9). Ranked as in §4:
 2. **The pair terminology** (§4.2). Decide how to describe a pair in output and in papers; report $\theta$ or the
    overlap.
 3. **A frame convention** for the local plot (§4.3, §5.2).
-4. **The metric under PCA** (§4.4, §5.4). Choose between the thesis's Euclidean and `W_binary`, **after** the
-   rotation problem (§4.1) is fully addressed: deferred on 2026-10-31, since Paper 1 uses Mahalanobis comparisons
-   under CVA only. Also add a test that pins the CVA identity: the ratio is $n-g$ for every pair, including 2-group
+4. **The metric under PCA** (§4.4, §5.4). **Resolved 2026-11-05:** the thesis's Euclidean rule is the PCA default
+   (`distance = "auto"`). Still to do: add a test that pins the CVA identity: the ratio is $n-g$ for every pair, including 2-group
    CVA. `17_3` §11 asserts it today; `tests/testthat/` does not.
 5. **Feasibility as a constraint** (§4.5, §5.4).
 6. **Off-plane counterfactuals** (§4.6). Mark them on the plot, or recompute `dist_z` / `dist_mahalanobis` for the
