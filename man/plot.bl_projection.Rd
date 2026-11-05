@@ -38,7 +38,8 @@ Renders the biplotEZ object stored in a \code{"bl_projection"} result.
 Default point colours are derived automatically:
 \itemize{
 \item CVA with TP/TN/FP/FN labels (all four, or any of them when a group is
-empty): green/steelblue/orange/red confusion colours.
+empty): the thesis confusion colours, TP red, TN blue, FP purple and
+FN orange, as in every other biplot.
 \item CVA with binary 0/1 labels: red (class 1) / blue (class 0).
 \item PCA (or any other case): red (class 1) / blue (class 0) when a
 \code{"class"} column was present in \code{train_data}; grey otherwise.

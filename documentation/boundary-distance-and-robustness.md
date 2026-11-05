@@ -171,7 +171,7 @@ the distance depend on the plane chosen to display the move).
 
 ## 3. Per-variable distance and robustness — `plot.bl_boundary()`, `bl_robustness()`
 
-### 3.1 The original method (thesis §4.1.2–4.1.3, pp.123–129)
+### 3.1 The original method (thesis §4.2.2–4.2.3, pp.101–108)
 
 **Each observation's change vector.**
 
@@ -195,7 +195,7 @@ $$
 - **The plot:** a jitter plot of the standardised components across all training points, coloured by outcome
   (Figure 4-5).
 
-**Robustness** (§4.1.3) is the total distance of the training points to their counterfactuals.
+**Robustness** (§4.2.3) is the total distance of the training points to their counterfactuals.
 
 - **The rule:** a larger total means a more robust model, one that needs larger input changes to alter its
   predictions.
@@ -372,10 +372,11 @@ All paths are relative to this file.
   - §4.6: robustness;
   - §4.6.1: Shapley versus the diagonal.
 - `../development/reference/review_section7_to_8.md`: the Phase 2 walkthrough on the loan harness.
-- **Thesis:** `Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`:
-  - §3.1: Euclidean and Mahalanobis distance;
-  - §4.1.2–4.1.3: variable importance and robustness;
-  - §6.3: calibration from the distance.
+- **Thesis:** the final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`, outside the
+  repository; printed page = PDF page − 16). This note cited the 30 September 2025 draft until 2026-11-05.
+  - §3.2: Euclidean and Mahalanobis distance;
+  - §4.2.2–4.2.3: variable importance and robustness;
+  - §6.4: calibration from the distance.
 
 ---
 
@@ -387,6 +388,6 @@ All paths are relative to this file.
 - **A Cholesky-whitened diagnostic plot.** It would show the whitened decomposition ($u_k^2$) across the training
   set, without claiming per-variable attribution. That is useful when the check's percentage is large; it has
   not been requested.
-- **Calibrated probabilities from the boundary distance.** The thesis's §6.3 (pp.173–174) proposes Platt scaling on
+- **Calibrated probabilities from the boundary distance.** The thesis's §6.4 (pp.145–146) proposes Platt scaling on
   the change vector's Euclidean or Mahalanobis length. That would give a model-agnostic posterior class probability
   from the distance to the boundary.

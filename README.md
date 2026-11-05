@@ -182,18 +182,38 @@ predicts as diabetic:
 
 ```r
 pred_pima <- bl_predict(bl_results_pima)
+# The second patient the model predicts as diabetic (see the note below
+# for the first)
 tgt_pima  <- bl_select_target(bl_results_pima,
-                              target = which(pred_pima$pred_class == 1)[1])
+                              target = which(pred_pima$pred_class == 1)[2])
 
 flt <- set_filters(
   tgt_pima,
-  Glucose     = "decrease",    # can only be reduced
-  Age         = "fixed",       # not actionable
-  Pregnancies = "fixed"        # not actionable
+  Pregnancies = "fixed",       # not actionable
+  Age         = "increase",    # cannot decrease
+  Glucose     = "decrease"     # can only be reduced
 )
 
 bl_local_pima <- bl_find_local_cf(bl_results_pima, tgt_pima, set_filters = flt)
+print(bl_local_pima)
 ```
+
+The printed result ends with the observed and counterfactual values:
+
+```
+  Observed vs counterfactual (model units):
+              observed counterfactual change constraint
+Pregnancies      10.00          10.00   0.00      fixed
+Glucose         125.00         118.56  -6.44   decrease
+BloodPressure    70.00          68.68  -1.32       none
+Insulin         115.00          89.55 -25.45       none
+BMI              31.10          30.30  -0.80       none
+Age            41.0000        41.0048 0.0048   increase
+```
+
+Strict constraints can leave no counterfactual. For the first patient the
+model predicts as diabetic, these constraints remove every boundary point,
+and `bl_local_pima$blocking_constraint` says why.
 
 Constraints are checked on the values the model sees (here raw clinical units).
 If the features were standardised before fitting, give `c(min, max)` ranges on
@@ -255,7 +275,7 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 
 | Function | Purpose | Returns |
 |---|---|---|
-| `bl_prepare_data()` | Convert raw data to binary 0/1, train/test split, convex hull outlier filter | `bl_filter_result` |
+| `bl_prepare_data()` | Convert raw data to binary 0/1, train/test split, optional convex hull outlier filter (`hull_fraction`; default `1`, no removal) | `bl_filter_result` |
 | `bl_wrap_data()` | Register pre-split, pre-coded data (no filtering) | `bl_data` |
 | `bl_filter_outliers()` | Convex hull outlier filter for `bl_wrap_data()` data | `bl_filter_result` |
 | `bl_set_scaling()` | Record a pre-model standardisation so plots and prints show raw units (display only) | same class as input |
@@ -323,9 +343,13 @@ Installation), and on the package's pkgdown site.
   the default → contours at 0.499 and 0.501; `b_margin = 0.01` → 0.49 and
   0.51). All model predictions are always stored to 3 decimal places
   regardless of this setting.
-- **Local search does not apply the convex hull:** `bl_find_local_cf()` rotates
-  the biplot plane, which invalidates the original hull polygon. The local
-  search is constrained only by `train_ranges` and `set_filters`.
+- **Local search rebuilds the convex hull on each rotated plane:**
+  `bl_find_local_cf()` rotates the biplot plane, which invalidates the hull
+  polygon of the global biplot. With `hull = TRUE` (the default) it rebuilds
+  the convex hull of the training data and the target on each rotated plane,
+  and keeps only the boundary points inside it (the thesis's plausibility
+  rule); `hull = FALSE` drops the rule. The search is further constrained by
+  `set_filters` and `train_ranges`.
 
 ---
 

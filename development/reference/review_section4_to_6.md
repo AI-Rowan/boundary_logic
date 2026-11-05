@@ -147,7 +147,7 @@ bl_dat <- bl_prepare_data(
 | `target_class` | `NULL` | default | The `class_col` value coded as `1`; `NULL` requires the column to be 0/1 already, as `loan_status` is |
 | `train_fraction` | `0.8` | `0.8` | Share of rows sampled for training; `1` keeps every row, and `bl_assemble()` then sets `test_data` to `train_data` |
 | `seed` | `121L` | `121L` | Fixes the train/test split, so every downstream count is reproducible |
-| `hull_fraction` | `0.9` | `0.9` | Share of training rows the outlier hull keeps (15,970 of 17,713 here); `1` removes nothing |
+| `hull_fraction` | `1` | `0.9` | Share of training rows the outlier hull keeps (15,970 of 17,713 here), as in the thesis's loan example; the default `1` removes nothing, as in the thesis's Pima example |
 | `verbose` | `TRUE` | default | Prints the one-line hull-filter summary |
 
 Full argument list: `?bl_prepare_data`.
@@ -355,7 +355,7 @@ bl_results <- bl_build_result(
   bl_data  = bl_dat,
   bl_model = bl_mod,
   method   = "CVA",
-  title    = "Loan default (prior defaulters) -- XGB, CVA biplot",
+  title    = "Loan default (no prior default) -- XGB, CVA biplot",
   b_margin = 0.001
 )
 ```

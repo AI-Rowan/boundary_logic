@@ -69,7 +69,7 @@ test_that("an empty confusion group is named, dropped, and keeps confusion colou
                                method = "CVA", bl_model = fp_free),
     "FP empty", fixed = TRUE)
   expect_identical(levels(res$cva_classes), c("FN", "TN", "TP"))
-  expect_setequal(unique(res$point_col), c("green3", "steelblue", "red"))
+  expect_setequal(unique(res$point_col), c("red", "blue", "orange"))
 })
 
 test_that("an unused level in user-supplied cva_classes is dropped before W", {

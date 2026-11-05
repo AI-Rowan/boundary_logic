@@ -20,19 +20,26 @@ its effect on results, and a suggested fix. Line numbers are those of 2026-11-04
 The Pima numbers come from the Paper 1 example (`scripts/paper1-pima/`, local), run on the GAM
 refitted on the four features kept after the global search: Pregnancies, Glucose, Insulin and Age.
 
+**Decided on 2026-11-05.** Every item below has a decision in
+`methodology-changes/future-improvements-review.md` (items A1-A9): fixed now, or an area of future
+improvement. Items 3, 8 and 9 are fixed (see §2), and item 1 is measured by a new script. This note
+is retired once the methodology note becomes the design-decisions document (Phase 5 of
+`../.claude/plans/cryptic-snuggling-bee.md`). The entries below keep the Pima numbers of
+2026-11-04, before the convex hull on the rotated plane (§2) changed the TP target's runs.
+
 ## 1. Open issues
 
-| # | Issue | Kind | Moves results if fixed? |
-|---|---|---|---|
-| 1 | The 2D-boundary approximation gap has not been measured | experiment | no (it measures) |
-| 2 | Only the winning pair's plane is stored | package | no |
-| 3 | `plot.bl_projection()` uses its own confusion colours | display | no |
-| 4 | The `"fixed"` tolerance is hard-coded | package | yes, for `"fixed"` runs |
-| 5 | No follow-up search when the `"fixed"` restore fails | method | yes, for `"fixed"` runs |
-| 6 | The local search does not work in the free features only | method | yes, for `"fixed"` runs |
-| 7 | Integer rounding cannot let the other features compensate | method | yes, for `"integer"` runs |
-| 8 | The README's constraint example finds no counterfactual | documentation | no |
-| 9 | The harness's CVA biplot title says "prior defaulters" | documentation | no |
+| # | Issue | Kind | Moves results if fixed? | Decision (2026-11-05) |
+|---|---|---|---|---|
+| 1 | The 2D-boundary approximation gap has not been measured | experiment | no (it measures) | measured now (A1) |
+| 2 | Only the winning pair's plane is stored | package | no | future (A2) |
+| 3 | `plot.bl_projection()` uses its own confusion colours | display | no | **fixed** (A3) |
+| 4 | The `"fixed"` tolerance is hard-coded | package | yes, for `"fixed"` runs | future (A4) |
+| 5 | No follow-up search when the `"fixed"` restore fails | method | yes, for `"fixed"` runs | future (A5) |
+| 6 | The local search does not work in the free features only | method | yes, for `"fixed"` runs | future (A6) |
+| 7 | Integer rounding cannot let the other features compensate | method | yes, for `"integer"` runs | future (A7) |
+| 8 | The README's constraint example finds no counterfactual | documentation | no | **fixed** (A8) |
+| 9 | The harness's CVA biplot title says "prior defaulters" | documentation | no | **fixed** (A9) |
 
 ### 1.1 The 2D-boundary approximation gap has not been measured
 
@@ -172,10 +179,15 @@ before it was written.
 | `best_pair` not reproducible across identical calls | The boundary searches take the exact nearest contour vertex (`max.col(..., ties.method = "first")`), not a random one among near-ties; see `nearest-vertex-tie-break.md`. The rotation plane's under-determination remains, but it is deterministic: CLAUDE.md §9 and the rotation note §4.1. | `f0e3dd4` |
 | Results depend on earlier calls in the session | The same fix: no search draws from the session's random numbers. | `f0e3dd4` |
 | The cutoff is not passed to `bl_build_grid()` | The grid takes the model's cutoff (`bl_model$cutoff`). | `f4f3647` |
-| `rotate_deg` is not applied to the sparse counterfactual's cross | `rotate_deg` was removed from the local plots, whose orientation the optimal rotation fixes. | `f4f3647` |
+| `rotate_deg` is not applied to the sparse counterfactual's cross | `rotate_deg` was removed from the local plots, whose orientation the Procrustes rotation fixes. | `f4f3647` |
 | `xgboost::xgboost()` models fail in prediction | `.pred_function()` accepts them. | `f4f3647` |
 | An empty outcome group breaks four-group CVA | `bl_build_projection()` drops empty groups, with a message. | `f4f3647` |
-| The PCA pair-selector default (`W_binary` Mahalanobis) departs from the thesis's Euclidean rule (rotation note §4.4) | `distance = "auto"` (2026-11-05): Euclidean in X-space on the total-SD scale under PCA, Mahalanobis under CVA, in `bl_find_local_cf()` and in Phase 2's `plot.bl_boundary()` / `bl_robustness()`. Paper 1 (CVA) is unchanged. | uncommitted |
+| The PCA pair-selector default (`W_binary` Mahalanobis) departs from the thesis's Euclidean rule (rotation note §4.4) | `distance = "auto"` (2026-11-05): Euclidean in X-space on the total-SD scale under PCA, Mahalanobis under CVA, in `bl_find_local_cf()` and in Phase 2's `plot.bl_boundary()` / `bl_robustness()`. Paper 1 (CVA) is unchanged. | `12b38e4` |
+| The local search applies no convex hull (methodology note §3.6; the thesis rule, p.117) | `bl_find_local_cf(hull = TRUE)` (2026-11-05): the convex hull of the training data and the target is rebuilt on each rotated plane, and only the boundary points inside it are kept; `hull = FALSE` gives the earlier search. See `local-convex-hull.md`. | uncommitted |
+| 3. `plot.bl_projection()` uses its own confusion colours | One private constant, `.confusion_cols`, holds the thesis colours for every plot method (2026-11-05). | uncommitted |
+| 8. The README's constraint example finds no counterfactual | The example uses Paper 1's run 4 constraints on the second patient predicted diabetic, shows its output, and notes that the first has no counterfactual (2026-11-05). | uncommitted |
+| 9. The harness's CVA biplot title says "prior defaulters" | "Loan default (no prior default) -- XGB, CVA biplot", in the harness and its walkthrough (2026-11-05). | uncommitted |
+| A target at the centroid (rotation note §4.8) | Verified (every pair gives the plane of components (1,2)); `bl_find_local_cf()` now warns (2026-11-05). | uncommitted |
 | `used_in_sparse` is `TRUE` for a fixed feature after the restore | The flag is `FALSE` for fixed features, matching what the sparse counterfactual does. | `7aa1344` |
 | Stale documentation: `dist_z`, the sparse colours and the Shapley `seed` in roxygen; the README; the "stratified" split; the walkthrough's `set_filters(person_age = "fixed")` examples after `person_age` was pruned | Corrected in the documentation sweep and the walkthrough review, and re-checked in the documentation audit of 2026-11-04. | `f2a076b`, `7aa1344` |
 

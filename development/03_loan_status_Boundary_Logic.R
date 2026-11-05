@@ -248,7 +248,7 @@ names(loan_encoded)
     bl_data  = bl_dat,
     bl_model = bl_mod,
     method   = "CVA",
-    title    = "Loan default (prior defaulters) -- XGB, CVA biplot",
+    title    = "Loan default (no prior default) -- XGB, CVA biplot",
     b_margin = 0.001
   )
   print(bl_results)
@@ -556,10 +556,14 @@ names(loan_encoded)
 
 # ---- Step 11: Find local counterfactual via biplot rotation ----------
 {
+  # hull = TRUE (the default) keeps only boundary points inside the convex
+  # hull of the training data and the target on each rotated plane, the
+  # thesis's plausibility rule; hull = FALSE drops it.
   bl_local <- bl_find_local_cf(
     bl_result   = bl_results_v2,
     set_filters = flt,
-    bl_target   = tgt
+    bl_target   = tgt,
+    hull        = TRUE
     )
   # print(bl_local) ends with the observed vs counterfactual table (one row
   # per feature, with its Step 10 constraint, in raw loan units) and notes

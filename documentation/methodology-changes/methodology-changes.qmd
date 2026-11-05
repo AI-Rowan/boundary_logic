@@ -1,8 +1,8 @@
 ---
 title: "Methodology changes since the thesis"
-subtitle: "The boundarylogic package against the PhD method, for the supervisor's approval before Paper 1"
+subtitle: "The boundarylogic package against the PhD method: the changes made and the future work"
 author: "Adriaan Rowan"
-date: "2026-11-04"
+date: "2026-11-05"
 format:
   docx:
     toc: true
@@ -36,6 +36,15 @@ f1  <- function(x) f2(x, 1)
 pct <- function(x) paste0(f1(abs(as.numeric(x))), "%")
 
 commit   <- substr(v("meta", "git_sha"), 1, 7)
+commit_txt <- paste0(commit, if (identical(v("meta", "git_dirty"), "TRUE"))
+  " with uncommitted changes to the package code" else "")
+
+# The approximation gap (Section 3.12), from the Pima script 05_full-space-gap.R.
+gap_file <- "../../scripts/paper1-pima/output/full_space_gap.rds"
+if (!file.exists(gap_file))
+  stop("Run 05_full-space-gap.R first: ", gap_file, " is missing.")
+gap <- readRDS(gap_file)
+gp_pct <- function(r) paste0(round(100 * (r - 1)), "%")
 n_train  <- num("M2", "n_train", model = "4f")
 n_test   <- num("M3", "rows_test", model = "4f")
 n_g      <- num("M2", "n_minus_g", model = "4f")
@@ -87,50 +96,71 @@ stopifnot(
   all(as.numeric(rows_of("M5P", "max_abs_dist_x_minus_dist_z")$value) < 1e-8),
   v("M1P", "weakest3", "7f", setting = "total SD (auto)") ==
     v("M1P", "weakest3", "7f", setting = "within-class SD"),
+  v("M5P", "solution_found", "4f", "TP", "run 1 / mahalanobis") == "FALSE",
   v("M7", "boundary_point_found", target = "TP", setting = "run3") == "FALSE",
-  v("M7", "solution_found", target = "TP", setting = "run4") == "TRUE",
+  v("M7", "boundary_point_found", target = "TP", setting = "run4") == "FALSE",
+  v("M7", "solution_found", target = "TP", setting = "run4") == "FALSE",
+  v("M7", "solution_found", target = "TP", setting = "run7") == "FALSE",
   v("M7", "solution_found", target = "TN", setting = "run3") == "FALSE",
   v("M7", "solution_found", target = "TN", setting = "run4") == "FALSE",
+  v("M7", "solution_found", target = "TN", setting = "run7") == "TRUE",
+  v("M7", "restore_applied", target = "TN", setting = "run7") == "TRUE",
+  all(rows_of("M6", "same_result")$value[rows_of("M6", "same_result")$target == "TN"] == "TRUE"),
+  v("M6", "same_result", "4f", "TP", "run1") == "FALSE",
+  v("M6", "solution_found", "4f", "TP", "run4 / no hull") == "TRUE",
+  v("M6", "solution_found", "4f", "TP", "run4 / hull") == "FALSE",
+  v("M6", "sweep_cf_found_hull", "4f") == v("M6", "sweep_test_rows", "4f"),
+  v("M6", "sweep_cf_found_no_hull", "4f") == v("M6", "sweep_test_rows", "4f"),
+  v("M4", "solution_found", "4f", "TP", "max_pairs = 1") == "FALSE",
+  v("K3", "solution_found", "4f", "TP", "thesis_order") == "FALSE",
+  v("P212", "uses_component_beyond_K", target = "TP", setting = "run1") == "TRUE",
   all(rows_of("M9", "sparse_would_differ")$value == "FALSE"),
   setequal(rows_of("M9", "no_effect_vars")$value, c("none", "Pregnancies")),
+  v("M9", "no_effect_vars", target = "TN", setting = "run7") == "Pregnancies",
   all(rows_of("M10", "greedy_valid")$value == "TRUE"),
   all(rows_of("M10", "all_supports_valid")$value == "TRUE"),
-  sparse_gain[["TP"]] == sparse_gain[["TN"]],
+  sparse_gain[["TP"]] == 0, sparse_gain[["TN"]] == 1,
   all(rows_of("K2", "same_as_baseline")$value == "TRUE"),
   all(rows_of("K4", "ridge_fallback_used")$value == "FALSE"),
   v("K5", "clamp_warning") == "FALSE",
-  all(rows_of("I5", "run2_equals_run1")$value == "TRUE")
+  v("I5", "run2_equals_run1", "4f", "TN") == "TRUE",
+  v("M6", "solution_found", "4f", "TP", "run2 / hull") == "FALSE",
+  gap$n_ratio_below_1 == 0, gap$hull$q1 > 1,
+  gap$hull$n_ratio == gap$hull$n_rows,
+  abs(gap$hull$median_plausible - gap$hull$median) < 0.05
 )
 ```
 
 # Summary {.unnumbered}
 
-This note records every change to the method of the thesis (Rowan, 2026) that the `boundarylogic`
-package has made since the thesis was submitted. It asks for the supervisor's approval of each change
-before Paper 1 relies on it. The note separates the **core methodology**, which determines what the
-method computes, from the **code improvements** used to implement it, and measures the effect of each
-change on the Pima diabetes example of Paper 1 wherever the package can switch the change back.
+This note records the changes made to the method of the thesis (Rowan, 2026) in the `boundarylogic`
+package since the thesis was submitted (Sections 2 to 4), and the future work that remains (Section 5).
+It separates the **core methodology**, which determines what the method computes, from the **code
+improvements** used to implement it, and measures the effect of each change on the Pima diabetes example
+of Paper 1 wherever the package can switch the change back.
 
-Eleven core changes are recorded in Section 3, each with a decision box. Two of them depart from the
-thesis text itself, not only from its code:
+Eleven core changes are recorded in Section 3. One of them departs from the
+thesis text itself, not only from its code: **global counterfactuals outside the training ranges are
+kept and reported** rather than discarded (Section 3.3), whereas the thesis filters them (p.93). The
+package keeps them so that the distance to the nearest boundary stays correct, at the cost of reporting
+some infeasible counterfactuals.
 
-- **the local search no longer requires the counterfactual to lie within the convex hull of the
-  training data** (Section 3.6), which the thesis requires on p.117;
-- **global counterfactuals outside the training ranges are kept and reported** rather than discarded
-  (Section 3.3), whereas the thesis filters them (p.93). The package keeps them so that the distance to
-  the nearest boundary stays correct, at the cost of reporting some infeasible counterfactuals.
+Two other departures were removed on 5 November 2026:
 
-A third departure, the comparison of the pairs of components by Mahalanobis rather than Euclidean
-distance under PCA, was removed on 5 November 2026: the package now applies the thesis's rule by
-projection (p.86), in the pair comparison and in the variable importance (Sections 3.1 and 3.5). Paper 1,
-which uses CVA, is unaffected.
+- the comparison of the pairs of components by Mahalanobis rather than Euclidean distance under PCA:
+  the package now applies the thesis's rule by projection (p.86), in the pair comparison and in the
+  variable importance (Sections 3.1 and 3.5). Paper 1, which uses CVA, is unaffected;
+- **the local search without a convex hull**: the package again keeps only the boundary points inside
+  the convex hull of the training data on each rotated plane, as the thesis requires (p.117; Section
+  3.6). This changes the Phase 3 results of the true-positive target.
 
 The remaining core changes extend the thesis method (the `"fixed"` and `"integer"` constraints, the
 greedy sparse counterfactual, the "No effect" class) or change the scale or reach of a measure (the
 within-class standard deviation in the variable importance, the covariance form of $\mathbf{W}$, the cap
-on the number of pairs). Section 3.12 adds two properties of the thesis method that the thesis does not
-state, both of which the paper relies on. The code improvements are summarised in Section 4, with one
-decision box for the section.
+on the number of pairs). Section 3.12 adds three properties of the thesis method that the thesis does not
+state, all of which the paper relies on, including the measured gap between the distances on the biplot
+planes and those in the full space. The code improvements are summarised in Section 4, and Section 5
+lists the future work, each item of which Paper 1 names as an area of future improvement.
 
 # How to read this note
 
@@ -144,8 +174,7 @@ are reported where they differ from the text or from each other:
   as Appendix A.
 
 Where the text, Appendix A and the branch disagree, the text defines the thesis version. Page numbers
-are the printed pages of the final thesis. The notes in the package's `documentation/` folder cite the
-30 September 2025 draft, whose page numbers run about 20 pages higher.
+are the printed pages of the final thesis, as in the package's other notes.
 
 **The Pima set-up** is that of Paper 1. The `r n_train + n_test` rows without zeros in *Insulin*, *SkinThickness*,
 *Glucose* or *BMI* are split 80:20 (seed 121) into `r n_train` training and `r n_test` testing rows. A
@@ -157,17 +186,17 @@ examples use a true positive (test row `r row_TP`) and a true negative (test row
 test row whose global counterfactual distance lies nearest its group's median.
 
 **Measurements.** Every measured number in this note is read from `method-change-effects.csv`, written by the
-script `04_method-change-effects.R` at package commit `r commit`. A *toggle* measurement switches one
+script `04_method-change-effects.R` at package commit `r commit_txt`, except the approximation gap of
+Section 3.12, which `05_full-space-gap.R` measures. A *toggle* measurement switches one
 change back through a package argument and reruns the search; a *stored* measurement reads a
 diagnostic the package keeps (for example the search point before a constraint is applied). Changes
 that cannot be switched back are described and marked "not measured". Distances are quoted as
 $\sqrt{d^2_M}$, the Mahalanobis distance under the package's $\mathbf{W}$ (Section 3.2).
 
-**Decision boxes.** Each core change ends with a box for the supervisor: *Approve* (the paper may rely
-on the change), *Query* (discuss before the paper relies on it) or *Reject* (return to the thesis
-version), with space for a comment. Comments can also be added in Word.
+**Proposed paper sentences.** Where a change affects how Paper 1 reports a Pima result, the section
+ends with the sentence the paper proposes to use.
 
-# History of changes
+# Changes made: history
 
 The package was started on 15 January 2026, while the thesis was being finalised, and was built from
 the thesis code over March 2026. Table 1 lists the dated changes that bear on the method. The category
@@ -192,11 +221,12 @@ column says whether a change belongs to the core methodology (Section 3), is a c
 | 31 Oct 2026 | `f0e3dd4` | The nearest boundary vertex taken deterministically | Code |
 | 31 Oct 2026 | `49c9067` | Pair cap raised to 21; the Phase 2 Mahalanobis check | Core (3.4); code |
 | 4 Nov 2026 | `67a1424` | Strict `"fixed"`; the `"integer"` constraint; Mahalanobis distance returned by the global search | Core (3.7, 3.8); code |
-| 5 Nov 2026 | uncommitted | The thesis's distance rule by projection (`distance = "auto"`): Euclidean under PCA, Mahalanobis under CVA, in the pair comparison and the variable importance | Core (3.1, 3.5) |
+| 5 Nov 2026 | `12b38e4` | The thesis's distance rule by projection (`distance = "auto"`): Euclidean under PCA, Mahalanobis under CVA, in the pair comparison and the variable importance | Core (3.1, 3.5) |
+| 5 Nov 2026 | uncommitted | The convex hull of the training data and the target rebuilt on each rotated plane in the local search (`hull = TRUE`), as the thesis requires; outlier removal off by default (`hull_fraction = 1`); one colour scheme for every biplot; a warning for a target at the centre of the biplot | Core (3.6, 3.11); code |
 
 : Table 1. Dated changes to the method since the thesis.
 
-# Core methodology: the thesis against the package
+# Changes made: core methodology
 
 Table 2 follows the method through its three phases and marks each step as unchanged or changed. The
 steps marked as changed are discussed in Sections 3.1 to 3.11; the code-level differences behind the
@@ -205,7 +235,7 @@ unchanged steps are listed in Section 4.
 | Step | Thesis (text) | Package | Status |
 |:--|:--|:--|:--|
 | **Phase 1** | | | |
-| Outlier removal | Optional; none for Pima (p.99), a 90% hull for the loans (p.127) | `bl_prepare_data(hull_fraction =)`, on a stand-in projection | Changed (3.11) |
+| Outlier removal | Optional; none for Pima (p.99), a 90% hull for the loans (p.127) | Optional, off by default: `bl_prepare_data(hull_fraction =)`, on a stand-in projection | Changed (3.11) |
 | Projection | PCA or CVA; CVA on the four prediction outcomes (p.92) | `bl_build_projection()` | Unchanged |
 | Metric $\mathbf{W}$ | Within-groups SSP (§3.4, p.48) | Within-groups covariance, SSP$/(n-g)$ | Changed (3.2) |
 | Decision boundary | Contours at $b \pm \varepsilon$ on a prediction grid (§3.6.1, p.62; $\varepsilon = 0.001$, p.78) | `bl_build_grid(b_margin = 0.001)` | Unchanged |
@@ -221,7 +251,7 @@ unchanged steps are listed in Section 4.
 | Pairs of components | All $p(p-1)/2$ pairs (p.117) | At most `max_pairs = 21` | Changed (3.4) |
 | Nearest point on one plane | Euclidean distance on the plane (p.75) | The same | Unchanged |
 | Comparison across pairs | Mahalanobis (CVA) or Euclidean (PCA) in the full space (p.86, p.117) | The same, by `distance = "auto"` (since 5 Nov 2026) | Restored (3.5) |
-| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | Not applied | Changed (3.6) |
+| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | The convex hull of the training data and the target, rebuilt on each rotated plane (`hull = TRUE`) | Restored (3.6) |
 | Actionability | Boundary points filtered by the constraints (p.88) | `set_filters()`, with a `"fixed"` restore | Changed (3.7) |
 | Whole-number variables | Treated as continuous (p.87, p.119) | `"integer"` constraint | Changed (3.8) |
 | Shapley values | All orderings of the change (§4.3.2, p.121) | Exact computation, the same values | Unchanged |
@@ -281,10 +311,6 @@ summed squared per-variable distances exceed the full squared Mahalanobis distan
 `r f1(abs(num("M1", "mahal_check_pct", "4f")))`% (four variables), so the importance ranks the variables
 but does not decompose the distance." A full decomposition is listed in Section 5.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
-
 ## The metric W as a covariance matrix
 
 **Thesis.** CVA partitions the total sums of squares and products (SSP) into the between-groups and
@@ -307,10 +333,6 @@ deviation that Section 3.1 can use. This also follows the covariance reading on 
 $g = `r v("M2", "g_groups", "4f")`$ groups, every squared distance is $n - g = `r n_g`$ times the
 thesis value, and every distance is $\sqrt{`r n_g`} = `r f2(num("M2", "sqrt_n_minus_g", "4f"))`$ times
 larger. No ranking or selection changes. The distances quoted in Paper 1 are on the package's scale.
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
 
 ## Global counterfactuals outside the training ranges
 
@@ -347,7 +369,7 @@ the nearest point and reports its feasibility.
 The commit records that CVA was unaffected. The same reconstruction applies under CVA, however, and the
 Pima results below show that counterfactuals on a CVA biplot can also fall outside the training ranges.
 
-**The choice for the supervisor.** The two rules trade correct distances against feasibility. Keeping
+**The trade-off.** The two rules trade correct distances against feasibility. Keeping
 the nearest point gives the correct distance to the approximated boundary, which the global measures
 need, but may report a counterfactual with feature values outside the training data. The thesis rule
 reports only feasible counterfactuals, but measures the distance to a farther point, and a data point
@@ -367,10 +389,6 @@ counterfactual outside them; the thesis rule would have replaced these with fart
 `r v("M3", "test_rows_outside_train_ranges", "7f")` test rows on the seven-feature model before the
 search. The local counterfactuals of Paper 1 are unaffected, since the local search applies the training
 ranges (Section 3.6).
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
 
 ## A cap on the number of pairs of components
 
@@ -396,20 +414,16 @@ instead against pair (1,2) alone (`max_pairs = 1`). Over all pairs, the search d
 `r f2(num("M8", "d_M_search", target = "TP", setting = "run5"))` to
 `r f2(num("M8", "d_M_search", target = "TP", setting = "run1"))` for the true positive and from
 `r f2(num("M8", "d_M_search", target = "TN", setting = "run5"))` to
-`r f2(num("M8", "d_M_search", target = "TN", setting = "run1"))` for the true negative; after the
-`"integer"` rounding of Section 3.8, the reported distances are
-`r f2(num("M4", "sqrt_d2M", "4f", "TP", "max_pairs = 1"))` against
-`r f2(num("M4", "sqrt_d2M", "4f", "TP", "max_pairs = 21"))` and
-`r f2(num("M4", "sqrt_d2M", "4f", "TN", "max_pairs = 1"))` against
+`r f2(num("M8", "d_M_search", target = "TN", setting = "run1"))` for the true negative. After the
+`"integer"` rounding of Section 3.8, the true positive has no counterfactual on pair (1,2) alone (no
+whole number of pregnancies near its search point crosses the boundary), against a reported distance of
+`r f2(num("M4", "sqrt_d2M", "4f", "TP", "max_pairs = 21"))` over all pairs; for the true negative the
+reported distances are `r f2(num("M4", "sqrt_d2M", "4f", "TN", "max_pairs = 1"))` against
 `r f2(num("M4", "sqrt_d2M", "4f", "TN", "max_pairs = 21"))`. The winning pairs are
 `r v("M4", "best_pair", "4f", "TP", "max_pairs = 21")` and `r v("M4", "best_pair", "4f", "TN", "max_pairs = 21")`.
 With more variables the number of pairs grows quickly (`r v("M4", "pairs_available", "7f")` for seven
 variables, `r choose(8, 2)` for eight), so a larger model may need a higher cap, or no cap, to find the nearest
 counterfactual. Removing the default cap would return the package to the thesis version.
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
 
 ## The distance that compares the pairs (restored under PCA)
 
@@ -456,11 +470,7 @@ Mahalanobis default finds no whole-number counterfactual; for the true negative 
 `r v("M5P", "sweep_rows_pair_differs", "4f")`. On the seven-feature PCA biplot the two standardisations of
 Section 3.1 rank the variables differently but identify the same three weakest.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
-
-## No convex hull in the local search
+## The convex hull in the local search (restored)
 
 **Thesis.** "The counterfactual must be selected from a local decision boundary that is within the
 convex hull of the training data" (§4.3.1, p.117), which ensures plausibility (p.116). The hull is
@@ -468,21 +478,56 @@ dropped only when an unconstrained solution is acceptable (p.115). Appendix A re
 rotated plane from the target and the training data (pp.207, 209); the branch builds it from the target
 and the test data, and keeps a closed contour only if it encloses the target.
 
-**Package.** `bl_find_local_cf()` applies no hull and no enclosure rule. The candidate boundary points
-are filtered by the actionability constraints and the training ranges only.
+**Package.** From March to November 2026 `bl_find_local_cf()` applied no hull: the candidate boundary
+points were filtered by the actionability constraints and the training ranges only. The recorded reason,
+that the rotation invalidates the hull of the global biplot, is correct for that hull, but it does not
+cover a hull rebuilt on each rotated plane. Since 5 November 2026 the convex hull of the training data
+and the target is rebuilt on each rotated plane, as in Appendix A, and only the boundary points inside it
+are kept, before the other filters (`hull = TRUE`, the default; `hull = FALSE` gives the earlier search).
+There is no enclosure rule, since the text does not require one for the local search.
 
-**Reason.** The package records that the rotation invalidates the hull of the global biplot, which is
-correct for that hull. The reason does not cover a hull rebuilt on each rotated plane, as Appendix A
-does, so the package departs from the thesis text here without a recorded justification.
+**Reason.** The text requires the hull for plausibility, and Appendix A builds it on each rotated
+plane; the earlier reason did not cover such a hull. The hull includes the target, as in Appendix A,
+so a target near the edge of the training data can still reach a counterfactual near it.
 
-**Effect on Pima.** Not switchable and not measured. The Paper 1 counterfactuals are feasible (within
-the training ranges) but have not been checked for plausibility; some may lie outside the convex hull
-of the training data on their rotated planes. This is the largest departure from the thesis text, and
-reinstating the hull per plane (Section 5) would change some Phase 3 results.
+**Effect on Pima.** The true negative is unchanged in every run. The true positive's search moves from
+pair `r v("M6", "best_pair", "4f", "TP", "run1 / no hull")` to
+`r v("M6", "best_pair", "4f", "TP", "run1 / hull")`, and its search distance from
+`r f2(num("M6", "d_M_search", "4f", "TP", "run1 / no hull"))` to
+`r f2(num("M6", "d_M_search", "4f", "TP", "run1 / hull"))`: without the hull its counterfactual raised
+*Age* from `r v("target", "x_obs:Age", "4f", "TP")` to
+`r f2(num("M6", "B_x:Age", "4f", "TP", "run1 / no hull"))`, a point outside the training data on its
+plane, while inside the hull it lowers *Age* to `r f2(run1("TP", "B_x:Age"))`. Every true-positive
+counterfactual inside the hull lowers *Age*, so the runs that keep *Age* from falling (runs 2, 3 and 4)
+have no counterfactual; run 4 had one without the hull. Over the
+`r v("M6", "sweep_test_rows", "4f")` test rows (run 1), every row keeps a counterfactual:
+`r v("M6", "sweep_unchanged", "4f")` are unchanged and `r v("M6", "sweep_moved", "4f")` move, with
+a median search distance `r pct(100 * (num("M6", "sweep_moved_median_ratio", "4f") - 1))` longer
+among the moved rows. See the package's `documentation/local-convex-hull.md`.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+**A constraint that does not bind (Pima issue 5).** With *Pregnancies* and *Age* not allowed to
+decrease (run 2), the true negative's counterfactual equals the unconstrained one, because its
+unconstrained counterfactual already increases these variables. The true positive's unconstrained
+counterfactual lowers both, so the constraint leaves it without a counterfactual. *Proposed paper sentence:*
+"A directional constraint changes the counterfactual only when it opposes the unconstrained move; for
+the true negative the unconstrained counterfactual already increases *Pregnancies* and *Age*, so the
+constraint does not bind."
+
+**Plausibility against actionability (Pima issue 11).** Inside the convex hull, the true
+positive (prediction `r f3(num("target", "pred_prob", "4f", "TP"))`) reaches the boundary by lowering
+every variable: *Pregnancies* from `r v("target", "x_obs:Pregnancies", "4f", "TP")` to
+`r f2(run1("TP", "B_x:Pregnancies"), 0)`, *Glucose* from `r v("target", "x_obs:Glucose", "4f", "TP")`
+to `r f2(run1("TP", "B_x:Glucose"))`, *Insulin* from `r v("target", "x_obs:Insulin", "4f", "TP")` to
+`r f2(run1("TP", "B_x:Insulin"))` and *Age* from `r v("target", "x_obs:Age", "4f", "TP")` to
+`r f2(run1("TP", "B_x:Age"))`. Without the hull it raised *Age* to
+`r f2(num("M6", "B_x:Age", "4f", "TP", "run1 / no hull"))`, where the GAM's non-monotone smooth of
+*Age* (effective degrees of freedom `r f1(num("I11", "edf:s(Age)", "4f"))`) predicts a lower risk but
+only `r v("I11", "train_age_over_50", "4f")` of the `r v("I11", "train_rows", "4f")` training patients
+are older than 50. *Proposed paper sentence:* "Without the plausibility rule, the nearest counterfactual for
+the true positive raised *Age* from `r v("target", "x_obs:Age", "4f", "TP")` to
+`r f1(num("M6", "B_x:Age", "4f", "TP", "run1 / no hull"))`, outside the training data; inside the
+convex hull every counterfactual lowers *Age*, which is not actionable, so the constrained runs report
+none."
 
 ## Fixed variables: a search tolerance and a strict restore
 
@@ -503,24 +548,23 @@ one possible.
 **Reason.** A reported counterfactual must hold every fixed variable exactly, which the thesis achieved
 only in the sparse counterfactual.
 
-**Effect on Pima (issue 12).** With *Pregnancies* and *Age* fixed (run 3), the true positive has no
-boundary point within the tolerance on any of the `r v("M4", "pairs_available", "4f")` pairs. With
-*Pregnancies* fixed and *Age* not allowed to decrease (run 4), the true-positive search moves
-*Pregnancies* from `r v("M7", "observed:Pregnancies", target = "TP", setting = "run4")` to
-`r f2(num("M7", "search_value:Pregnancies", target = "TP", setting = "run4"))`; restoring it lowers the
-prediction from `r f3(num("M7", "B_pred_search", target = "TP", setting = "run4"))` to
-`r f3(num("M7", "B_pred_restored", target = "TP", setting = "run4"))`, which still crosses, so the
-counterfactual is kept. For the true negative the restored points score
-`r f3(num("M7", "B_pred_restored", target = "TN", setting = "run3"))` (run 3) and
+**Effect on Pima (issue 12).** With *Pregnancies* and *Age* fixed (run 3), and with *Pregnancies* fixed
+and *Age* not allowed to decrease (run 4), the true positive has no boundary point within the tolerance
+and inside the hull on any of the `r v("M4", "pairs_available", "4f")` pairs (Section 3.6: every
+true-positive counterfactual inside the hull lowers *Age*). For the true negative the restored points
+score `r f3(num("M7", "B_pred_restored", target = "TN", setting = "run3"))` (run 3) and
 `r f3(num("M7", "B_pred_restored", target = "TN", setting = "run4"))` (run 4), which do not cross, so
-neither run reports a counterfactual. *Proposed paper sentence:* "With two of the four variables fixed,
-the two-dimensional search rarely finds a boundary point that also holds them; `r words(n_fixed_none)`
-of the `r words(n_fixed_runs)` fixed-variable runs report no counterfactual." A follow-up search that holds the fixed variables
-exactly is listed in Section 5.
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+neither run reports a counterfactual. With *Pregnancies* fixed and *Glucose* not allowed to increase
+(run 7), the true-negative search moves *Pregnancies* from
+`r v("M7", "observed:Pregnancies", target = "TN", setting = "run7")` to
+`r f2(num("M7", "search_value:Pregnancies", target = "TN", setting = "run7"))`; restoring it changes
+the prediction from `r f3(num("M7", "B_pred_search", target = "TN", setting = "run7"))` to
+`r f3(num("M7", "B_pred_restored", target = "TN", setting = "run7"))`, which still crosses, so the
+counterfactual is kept. The true positive's run 7 restore fails
+(`r f3(num("M7", "B_pred_restored", target = "TP", setting = "run7"))`). *Proposed paper sentence:*
+"When variables are held fixed, the two-dimensional search rarely finds a boundary point that also
+holds them; `r words(n_fixed_none)` of the `r words(n_fixed_runs)` runs with a fixed variable report no
+counterfactual." A follow-up search that holds the fixed variables exactly is listed in Section 5.
 
 ## Whole-number variables: the integer constraint
 
@@ -555,10 +599,6 @@ boundary; for the true negative, the whole pregnancy raises the distance from
 `r f2(num("M8", "d_M_rounded", target = "TN", setting = "run1"))`." Letting the other variables
 compensate after the rounding is listed in Section 5.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
-
 ## A "No effect" class for zero Shapley values
 
 **Thesis.** A variable *supports* the counterfactual when its Shapley value moves the prediction towards
@@ -572,13 +612,9 @@ and as Contradicts for a class-1 target (p.216).
 **Reason.** A variable whose change never moves the prediction should not be changed in the sparse
 counterfactual. This follows the thesis text, which the code's labelling did not.
 
-**Effect on Pima.** "No effect" occurs only where *Pregnancies* ends at its observed value (true-positive
-runs 4 and 5, after the restore or the rounding). The true positive is a class-1 target, so Appendix A
-would have labelled these Contradicts, and the sparse counterfactual is the same under both rules.
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+**Effect on Pima.** "No effect" occurs only where *Pregnancies* ends at its observed value: the true
+negative's run 7, after the restore. The true negative is a class-0 target, so Appendix A would have
+labelled it Supports, and the sparse counterfactual is the same under both rules.
 
 ## The sparse counterfactual: a greedy rule with a stopping point
 
@@ -605,11 +641,8 @@ prediction `r f3(num("M10", "greedy_pred", target = "TP"))`), against
 `r f3(num("M10", "greedy_pred", target = "TN"))`) against
 `r v("M10", "all_supports_n_changed", target = "TN")` (prediction
 `r f3(num("M10", "all_supports_pred", target = "TN"))`). Both versions cross the boundary for both
-targets; the greedy rule is sparser by `r words(sparse_gain[["TP"]])` variable for each target.
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+targets. For the true positive every Supports variable is needed, so the two rules agree; for the true
+negative the greedy rule is sparser by `r words(sparse_gain[["TN"]])` variable.
 
 ## Outlier removal before the projection
 
@@ -618,24 +651,24 @@ loan example "all data points lying outside the 90% convex hull of the training 
 "the convex hull fraction was adjusted" (p.127). Appendix A computes the hull on the training biplot
 itself.
 
-**Package.** `bl_prepare_data(hull_fraction = 0.9)` removes the training rows outside the hull by
-default, computing the hull on a two-component PCA of the standardised training features, before the
-model is fitted.
+**Package.** `bl_prepare_data(hull_fraction = )` removes the training rows outside a convex hull that
+encloses the given fraction of them, computing the hull on a two-component PCA of the standardised
+training features, before the model is fitted. The test data is never filtered. The default was 0.9
+from March to November 2026; since 5 November 2026 it is 1, which removes nothing, so outlier removal
+is optional, as in the thesis. Each application sets its own value: the loan harness and vignette use
+0.9, as the thesis's loan example does, and the Pima example of Paper 1 uses 1, as the thesis's Pima
+example does.
 
 **Reason.** The filter runs as part of the data preparation, before the model and the final projection
-exist, so it uses a stand-in projection.
+exist, so it uses a stand-in projection. A value below 1 is worth choosing when extreme training rows
+would stretch the biplot and its prediction grid; the default keeps the data as given.
 
-**Effect on Pima.** None: Paper 1 sets `hull_fraction = 1`, as the thesis's Pima example did. Not
-measured. The supervisor may wish to consider whether the default should be no filtering.
+**Effect on Pima.** None: Paper 1 sets `hull_fraction = 1`, which is now also the default. Not
+measured.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+## Three properties the thesis does not state
 
-## Two properties the thesis does not state
-
-These properties are unchanged from the thesis, but Paper 1 relies on them, so they are recorded here
-for approval.
+These properties are unchanged from the thesis, but Paper 1 relies on them, so they are recorded here.
 
 **Components beyond the canonical dimensions.** With $g$ groups, CVA has
 $K = \min(g - 1, p)$ non-zero eigenvalues (§3.4, p.49), so $K = `r v("P212", "K_nonzero_eigenvalues", "4f")`$
@@ -643,7 +676,8 @@ for the four prediction outcomes. The remaining $p - K$ components span the null
 two or more dimensions, its basis is not unique and is set by the numerical routine; this holds for the
 seven-feature model ($p - K = `r v("P212", "p_minus_K", "7f")`$), where the thesis's pair (1,7) uses such
 a component. On the four-feature model of Paper 1, $p - K = `r v("P212", "p_minus_K", "4f")`$, so the
-fourth component is fixed up to its sign. The true negative's counterfactual uses it (pair
+fourth component is fixed up to its sign. Both counterfactuals use it (pairs
+`r v("P212", "best_pair", target = "TP", setting = "run1")` and
 `r v("P212", "best_pair", target = "TN", setting = "run1")`).
 
 **The rotation is not unique.** The Procrustes rotation aligns the plane with a single target point, so
@@ -652,17 +686,31 @@ of the plane is left to a numerical tie-break. The thesis does not discuss this 
 is inherited from the thesis code and documented in the package's rotation note (§4.1). The results are
 deterministic for identical inputs, but a perturbation of the loadings at machine precision can move
 the plane. On Pima, ordering the CVA groups as the thesis code did changes the loadings by no more than
-`r formatC(num("K3", "max_abs_V_difference", "4f"), format = "e", digits = 1)`, yet the true positive's
-winning pair moves from `r run1("TP", "best_pair")` to `r run1("TP", "best_pair", "thesis_order", "K3")`
-and its distance from `r f2(run1("TP", "sqrt_d2M"))` to
-`r f2(run1("TP", "sqrt_d2M", "thesis_order", "K3"))`. A deterministic replacement is proposed in
+`r formatC(num("K3", "max_abs_V_difference", "4f"), format = "e", digits = 1)`, yet the true positive
+loses its counterfactual: its search point moves, and no whole number of pregnancies near the new point
+crosses the boundary (against pair `r run1("TP", "best_pair")` and distance
+`r f2(run1("TP", "sqrt_d2M"))` with the package's order). A deterministic replacement is proposed in
 Section 5.
 
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+**The reported distance is an upper bound (the approximation gap).** The counterfactual is the nearest
+boundary point within the planes that are searched, so its distance is at least the distance to the
+nearest point of the decision boundary in the full space of the four variables. A constrained search in
+the full space measures the gap: for each of the `r gap$hull$n_rows` test rows, the smallest
+Mahalanobis distance at which the GAM's probability equals 0.5 within the training ranges, found by a
+gradient-based solver from the package's point and from `r gap$n_dirs` random directions. The
+package's search distance is a median `r f2(gap$hull$median)` times the full-space distance
+(quartiles `r f2(gap$hull$q1)` and `r f2(gap$hull$q3)`, range `r f2(gap$hull$min)` to
+`r f2(gap$hull$max)`), and within 5% of it for `r round(100 * gap$hull$share_le_1.05)`% of the rows.
+For the two examples the ratios are `r f2(gap$targets$TP$hull$ratio)` (true positive) and
+`r f2(gap$targets$TN$hull$ratio)` (true negative). `r gap$hull$n_full_in_train_hull` of the
+full-space points lie inside the convex hull of the training data in four dimensions, and their median
+ratio is `r f2(gap$hull$median_plausible)`, so the gap is not explained by implausible full-space points.
+*Proposed paper sentence:* "The biplot search finds a boundary point a median `r gp_pct(gap$hull$median)`
+further from the target than the nearest boundary point in the full four-dimensional space, so the
+distances it reports are upper bounds (quartiles `r gp_pct(gap$hull$q1)` and
+`r gp_pct(gap$hull$q3)` further)."
 
-# Code improvements
+# Changes made: code improvements
 
 These changes alter how the method is computed, its default parameters or its numerical behaviour, not
 what it computes. Table 4 summarises them with their measured effect on Pima. Run 1 is the paper's
@@ -672,11 +720,13 @@ unconstrained run (*Pregnancies* `"integer"`).
 |:--|:--|:--|:--|
 | Contour band and prediction rounding | $\varepsilon = 0.01$ and predictions floored to 2 decimals → $\varepsilon = 0.001$ (as in the text, p.78) and 3 decimals | Separate the band from the rounding; a narrower band | With $\varepsilon = 0.01$: true-positive distance `r f3(run1("TP", "sqrt_d2M", "b_margin", "K1"))` against `r f3(run1("TP", "sqrt_d2M"))`, prediction `r f3(run1("TP", "B_pred", "b_margin", "K1"))` against `r f3(run1("TP", "B_pred"))`; true-negative distance `r f3(run1("TN", "sqrt_d2M", "b_margin", "K1"))` against `r f3(run1("TN", "sqrt_d2M"))`; the target rule picks test row `r v("K1", "rule_target_TP", "4f", setting = "b_margin")` for the true positive (row `r row_TP` at 0.001). The 2-decimal floor cannot be switched back. |
 | Global grid hull fraction | 0.9 → 1 | Every training point inside the hull | Run 1 unchanged for both targets; the target rule picks test row `r v("K2", "rule_target_TN", "4f", setting = "outlie")` for the true negative (row `r row_TN` at 1) |
-| Order of the CVA groups | TN, FN, FP, TP (colour names) → FN, FP, TN, TP, fixed | Reproducibility | True positive: pair `r run1("TP", "best_pair", "thesis_order", "K3")` against `r run1("TP", "best_pair")`, distance `r f2(run1("TP", "sqrt_d2M", "thesis_order", "K3"))` against `r f2(run1("TP", "sqrt_d2M"))`; true negative: `r f2(run1("TN", "sqrt_d2M", "thesis_order", "K3"))` against `r f2(run1("TN", "sqrt_d2M"))` (Section 3.12) |
+| Order of the CVA groups | TN, FN, FP, TP (colour names) → FN, FP, TN, TP, fixed | Reproducibility | True positive: no counterfactual with the thesis order (no whole-number point), against pair `r run1("TP", "best_pair")` and distance `r f2(run1("TP", "sqrt_d2M"))`; true negative: `r f2(run1("TN", "sqrt_d2M", "thesis_order", "K3"))` against `r f2(run1("TN", "sqrt_d2M"))` (Section 3.12) |
 | Inverse of $\mathbf{W}$ | `solve()` → Cholesky, with a ridge fallback | Numerical stability; detects a singular $\mathbf{W}$ | The ridge fallback is not needed on either model |
 | Grid probabilities | No clamp → clamped to [0, 1], with a warning | Out-of-range model outputs gave missing colours | No warning raised |
 | Nearest boundary vertex | Appendix A `which.min`; branch random tie-break → the first nearest vertex | Determinism, as the text states (p.92) | Not measured; the scale on the loan data is in the package's tie-break note (§5) |
 | Data behind the local plane | Test data and plot bounds → training data, range plus 10% | The training data defines the projection | Not measured |
+| Confusion colours | The thesis scheme in every plot except `plot.bl_projection()` → one shared scheme (TP red, TN blue, FP purple, FN orange) | One colour means one outcome in every biplot | Display only |
+| A target at the centre of the biplot | No check → a warning (the rotation is undefined there) | The local plane is arbitrary at the centre | No result changes |
 | Hull for the global test search | Test-data hull (branch) → training hull | As the text states (p.93) | Not measured |
 | Constraint syntax and pair order | Free expressions; pairs in `combn` order → named forms (`"increase"`, `"decrease"`, ranges); pairs by the second component | Usability | Only ties are affected |
 | New diagnostics | None → Mahalanobis distance in the global search; the Phase 2 Mahalanobis check | Reporting | No search result changes |
@@ -704,28 +754,25 @@ unconstrained run (*Pregnancies* `"integer"`).
 **Open coding issues** are recorded in the package's `documentation/known-issues.md`; those that bear on
 the method are listed in Section 5.
 
-| **Supervisor decision (Section 4 as a whole)** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
+# Future work
 
-# Possible future changes
+None of these is implemented. Each is left as future work, and Paper 1 names it as an area of future
+improvement. Table 5 summarises them; each is described below.
 
-None of these is implemented. Table 5 summarises them; each is described below.
-
-| Change | Why | Expected effect on results | Effort | Recommendation |
+| Change | Why | Expected effect on results | Effort | Decision |
 |:--|:--|:--|:--|:--|
-| Minimal rotation with a search over planes | Makes the plane unique (Section 3.12) | Moves every Phase 3 result | High | After Paper 1 |
-| A hull rebuilt on each rotated plane | Restores the plausibility rule of the text (Section 3.6) | Some counterfactuals removed or moved | Medium | Decide with Section 3.6 |
-| Follow-up searches for `"fixed"` and `"integer"` | Fewer runs without a counterfactual; smaller rounding cost | Changes constrained runs only | Medium | After Paper 1 |
-| A configurable `"fixed"` tolerance | The 0.5 tolerance is hard-coded | None at the default | Low | Soon |
-| A per-row feasibility flag, and the training-range filter as an option, in the global search | Shows which counterfactuals are infeasible; offers the text's rule (Section 3.3) | None at the default | Low | Soon |
-| Storing every pair's plane | Shows the search across planes | None | Low to medium | When needed for a figure |
-| The approximation-gap experiment | Measures how far the 2D boundary lies from the full boundary | None; informs accuracy claims | Medium | Before a later paper |
-| Full Mahalanobis decomposition in Phase 2 | Removes the gap of Section 3.1 | Changes the importance values | Medium | After Paper 1 |
-| Aggregated Shapley values | Global importance from local attributions (thesis §6.2) | New output | High | Later |
-| CVA biplot for a singular $\mathbf{W}$ ($p > n$) | Wide data | New capability | Medium to high | Later |
-| LDA for more than two classes | Multi-class models | New capability | High | Later |
-| A different transformation per variable | Skewed or mixed-scale variables (display only) | None | Medium | Later |
+| Minimal rotation with a search over planes | Makes the plane unique (Section 3.12) | Moves every Phase 3 result | High | Future work, after Paper 1 |
+| A check on other platforms | The plane depends on the linear algebra routine (Section 3.12) | Tests whether the results reproduce | Low | Future work; Paper 1 states its platform |
+| Follow-up searches for `"fixed"` and `"integer"`, and a search in the actionable variables only | Fewer runs without a counterfactual; smaller rounding cost | Changes constrained runs only | Medium to high | Future work |
+| Feasibility as a constraint inside the search | Finds the nearest feasible point directly | Changes constrained runs | Medium | Future work |
+| A configurable `"fixed"` tolerance | The 0.5 tolerance is hard-coded | None at the default | Low | Future work |
+| A per-row feasibility flag, and the training-range filter as an option, in the global search | Shows which counterfactuals are infeasible; offers the text's rule (Section 3.3) | None at the default | Low | Future work |
+| Storing every pair's plane | Shows the search across planes; allows a failed restore to be retried on the next-best pair | None | Low to medium | Future work |
+| Full Mahalanobis decomposition in Phase 2 | Removes the gap of Section 3.1 | Changes the importance values | Medium | Future work |
+| Aggregated Shapley values | Global importance from local attributions (thesis §6.2) | New output | High | Future work |
+| CVA biplot for a singular $\mathbf{W}$ ($p > n$) | Wide data | New capability | Medium to high | Future work |
+| Multi-class models | One boundary for each pair of classes | New capability | High | Future work, a key area |
+| A different transformation per variable | Skewed or mixed-scale variables (display only) | None | Medium | Future work |
 
 : Table 5. Possible future changes.
 
@@ -735,15 +782,23 @@ the family of planes that contain the target. This removes the tie-break of Sect
 the search beyond fixed pairs, in the spirit of the grand tour proposed in the thesis (§6.3, p.144).
 Since every Phase 3 number would move, the change should follow Paper 1.
 
-**A hull rebuilt on each rotated plane.** Building the convex hull of the training data on each rotated
-plane, as Appendix A does, and keeping only the boundary points inside it would restore the thesis's
-plausibility requirement (Section 3.6). Some local counterfactuals may be removed or moved further away.
+**A check on other platforms.** The Procrustes rotation leaves the plane's second direction to the
+linear algebra routine (Section 3.12), so another operating system or linear algebra library may select
+a different plane, and hence a different counterfactual. The package has been run on one platform (R
+4.6.0 on Windows); Paper 1 states this, and its supplement records the session information. Rerunning the
+Pima example on other platforms would test whether its results reproduce; the minimal rotation above
+would remove the dependence.
 
 **Follow-up searches for `"fixed"` and `"integer"`.** When the restore of a fixed variable fails, a
 second search could move the free variables along the search direction, with the fixed variables held
-exactly, until the model crosses the boundary; a search in the free variables only is the larger
-alternative. After an integer rounding, the other variables could compensate, reducing the distance
-cost of Section 3.8. Both are recorded in `known-issues.md` (§1.5 to §1.7).
+exactly, until the model crosses the boundary; building the local biplot in the actionable variables
+only is the larger alternative. After an integer rounding, the other variables could compensate,
+reducing the distance cost of Section 3.8, and a step size other than 1 could be allowed. Both are
+recorded in `known-issues.md` (§1.5 to §1.7).
+
+**Feasibility as a constraint inside the search.** The constraints and the training ranges filter the
+vertices of the boundary contour, so the nearest feasible point may lie between two vertices. Treating
+feasibility as a constraint inside the search would find it directly.
 
 **A configurable `"fixed"` tolerance and the global training ranges.** The 0.5 tolerance suits
 variables measured in whole units, but not variables on a small scale. For the global search, a flag on
@@ -752,12 +807,8 @@ reports only their number. An option to filter by the ranges before the selectio
 version of Section 3.3 without changing the default.
 
 **Storing every pair's plane.** Only the winning plane is kept, so the other candidates cannot be drawn.
-Storing all planes would allow a figure of the search across planes without changing any result.
-
-**The approximation-gap experiment.** The 2D biplot approximates a slice of the decision surface, and
-boundaries outside the plane are omitted. Measuring the gap between the counterfactual found on the
-planes and the nearest counterfactual in the full space, for example by a direct search on a small
-model, would quantify the accuracy discussed in the thesis (§3.9.1, p.85).
+Storing all planes would allow a figure of the search across planes, and the restore of a fixed
+variable to be retried on the next-best pair, without changing any other result.
 
 **Full Mahalanobis decomposition in Phase 2.** A Shapley decomposition of the full Mahalanobis distance
 would attribute the correlated part of the distance that the per-variable measure ignores. Its cost
@@ -771,49 +822,22 @@ a Shapley computation for each data point.
 singular value decomposition of Ganey & Gardner-Lubbe (2026, *Statistical Methods & Applications* 35,
 825–847; R package `wideRhino`) gives a CVA biplot in this case.
 
-**LDA for more than two classes.** Linear discriminant analysis gives one discriminant direction per
-class contrast and could support multi-class models, each pair of classes with its own boundary.
+**Multi-class models.** The method explains binary classifiers. A multi-class model can be explained
+one class at a time, by coding the class of interest as 1 and the other classes as 0, so that the
+counterfactual moves the observation out of that class rather than towards a specific other class. The
+CVA biplot already separates more than two groups (here the four outcome groups), so extending the
+boundaries and the search to one boundary for each pair of classes, for example through linear
+discriminant analysis, is a key area of future research.
 
 **A different transformation per variable.** The package records one affine scaling for display. Allowing
-a different transformation for each variable (z-score, log, none) would help skewed variables, with
-non-linear axes for non-affine transformations.
+a different transformation for each variable (z-score, log, none) would help skewed variables. A
+non-affine transformation needs calibrated non-linear axes, such as the spline-based biplots of
+Groenen, le Roux & Gardner-Lubbe (2015, *Advances in Data Analysis and Classification* 9, 219–238).
 
-# Interpretation points for the paper
-
-These points are not method changes. They concern how Paper 1 explains two Pima results, and the
-proposed sentences are given for approval.
-
-**A constraint that does not bind (Pima issue 5).** With *Pregnancies* and *Age* not allowed to
-decrease (run 2), the counterfactual equals the unconstrained one for both targets, because both
-unconstrained counterfactuals already increase these variables. *Proposed sentence:* "A directional constraint changes the counterfactual
-only when it opposes the unconstrained move; for both targets the unconstrained counterfactual already
-increases *Pregnancies* and *Age*, so the constraint does not bind."
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
-
-**The counterfactual describes the model (Pima issue 11).** The true positive (prediction
-`r f3(num("target", "pred_prob", "4f", "TP"))`) reaches the boundary by raising *Age* from
-`r v("target", "x_obs:Age", "4f", "TP")` to `r f2(run1("TP", "B_x:Age"))` and *Pregnancies* from
-`r v("target", "x_obs:Pregnancies", "4f", "TP")` to `r f2(run1("TP", "B_x:Pregnancies"), 0)`, while
-lowering *Glucose* from `r v("target", "x_obs:Glucose", "4f", "TP")` to
-`r f2(run1("TP", "B_x:Glucose"))` and *Insulin* from `r v("target", "x_obs:Insulin", "4f", "TP")` to
-`r f2(run1("TP", "B_x:Insulin"))`. The GAM's smooths of *Age* and *Insulin* are not monotone
-(effective degrees of freedom `r f1(num("I11", "edf:s(Age)", "4f"))` and
-`r f1(num("I11", "edf:s(Insulin)", "4f"))`), and only `r v("I11", "train_age_over_50", "4f")` of the
-`r v("I11", "train_rows", "4f")` training patients are older than 50. *Proposed sentence:* "The
-counterfactual describes the model, not the clinical mechanism: for this patient the fitted GAM
-predicts a lower risk at an older age, in a region supported by only
-`r v("I11", "train_age_over_50", "4f")` training patients over 50."
-
-| **Supervisor decision** | ☐ Approve   ☐ Query   ☐ Reject |
-|:--|:--|
-| **Comment** | |
 
 # Reproduction {.unnumbered}
 
-The measurements were made at package commit `r commit` (`boundarylogic` `r v("meta", "package_version")`,
+The measurements were made at package commit `r commit_txt` (`boundarylogic` `r v("meta", "package_version")`,
 `r v("meta", "r_version")`, mgcv `r v("meta", "mgcv_version")`, run `r v("meta", "time")`). The scripts
 of the Pima example are kept outside the package repository. From that folder:
 
@@ -821,4 +845,5 @@ of the Pima example are kept outside the package repository. From that folder:
 2. `Rscript 04_method-change-effects.R` reruns the searches with each change switched back and writes
    `method-change-effects.csv` to this folder; it stops if the baseline does not reproduce the Paper 1
    results;
-3. `quarto render methodology-changes.qmd --to docx` renders this note.
+3. `Rscript 05_full-space-gap.R` measures the approximation gap of Section 3.12;
+4. `quarto render methodology-changes.qmd --to docx` renders this note.

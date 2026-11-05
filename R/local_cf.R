@@ -39,7 +39,7 @@
 #' @param x_target_st Named numeric vector (length p) of the standardised
 #'   target point.
 #' @param V p x p loading matrix.
-#' @param proj_pair Integer vector of length 2 giving the eigenvector indices.
+#' @param proj_pair Integer vector of length 2 giving the component indices.
 #' @return Named list with \code{Vr_rot} (p x 2) and \code{tVr_rot} (2 x p).
 #' @noRd
 .bl_rotate <- function(x_target_st, V, proj_pair) {
@@ -438,7 +438,7 @@ set_filters <- function(bl_target, ...) {
 
 #' Find the nearest decision boundary for a single target observation
 #'
-#' Searches across multiple eigenvector pairs for the closest decision boundary
+#' Searches across multiple component pairs for the closest decision boundary
 #' to the target observation in the rotated biplot space. For each pair, the
 #' loading matrix is rotated so that the target observation is aligned with the
 #' plane of that pair (see \strong{Rotation}), then a fine grid is scored and
@@ -450,19 +450,32 @@ set_filters <- function(bl_target, ...) {
 #' branch of the repository). An SVD-based orthogonal rotation
 #' matrix \eqn{A} is computed such that the rotated loading matrix aligns the
 #' target observation with the projection plane defined by \code{proj_pair}.
-#' This gives each eigenvector pair the best possible chance of revealing a
-#' nearby boundary.
+#' This gives each component pair the best possible chance of revealing a
+#' nearby boundary. Each pair of components labels one plane through the
+#' target point; since the Procrustes rotation turns the plane, the selected
+#' plane need not coincide with the plane spanned by the two components that
+#' name it.
 #'
 #' @section Constraints:
-#' The Z-space training hull polygon is \strong{not} applied here because the
-#' per-pair rotation invalidates the polygon from \code{bl_build_grid()}.
-#' Two constraint types are applied instead:
+#' The convex hull polygon of the global biplot (from \code{bl_build_grid()})
+#' is \strong{not} used here, because the per-pair rotation invalidates its
+#' coordinates. Three constraint types are applied instead, in this order:
 #' \describe{
-#'   \item{train_ranges}{Back-projected X-space values must lie within the
-#'     per-variable ranges observed in the training data.}
+#'   \item{hull}{When \code{hull = TRUE} (the default), a boundary vertex must
+#'     lie inside the convex hull of the training data and the target,
+#'     projected onto the rotated plane of that pair. The hull is rebuilt for
+#'     every pair, as in Appendix A of the thesis, and applies its
+#'     plausibility rule (section 4.3.1): the counterfactual is selected from
+#'     a local decision boundary within the convex hull of the training data.
+#'     \code{hull = FALSE} drops this rule.}
 #'   \item{set_filters}{Actionability constraints supplied via
 #'     \code{\link{set_filters}}.}
+#'   \item{train_ranges}{Back-projected X-space values must lie within the
+#'     per-variable ranges observed in the training data.}
 #' }
+#' The hull applies to the boundary points on the plane. The restored
+#' (\code{"fixed"}) and rounded (\code{"integer"}) points lie off the plane,
+#' and are checked against the constraints and \code{train_ranges} only.
 #'
 #' @section Fixed constraints:
 #' During the search a \code{"fixed"} feature may move by up to 0.5 in model
@@ -501,7 +514,7 @@ set_filters <- function(bl_target, ...) {
 #' rounded together (\eqn{2^{12}} candidates).
 #'
 #' @section Cross-pair selection criterion:
-#' The best eigenvector pair is selected by minimum distance from the target
+#' The best component pair is selected by minimum distance from the target
 #' to the nearest valid boundary vertex, measured in X-space with
 #' \eqn{v = B_x - x_{obs}}. Two distance metrics are available:
 #' \describe{
@@ -533,7 +546,7 @@ set_filters <- function(bl_target, ...) {
 #'   \code{\link{bl_select_target}}.
 #' @param set_filters A \code{"bl_filters"} object from
 #'   \code{\link{set_filters}}, or \code{NULL} (no actionability constraints).
-#' @param max_pairs   Integer; maximum number of eigenvector pairs to try.
+#' @param max_pairs   Integer; maximum number of component pairs to try.
 #'   Default \code{21L}: every pair for up to 7 features
 #'   (\code{choose(7, 2) = 21}). With more features, the pairs with the
 #'   highest components are left out.
@@ -545,6 +558,10 @@ set_filters <- function(bl_target, ...) {
 #'   \code{"euclidean"}. See \strong{Cross-pair selection criterion} section
 #'   above.
 #' @param verbose     Logical; print progress messages. Default \code{TRUE}.
+#' @param hull        Logical; keep only boundary points inside the convex hull
+#'   of the training data and the target on each rotated plane (see
+#'   \strong{Constraints}). Default \code{TRUE}; \code{FALSE} searches without
+#'   this rule.
 #'
 #' @return A list of class \code{"bl_local_result"} with the following fields:
 #'   \describe{
@@ -569,7 +586,7 @@ set_filters <- function(bl_target, ...) {
 #'     \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
 #'       or \code{"euclidean"}), after \code{"auto"} is resolved.}
 #'     \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
-#'     \item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
+#'     \item{best_pair}{Integer vector of length 2; winning component pair.}
 #'     \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
 #'     \item{tVr_rot}{2 x p inverse loading matrix for the best pair.}
 #'     \item{Z_train_rot}{n x 2 matrix; training data in rotated Z-space.}
@@ -579,11 +596,15 @@ set_filters <- function(bl_target, ...) {
 #'     \item{ct_local}{Raw contour list from \code{grDevices::contourLines}.}
 #'     \item{xseq, yseq}{Grid axis sequences.}
 #'     \item{min_val, max_val}{Grid axis limits.}
+#'     \item{hull_polygon}{Two-column matrix; the vertices of the convex hull
+#'       on the plane of \code{best_pair} (rotated Z-space), or \code{NULL}
+#'       when \code{hull = FALSE} or no solution is found.}
 #'     \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
 #'     \item{all_distances_x}{Named numeric vector; X-space Euclidean distance
 #'       (total-SD scale) per pair tried.}
 #'     \item{all_distances_mahalanobis}{Named numeric vector; squared
 #'       Mahalanobis distance per pair tried.}
+#'     \item{hull}{Logical; the \code{hull} argument.}
 #'     \item{solution_found}{Logical.}
 #'     \item{blocking_constraint}{Character message if no solution, else NULL:
 #'       why no boundary point satisfied the constraints, why the restored
@@ -628,7 +649,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
                                    max_pairs   = 21L,
                                    m           = 200L,
                                    distance    = c("auto", "mahalanobis", "euclidean"),
-                                   verbose     = TRUE) {
+                                   verbose     = TRUE,
+                                   hull        = TRUE) {
 
   if (!inherits(bl_result, "bl_result"))
     stop("'bl_result' must be a 'bl_result' object.", call. = FALSE)
@@ -638,6 +660,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
   if (!is.null(set_filters) && !inherits(set_filters, "bl_filters"))
     stop("'set_filters' must be a 'bl_filters' object from set_filters() or NULL.",
          call. = FALSE)
+  if (!is.logical(hull) || length(hull) != 1L || is.na(hull))
+    stop("'hull' must be TRUE or FALSE.", call. = FALSE)
   # "auto": Euclidean under PCA, Mahalanobis under CVA (thesis section 3.9.1)
   distance <- .resolve_distance(distance[1L], bl_result)
 
@@ -667,6 +691,14 @@ bl_find_local_cf <- function(bl_result, bl_target,
   # Standardise target and training data
   sv           <- if (isTRUE(standardise)) X_sd else rep(1, p)
   x_target_st  <- (x_obs - X_center) / sv
+
+  # A target at the centre of the biplot makes the Procrustes cross-product
+  # zero, so the rotation is undefined and the local plane is arbitrary.
+  if (sqrt(sum(x_target_st^2)) < sqrt(.Machine$double.eps))
+    warning("The target lies at the centre of the biplot, so the Procrustes ",
+            "rotation is undefined and the local plane is arbitrary.",
+            call. = FALSE)
+
   X_train_st   <- scale(
     as.matrix(bl_result$train_data[, var_names, drop = FALSE]),
     center = X_center,
@@ -675,7 +707,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
   pairs <- .generate_pairs(p, as.integer(max_pairs))
   if (nrow(pairs) == 0L)
-    stop("Cannot generate any eigenvector pairs from the available dimensions.",
+    stop("Cannot generate any component pairs from the available dimensions.",
          call. = FALSE)
 
   pair_names                <- apply(pairs, 1L, function(r) paste0("(", r[1], ",", r[2], ")"))
@@ -688,7 +720,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
   for (k in seq_len(nrow(pairs))) {
     pair <- pairs[k, ]
     if (isTRUE(verbose))
-      message(sprintf("  Pair %d/%d: eigenvectors (%d, %d) ...",
+      message(sprintf("  Pair %d/%d: components (%d, %d) ...",
                       k, nrow(pairs), pair[1L], pair[2L]))
 
     # Rotation
@@ -706,6 +738,16 @@ bl_find_local_cf <- function(bl_result, bl_target,
     z_pad   <- diff(z_range) * 0.10
     min_val <- z_range[1L] - z_pad
     max_val <- z_range[2L] + z_pad
+
+    # Plausibility (thesis section 4.3.1): the convex hull of the training
+    # data and the target on this rotated plane, rebuilt for every pair (the
+    # global grid's polygon does not apply after the rotation).
+    hull_poly <- if (hull) {
+      .build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val,
+                          outlie = 1)
+    } else {
+      NULL
+    }
 
     # Build m x m grid in rotated Z-space
     xseq  <- seq(min_val, max_val, length.out = m)
@@ -757,16 +799,22 @@ bl_find_local_cf <- function(bl_result, bl_target,
       Mi  <- cbind(ct_local[[i]]$x, ct_local[[i]]$y)
       colnames(Mi) <- c("x", "y")
 
+      # Hull filter first: only the vertices inside this plane's hull.
+      if (hull) {
+        Mi <- .poly_clip(Mi, hull_poly)
+        if (nrow(Mi) == 0L) next
+      }
+
       # Back-project segment to X-space
       Bx <- as.data.frame(Mi %*% tVr_rot)
       if (isTRUE(standardise)) Bx <- sweep(Bx, 2L, X_sd, "*")
       Bx <- sweep(Bx, 2L, X_center, "+")
       colnames(Bx) <- var_names
 
-      # Actionability filter first (Phase 3 only -- no hull polygon).
-      # Typically more selective than train_ranges (especially with "fixed"
-      # constraints), so running it first lets us short-circuit before the
-      # train_ranges pass on the vertices it eliminates.
+      # Actionability filter next. Typically more selective than train_ranges
+      # (especially with "fixed" constraints), so running it first lets us
+      # short-circuit before the train_ranges pass on the vertices it
+      # eliminates.
       keep <- if (!is.null(set_filters)) {
         .apply_actionability(Bx, x_obs_named, set_filters)
       } else {
@@ -881,7 +929,9 @@ bl_find_local_cf <- function(bl_result, bl_target,
         xseq             = xseq,
         yseq             = yseq,
         min_val          = min_val,
-        max_val          = max_val
+        max_val          = max_val,
+        hull_polygon     = if (hull)
+          hull_poly@polygons[[1L]]@Polygons[[1L]]@coords else NULL
       )
     }
   }
@@ -889,18 +939,22 @@ bl_find_local_cf <- function(bl_result, bl_target,
   solution_found <- !is.null(best_result)
 
   if (!solution_found) {
+    hull_text <- if (hull) paste(
+      "Boundary points must also lie inside the convex hull of the training",
+      "data on each plane (hull = FALSE drops this rule)."
+    ) else NULL
     if (!is.null(set_filters) && length(set_filters$constraints) > 0L) {
-      blocking <- paste(
+      blocking <- paste(c(
         "No counterfactual satisfying all constraints was found across",
-        nrow(pairs), "eigenvector pair(s).",
+        nrow(pairs), "component pair(s).", hull_text,
         "Try relaxing or removing actionability filters in set_filters()."
-      )
+      ), collapse = " ")
     } else {
-      blocking <- paste(
-        "No counterfactual found across", nrow(pairs), "eigenvector pair(s).",
+      blocking <- paste(c(
+        "No counterfactual found across", nrow(pairs), "component pair(s).",
         "The decision boundary may not cross the projected feature space.",
-        "Try increasing max_pairs."
-      )
+        hull_text, "Try increasing max_pairs."
+      ), collapse = " ")
     }
     message("bl_find_local_cf: ", blocking)
   } else {
@@ -982,7 +1036,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
     Z_target = NULL, best_pair = NA_integer_, Vr_rot = NULL,
     tVr_rot = NULL, Z_train_rot = NULL, Zgrid = NULL,
     grid_prob = NULL, col_value = NULL, ct_local = NULL,
-    xseq = NULL, yseq = NULL, min_val = NULL, max_val = NULL
+    xseq = NULL, yseq = NULL, min_val = NULL, max_val = NULL,
+    hull_polygon = NULL
   )
 
   structure(
@@ -993,6 +1048,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
         all_distances_x           = all_distances_x,
         all_distances_mahalanobis = all_distances_mahalanobis,
         distance                  = distance,
+        hull                      = hull,
         solution_found            = solution_found,
         blocking_constraint       = blocking,
         bl_target                 = bl_target,
@@ -1517,7 +1573,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
 #' Plot the local biplot for a bl_local_result
 #'
-#' Renders the rotated biplot for the best eigenvector pair found by
+#' Renders the rotated biplot for the best component pair found by
 #' \code{\link{bl_find_local_cf}} using the same biplotEZ pipeline as
 #' \code{\link{plot_biplotEZ}}. The biplotEZ object is patched with the rotated
 #' loading matrix (\code{Vr_rot}) and rotated training coordinates
@@ -1625,7 +1681,7 @@ plot.bl_local_result <- function(x,
   # would fall into ... and be silently ignored.
   if ("rotate_deg" %in% ...names())
     stop("'rotate_deg' is not available for the local biplot: its orientation ",
-         "is fixed by the optimal rotation (.bl_rotate()). Use rotate_deg only ",
+         "is fixed by the Procrustes rotation (.bl_rotate()). Use rotate_deg only ",
          "to view the global biplot (plot_biplotEZ(), plot(<bl_surrogate>)).",
          call. = FALSE)
 
@@ -1677,10 +1733,10 @@ plot.bl_local_result <- function(x,
   }
 
   train_col <- dplyr::case_when(
-    !is.na(true_class) & true_class == 1L & train_pred_class == 1L ~ "red",
-    !is.na(true_class) & true_class == 0L & train_pred_class == 0L ~ "blue",
-    !is.na(true_class) & true_class == 0L & train_pred_class == 1L ~ "purple",
-    !is.na(true_class) & true_class == 1L & train_pred_class == 0L ~ "orange",
+    !is.na(true_class) & true_class == 1L & train_pred_class == 1L ~ .confusion_cols[["TP"]],
+    !is.na(true_class) & true_class == 0L & train_pred_class == 0L ~ .confusion_cols[["TN"]],
+    !is.na(true_class) & true_class == 0L & train_pred_class == 1L ~ .confusion_cols[["FP"]],
+    !is.na(true_class) & true_class == 1L & train_pred_class == 0L ~ .confusion_cols[["FN"]],
     TRUE ~ "grey50"
   )
 
@@ -1700,10 +1756,10 @@ plot.bl_local_result <- function(x,
     if (pred_class == 1L) "red" else "blue"
   } else {
     dplyr::case_when(
-      target_true_class == 1L & pred_class == 1L ~ "red",
-      target_true_class == 0L & pred_class == 0L ~ "blue",
-      target_true_class == 0L & pred_class == 1L ~ "purple",
-      target_true_class == 1L & pred_class == 0L ~ "orange",
+      target_true_class == 1L & pred_class == 1L ~ .confusion_cols[["TP"]],
+      target_true_class == 0L & pred_class == 0L ~ .confusion_cols[["TN"]],
+      target_true_class == 0L & pred_class == 1L ~ .confusion_cols[["FP"]],
+      target_true_class == 1L & pred_class == 0L ~ .confusion_cols[["FN"]],
       TRUE ~ "grey50"
     )
   }

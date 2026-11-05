@@ -118,7 +118,7 @@ rotation (\code{.bl_rotate()}), so passing \code{rotate_deg} is an error.
 (\code{\link{plot_biplotEZ}}, \code{\link{plot.bl_surrogate}}).}
 }
 \description{
-Renders the rotated biplot for the best eigenvector pair found by
+Renders the rotated biplot for the best component pair found by
 \code{\link{bl_find_local_cf}} using the same biplotEZ pipeline as
 \code{\link{plot_biplotEZ}}. The biplotEZ object is patched with the rotated
 loading matrix (\code{Vr_rot}) and rotated training coordinates

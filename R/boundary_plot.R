@@ -167,7 +167,7 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
       actual == 1L & pred_class_int == 0L ~ "FN",
       TRUE                               ~ "Unknown"
     )
-    col_map     <- c("TP" = "red", "TN" = "blue", "FP" = "purple", "FN" = "orange")
+    col_map     <- .confusion_cols
     legend_name <- "Confusion"
   } else {
     grp         <- as.character(pred_class_int)

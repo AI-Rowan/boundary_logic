@@ -1,7 +1,29 @@
-# boundarylogic (development version)
+# boundarylogic 0.2.0
 
 ## Breaking changes
 
+* `bl_find_local_cf()` now applies the thesis's plausibility rule (section
+  4.3.1): the counterfactual is selected from a local decision boundary within
+  the convex hull of the training data. For each component pair, the convex
+  hull of the training data and the target is rebuilt on the rotated plane, as
+  in Appendix A of the thesis, and only the boundary points inside it are kept,
+  before the actionability, `train_ranges` and model filters. The global
+  biplot's hull polygon is still not used, since the rotation invalidates it.
+  The new argument `hull = TRUE` is the default; `hull = FALSE` reproduces the
+  earlier search exactly. The result gains the fields `hull` and
+  `hull_polygon` (the winning plane's hull), and the no-solution message names
+  the hull. Results change where the nearest boundary point lay outside the
+  hull: on the Pima example (Paper 1), 11 of the 79 test targets move, none
+  loses its counterfactual, and the TP target's constrained runs that hold
+  *Age* now have none. The loan harness is unchanged. Decided by Adriaan Rowan
+  on 2026-11-05; see `documentation/local-convex-hull.md`.
+* `bl_prepare_data()`'s `hull_fraction` default is now `1` (no outlier removal;
+  it was `0.9`), as in the thesis, where outlier removal is optional. Pass
+  `hull_fraction = 0.9` to remove the outermost 10% of the training rows, as the
+  thesis's loan example and the package's loan harness and vignette do. Code
+  that relied on the old default keeps every training row now.
+  `bl_filter_outliers()` keeps `0.9`, since calling it means filtering is
+  wanted.
 * The distance now follows the thesis rule by projection (thesis section
   3.9.1): Euclidean distance for a PCA biplot, Mahalanobis distance for a CVA
   biplot. The new default `distance = "auto"` resolves it in
@@ -172,6 +194,23 @@
 
 ## Bug fixes and other improvements
 
+* Every biplot now uses the thesis colours for the four prediction outcomes:
+  TP red, TN blue, FP purple, FN orange. `plot.bl_projection()` (through
+  `bl_build_projection()`'s `point_col`) used green, steel blue, orange and
+  red, so red meant FN there and TP everywhere else. The colours are held in
+  one private constant, `.confusion_cols` (`R/utils.R`).
+* `bl_find_local_cf()` warns when the target lies at the centre of the biplot:
+  the Procrustes cross-product is then zero, the rotation is undefined, and
+  every component pair gives the plane of components (1,2). Results are
+  unchanged.
+* The help pages and messages of `bl_find_local_cf()` and
+  `plot.bl_local_result()` say "component pair", not "eigenvector pair": each
+  pair labels a plane through the target, which the Procrustes rotation turns,
+  so the selected plane need not coincide with the plane of the two components
+  that name it. The `rotate_deg` error names the Procrustes rotation.
+* The README's constraint example finds a counterfactual (it found none) and
+  shows its output; the loan harness's first biplot is titled "no prior
+  default", which matches its data.
 * `plot.bl_shapley()` labels every variable `"variable: observed ->
   counterfactual"`, with and without a recorded scaling. Without a scaling it
   showed the observed value and the *change* (e.g. `"Age: 22 -> -0.88"`),

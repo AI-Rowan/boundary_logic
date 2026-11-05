@@ -124,10 +124,10 @@ bl_project_points <- function(data, bl_result,
     if ("class" %in% names(data)) {
       actual   <- data[["class"]]
       pred_col <- dplyr::case_when(
-        actual == pred_class & actual == 1L ~ "red",    # TP
-        actual == pred_class & actual == 0L ~ "blue",   # TN
-        actual != pred_class & actual == 0L ~ "purple", # FP
-        TRUE                               ~ "orange"   # FN
+        actual == pred_class & actual == 1L ~ .confusion_cols[["TP"]],
+        actual == pred_class & actual == 0L ~ .confusion_cols[["TN"]],
+        actual != pred_class & actual == 0L ~ .confusion_cols[["FP"]],
+        TRUE                               ~ .confusion_cols[["FN"]]
       )
     } else {
       actual   <- NULL

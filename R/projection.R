@@ -317,8 +317,7 @@ bl_build_projection <- function(train_data,
     # Confusion palette for any subset of TP/TN/FP/FN (a group can be empty);
     # otherwise the binary 0/1 rule.
     if (all(levels(cva_classes) %in% c("TP", "TN", "FP", "FN"))) {
-      col_map <- c(TP = "green3", TN = "steelblue", FP = "orange", FN = "red")
-      unname(col_map[as.character(cva_classes)])
+      unname(.confusion_cols[as.character(cva_classes)])
     } else {
       ifelse(as.character(cva_classes) == "1", "red", "blue")
     }
@@ -373,7 +372,8 @@ bl_build_projection <- function(train_data,
 #' Renders the biplotEZ object stored in a `"bl_projection"` result.
 #' Default point colours are derived automatically:
 #' - CVA with TP/TN/FP/FN labels (all four, or any of them when a group is
-#'   empty): green/steelblue/orange/red confusion colours.
+#'   empty): the thesis confusion colours, TP red, TN blue, FP purple and
+#'   FN orange, as in every other biplot.
 #' - CVA with binary 0/1 labels: red (class 1) / blue (class 0).
 #' - PCA (or any other case): red (class 1) / blue (class 0) when a
 #'   `"class"` column was present in `train_data`; grey otherwise.

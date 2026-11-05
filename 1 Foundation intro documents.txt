@@ -248,9 +248,13 @@ bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, distance,
   - Returns: bl_local_result object
 
 Key design decision — local CF hull rule:
-  The Z-space convex hull polygon is NOT applied in bl_find_local_cf().
-  Rotation invalidates the original polygon coordinates. Only train_ranges
-  and set_filters constrain the local search. This is intentional.
+  The global biplot's Z-space convex hull polygon (from bl_grid) is NOT
+  applied in bl_find_local_cf(): rotation invalidates its coordinates.
+  Instead, with hull = TRUE (the default since 2026-11-05, decided by the
+  author), the convex hull of the training data and the target is rebuilt
+  on each rotated plane and only the boundary points inside it are kept,
+  as the thesis requires (p.117, Appendix A). set_filters and train_ranges
+  then constrain the search. hull = FALSE gives the earlier search.
 
 E. Variable Contribution and Robustness Analysis (R/boundary_plot.R)
 ---------------------------------------------------------------
@@ -516,11 +520,13 @@ Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
   CVA within-class scatter must use the full maths (Wmat_inv), not a
   simple matrix inverse.
 
-10.4 Local CF rotation invalidates the hull polygon
-  When bl_find_local_cf() rotates the biplot plane to a new eigenvector
-  pair, the original Z-space convex hull polygon coordinates are no longer
-  valid. Only train_ranges and set_filters constrain the local search.
-  Do not apply the hull polygon in the local search.
+10.4 Local CF rotation invalidates the global hull polygon
+  When bl_find_local_cf() rotates the biplot plane for a component pair,
+  the original Z-space convex hull polygon coordinates are no longer valid.
+  Do not apply that polygon in the local search. The local search rebuilds
+  a hull on each rotated plane instead (hull = TRUE, since 2026-11-05;
+  documentation/local-convex-hull.md), then applies set_filters and
+  train_ranges.
 
 10.5 Model type coupling
   The package should not become dependent on one classifier. New model
@@ -557,7 +563,8 @@ Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
   - Remove metadata needed for inverse projection or interpretation
   - Entangle plotting code with computation code
   - Pass rounding to .pred_function() — it does not belong there
-  - Apply the Z-space hull polygon inside bl_find_local_cf()
+  - Apply the global biplot's Z-space hull polygon inside bl_find_local_cf()
+    (the hull rebuilt on each rotated plane is the one the local search uses)
   - Show outlie, calc_hull, or bl_robustness() as sequential steps in examples
 
 11.3 Always do the following

@@ -124,12 +124,12 @@ All objects have `print()` methods. Objects with visual outputs have `plot()` me
 
 | Function | Signature | Returns |
 |---|---|---|
-| `bl_prepare_data()` | `(data, class_col, target_class=NULL, feature_cols=NULL, train_fraction=0.8, seed=121L, hull_fraction=0.9, verbose=TRUE)` | `bl_filter_result` |
+| `bl_prepare_data()` | `(data, class_col, target_class=NULL, feature_cols=NULL, train_fraction=0.8, seed=121L, hull_fraction=1, verbose=TRUE)` | `bl_filter_result` |
 | `bl_wrap_data()` | `(train_data, test_data=NULL, var_names=NULL, target_class=NULL)` | `bl_data` |
 | `bl_set_scaling()` | `(x, center, scale, method="z-score")` | same class as `x` (`bl_data`/`bl_filter_result`) |
 | `bl_apply_scaling()` | `(data, bl_result)` | `data` with feature columns in model units |
 
-`bl_prepare_data()` is the standard in-package ingestion path: converts multiclass factors to binary 0/1 indicators, makes a seeded simple random train/test split (`sample()`, not stratified), then calls `bl_filter_outliers()` internally to remove outliers and returns a `"bl_filter_result"`. The `hull_fraction` parameter (default `0.9`) controls how aggressively the convex hull trims the outermost training points; `hull_fraction = 1` retains all points.
+`bl_prepare_data()` is the standard in-package ingestion path: converts multiclass factors to binary 0/1 indicators, makes a seeded simple random train/test split (`sample()`, not stratified), then calls `bl_filter_outliers()` internally to remove outliers and returns a `"bl_filter_result"`. The `hull_fraction` parameter controls how aggressively the convex hull trims the outermost training points. Its default is `1` (since 2026-11-05; it was `0.9`), which retains all points: the thesis makes outlier removal optional, with none in its Pima example. A value below 1 removes the rows outside the hull enclosing that fraction, e.g. `0.9` as in the thesis's loan example; the loan harness and vignette set `0.9`, and the Pima example of Paper 1 sets `1`. `bl_filter_outliers()` keeps `0.9` as its default, since calling it directly means filtering is wanted.
 
 `bl_wrap_data()` is the external-data path: accepts pre-split, pre-coded data and returns a `"bl_data"` object with no outlier filtering. Use it when the data and model are prepared outside the package.
 
@@ -356,7 +356,7 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 |---|---|---|
 | `bl_select_target()` | `(bl_result, target, data=NULL)` | `bl_target` |
 | `set_filters()` | `(bl_target, ...)` | `bl_filters` |
-| `bl_find_local_cf()` | `(bl_result, bl_target, set_filters=NULL, max_pairs=21L, m=200L, distance=c("auto","mahalanobis","euclidean"), verbose=TRUE)` | `bl_local_result` |
+| `bl_find_local_cf()` | `(bl_result, bl_target, set_filters=NULL, max_pairs=21L, m=200L, distance=c("auto","mahalanobis","euclidean"), verbose=TRUE, hull=TRUE)` | `bl_local_result` |
 
 **`bl_select_target()`** wraps a single observation (integer row index or single-row data frame) into a `bl_target` object, projecting it into Z-space and scoring it through the model. External data frames (no class column, not in train/test) are fully supported. A data-frame target must be in model units; the private `.warn_target_range()` warns when any of its features lies outside `train_ranges` and, when a scaling is recorded and converting the target would bring more features into range, suggests `bl_apply_scaling()` (the target looks like raw units). Index targets are not checked.
 
@@ -374,29 +374,36 @@ Assigns each observation to the nearest biplot contour region (using `ct_surroga
 
 Every reader of `set_filters$constraints` parses a constraint with the private `.parse_constraint()`, which returns its `type` (`"decrease"`, `"increase"`, `"fixed"`, `"range"`, `"none"`), `range` and `integer` flag; `.fixed_vars()` and `.integer_vars()` (integer and not fixed) sit on top of it.
 
-**`bl_find_local_cf()`** iterates over up to `max_pairs` eigenvector pairs in canonical order — (1,2), (1,3), (2,3), (1,4), … — testing a maximum of 21 combinations by default, which is every pair for up to 7 features (configurable). For each pair:
+**`bl_find_local_cf()`** iterates over up to `max_pairs` component pairs in canonical order — (1,2), (1,3), (2,3), (1,4), … — testing a maximum of 21 combinations by default, which is every pair for up to 7 features (configurable). Each pair labels one plane through the target; the Procrustes rotation turns the plane, so it need not coincide with the plane of the two components that name it. It warns once when the target lies at the centre of the biplot (`sqrt(sum(x_target_st^2)) < sqrt(.Machine$double.eps)`): the Procrustes cross-product is then zero, `A = I`, and every pair gives the plane of components (1,2). For each pair:
 
 1. Rotates the biplot via `.bl_rotate()` to align the target with the projection plane
 2. Projects the target and all training observations into the rotated Z-space
-3. Builds an `m × m` grid, scores through the model (chunked for memory)
-4. Extracts contour lines at `cutoff ± b_margin`
-5. Back-projects contour segments to X-space
-6. Filters contour vertices through a four-stage cascade:
+3. When `hull = TRUE` (the default, since 2026-11-05), builds the convex hull of the training data and the target on this rotated plane with `.build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val, outlie = 1)` (the full hull, as the global grid's default)
+4. Builds an `m × m` grid, scores through the model (chunked for memory)
+5. Extracts contour lines at `cutoff ± b_margin`
+6. Filters contour vertices through a five-stage cascade:
    a. Opposing-class contour level only (cheap, pre-back-projection).
-   b. **`set_filters` actionability first** (when supplied) -- the
-      "fixed", "decrease", "increase", `c(min,max)` constraints. Often
-      the most selective filter; running it first with an early-exit
-      check on `any(keep)` short-circuits the rest of the cascade on
-      vertices it rejects.
-   c. **`train_ranges` feasibility second** -- per-feature [min, max]
+   b. **The hull** (when `hull = TRUE`) -- `.poly_clip()` keeps the
+      vertices inside this plane's hull, in 2D, before back-projection.
+      This is the thesis's plausibility rule (§4.3.1, p.117), as in
+      Appendix A; see `documentation/local-convex-hull.md`.
+   c. **`set_filters` actionability** (when supplied), on the
+      back-projected X-space vertices -- the "fixed", "decrease",
+      "increase", `c(min,max)` constraints. Often the most selective
+      filter; running it before (d) with an early-exit check on
+      `any(keep)` short-circuits the rest of the cascade on vertices it
+      rejects.
+   d. **`train_ranges` feasibility** -- per-feature [min, max]
       bounds from training data, applied only to vertices that
-      survived (b).
-   d. **Model-consistency re-scoring** -- the surviving vertices are
+      survived (c).
+   e. **Model-consistency re-scoring** -- the surviving vertices are
       passed back through `.pred_function()` and dropped if the model's
       actual probability disagrees with the contour level's side of
       `cutoff`. This is the most expensive stage; the ordering of
-      (b)-(c) is chosen so it sees the smallest possible set.
-7. Finds the nearest valid boundary point among the survivors of (d).
+      (b)-(d) is chosen so it sees the smallest possible set.
+7. Finds the nearest valid boundary point among the survivors of (e).
+
+The result stores `hull` (the argument) and `hull_polygon` (the two-column vertex matrix of the winning plane's hull; `NULL` when `hull = FALSE` or with no solution). With no solution and `hull = TRUE`, `blocking_constraint` adds that boundary points must lie inside the hull and that `hull = FALSE` drops the rule. The hull applies to the points on the plane only: the restored, rounded and sparse points lie off the plane and are checked against the constraints and `train_ranges`.
 
 **Cross-pair selection metric (`distance` parameter):** the default `"auto"` (private `.resolve_distance()`) follows the thesis rule (§3.9.1): `"euclidean"` for a PCA biplot, `"mahalanobis"` for a CVA biplot and for a `bl_result` without `method` (since 2026-11-05; before, `"mahalanobis"` for both). Both are measured in X-space on the change `v = B_x - x_obs` by the private `.cf_sq_distance()`.
 
@@ -421,13 +428,14 @@ The field `fixed_check` (`NULL` when no fixed feature moved) records `vars`, `ap
 
 | Constraint | Global (`bl_find_boundary`) | Local (`bl_find_local_cf`) |
 |---|---|---|
-| Z-space hull polygon | Applied | **Not applied** — rotation invalidates it |
+| Z-space hull polygon of the global biplot | Applied | **Not applied** — rotation invalidates it |
+| Hull rebuilt on each rotated plane (training data + target) | — | Applied when `hull = TRUE` (default), before the other filters |
 | `train_ranges` | Reported only (post-selection, no exclusion) | Applied as hard in-loop filter |
 | Actionability filters | Not available | Applied via `set_filters` |
 
 **Why Filter (d) is not batched across segments.** The model re-scoring inside the per-pair loop is the dominant computational cost, and a meaningful wall-clock saving is available by collecting all surviving vertices across all opposing-class segments and scoring them in a single `.pred_function()` call (especially for XGBoost, where each call has DMatrix-construction overhead). The current per-segment call is retained deliberately: the bookkeeping required to split a batched prediction back to its source segments adds complexity that obscures the search logic, and the per-pair cost is already small enough (typically sub-second on a 100x100 grid) that the saving doesn't justify the trade. If a future use case pushes `m` high enough that this dominates, the batch is the right next optimisation; the segment loop is structured to make that refactor local.
 
-**`train_ranges` enforcement asymmetry between global and local search.** On the **default global path** (`bl_find_boundary()` followed by `bl_project_points(..., filter_to_train_ranges = FALSE)`), `train_ranges` is never used to exclude points. `bl_find_boundary()` only reports out-of-range counterfactuals as a console message (its post-selection feasibility check) -- it does not discard them, because doing so would select a geometrically incorrect (farther) boundary point. `bl_project_points()` enforces `train_ranges` only when the caller opts in via `filter_to_train_ranges = TRUE`. The local search, by contrast, applies it as a hard in-loop filter (per the cascade above) -- not because feasibility matters more in Phase 3, but because the SVD rotation invalidates the Z-space hull polygon and `train_ranges` is the only feasibility constraint that survives the rotation. If a future requirement asks the global search to enforce actionability and feasibility (e.g. to surface only realistic counterfactuals in `bl_find_boundary()` rather than reporting them post-hoc), the local cascade above is the template -- introduce a `set_filters` argument and the four-stage cascade into the segment loop of `bl_find_boundary()`.
+**`train_ranges` enforcement asymmetry between global and local search.** On the **default global path** (`bl_find_boundary()` followed by `bl_project_points(..., filter_to_train_ranges = FALSE)`), `train_ranges` is never used to exclude points. `bl_find_boundary()` only reports out-of-range counterfactuals as a console message (its post-selection feasibility check) -- it does not discard them, because doing so would select a geometrically incorrect (farther) boundary point. `bl_project_points()` enforces `train_ranges` only when the caller opts in via `filter_to_train_ranges = TRUE`. The local search, by contrast, applies it as a hard in-loop filter (per the cascade above) -- not because feasibility matters more in Phase 3, but because the SVD rotation invalidates the global Z-space hull polygon (the local search rebuilds a hull per rotated plane for plausibility, but `train_ranges` is the X-space feasibility check that survives the rotation). If a future requirement asks the global search to enforce actionability and feasibility (e.g. to surface only realistic counterfactuals in `bl_find_boundary()` rather than reporting them post-hoc), the local cascade above is the template -- introduce a `set_filters` argument and the four-stage cascade into the segment loop of `bl_find_boundary()`.
 
 **`plot.bl_local_result()`** renders using the same biplotEZ pipeline as `plot_biplotEZ()`. The biplotEZ object from `bl_result` is patched in-place with the rotated local coordinates before rendering:
 
@@ -539,7 +547,7 @@ biplotEZ computes the PCA/CVA loading matrix (`V = bp$Lmat` from `biplotEZ::PCA(
 
 ### 6.3 CVA with two classes (Architecture Q9)
 
-CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. With a `bl_model`, CVA uses the four prediction-outcome groups (TP/TN/FP/FN) by default, as in the loan example in the vignette and the development harness. If a group is empty (for example, the model makes no false positives on the training data), `bl_build_projection()` names it in a message and CVA uses the remaining groups. Empty levels, derived or in a user-supplied `cva_classes`, are dropped before CVA and before `W`, so its denominator `n - g` counts only groups with rows. `point_col` uses the confusion palette for any subset of the four labels. Two-group CVA arises only with `cva_classes = as.factor(class)` or a model-free `bl_build_result()`, and it warns. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
+CVA is technically defined for three or more classes, but biplotEZ permits two-class CVA. The package supports this; the limitation is documented in `bl_build_projection()` help. With a `bl_model`, CVA uses the four prediction-outcome groups (TP/TN/FP/FN) by default, as in the loan example in the vignette and the development harness. If a group is empty (for example, the model makes no false positives on the training data), `bl_build_projection()` names it in a message and CVA uses the remaining groups. Empty levels, derived or in a user-supplied `cva_classes`, are dropped before CVA and before `W`, so its denominator `n - g` counts only groups with rows. `point_col` uses the confusion palette for any subset of the four labels: the thesis colours held in the private constant `.confusion_cols` (`R/utils.R`; TP red, TN blue, FP purple, FN orange), which every plot method shares (since 2026-11-05; `point_col` used green, steel blue, orange and red before). Two-group CVA arises only with `cva_classes = as.factor(class)` or a model-free `bl_build_result()`, and it warns. Within `bl_build_projection()`, `standardise` is forced to `FALSE` for CVA regardless of the user-supplied value, because biplotEZ performs its own within-class normalisation.
 
 ### 6.4 Cutoff parameter (Architecture Q10)
 
@@ -549,14 +557,14 @@ The `cutoff` parameter (default 0.5) is stored in `bl_result` and propagated thr
 
 The hull polygon in `bl_result` always comes from `bl_grid`, not from `bl_filter_result`. Reason: the filter polygon is constructed in a lightweight 2-PC space of the standardised training features, while the grid polygon is constructed in the final Z-space (which may be CVA, or PCA with different `proj_dims`). Only the grid polygon is consistent with the rendered biplot. `bl_assemble()` enforces this by reading the polygon from `bl_grid`.
 
-### 6.6 Local rotation invalidates the hull polygon
+### 6.6 Local rotation invalidates the global hull polygon; the local search rebuilds one per plane
 
-The per-pair SVD rotation in `bl_find_local_cf()` produces a new Z-space for each eigenvector pair. The convex hull polygon from `bl_grid` is expressed in the original (unrotated) Z-space and is no longer geometrically meaningful after rotation. Therefore:
+The per-pair SVD rotation in `bl_find_local_cf()` produces a new Z-space for each component pair. The convex hull polygon from `bl_grid` is expressed in the original (unrotated) Z-space and is no longer geometrically meaningful after rotation. Therefore:
 
-- Global search: hull polygon applied
-- Local search: hull polygon **not applied**; only `train_ranges` (X-space bounds) and `set_filters` (actionability) constrain the search
+- Global search: the `bl_grid` hull polygon is applied
+- Local search: the `bl_grid` polygon is **never** applied. With `hull = TRUE` (the default since 2026-11-05) a new hull is built on each rotated plane from the training data and the target, as Appendix A of the thesis does, and only the boundary vertices inside it are kept (the thesis's plausibility rule, §4.3.1, p.117). `set_filters` (actionability) and `train_ranges` (X-space bounds) then apply as before. `hull = FALSE` gives the earlier search, with no hull. See `documentation/local-convex-hull.md`.
 
-This is the most important constraint difference between the two search modes.
+Until 2026-11-05 the local search applied no hull at all; the recorded reason (the global polygon is invalid after the rotation) did not cover a hull rebuilt per plane.
 
 ### 6.7 Actionability filters (Manual §3D, Architecture Q8)
 

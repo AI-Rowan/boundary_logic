@@ -29,7 +29,10 @@ This note uses $\mathbf{W}$ only to choose the plane under CVA, or under PCA wit
 
 **Sources:**
 
-- **The thesis:** `../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`, cited by section and printed page.
+- **The thesis:** the final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`, kept outside the
+  repository in `Explain XAI code/reference-materials/`), cited by section and printed page (printed page = PDF
+  page − 16). Until 2026-11-05 this note cited the 30 September 2025 draft
+  (`../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`), whose section numbers and pages differ.
 - **The research code:** branch `origin/original_PhD_code`, cited as `scripts/<file>:<line>`.
 - **Package source:** `R/local_cf.R` and `R/projection.R`.
 - **Package design documents:** `1 Foundation intro documents.txt` and `2 implementation_summary.txt`.
@@ -55,6 +58,10 @@ the details. In brief:
 - **Which selector:** the measurements use the Mahalanobis pair selector, the package's default for both projections
   until 2026-11-05. Since then the default follows the thesis by projection (§3.4, §4.4), and the scripts pin
   `distance = "mahalanobis"` so that every number here is reproduced unchanged (re-run on 2026-11-05).
+- **Which search:** since 2026-11-05 `bl_find_local_cf()` keeps only boundary points inside the convex hull of the
+  training data and the target on each rotated plane (`hull = TRUE`, `documentation/local-convex-hull.md`). The
+  measurements here concern the rotation and the pair search before that filter, so the scripts also pin
+  `hull = FALSE`, the search they measured.
 
 ---
 
@@ -94,13 +101,13 @@ explained. The search (§2.4) then chooses among the planes the rotation can pro
 
 The thesis defines the method in three places:
 
-- **the rotation:** §3.4–3.4.2 (pp.70–79);
-- **the choice of projection and distance:** §3.7.3–3.9 (pp.102–114);
-- **the search over component pairs:** §4.2.1 (pp.136–140).
+- **the rotation:** §3.5–3.5.2 (pp.52–61);
+- **the choice of projection and distance:** §3.8.3–3.9.3 (pp.82–93);
+- **the search over component pairs:** §4.3.1 (pp.113–118).
 
 The research code that produced the thesis's results is on the branch `origin/original_PhD_code` (§2.6).
 
-### 2.1 The rotated component biplot (thesis §3.4)
+### 2.1 The rotated component biplot (thesis §3.5)
 
 **The three-point construction.** The rotation is framed as a **Procrustes problem**: the optimal one-to-one
 transformation that maps points in one configuration onto points in another (Cox & Cox, 2008). Ordinarily
@@ -183,7 +190,7 @@ so the model's classification and the biplot's agree: $f(\hat{\mathbf{x}}_i) = f
 - **A point $z$ in rotated Z-space** maps back to X-space as
   $\hat{\mathbf{x}}' = \mathbf{z}'\mathbf{A}\mathbf{V}'\mathbf{J}'$.
 
-### 2.2 The CVA variant (thesis §3.4.2, p.79)
+### 2.2 The CVA variant (thesis §3.5.2, p.61)
 
 The same machinery applies to the CVA transformation matrix $\mathbf{M}$, or to the two-group optimised
 $\mathbf{M}^{opt}$:
@@ -194,7 +201,7 @@ $$
 $$
 
 **The general rule.** "The only change required between using either the CVA and PCA biplots is replacing the
-matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$" (§3.9, p.113).
+matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$" (§3.9.3, p.92).
 
 **The cost specific to CVA.**
 
@@ -203,7 +210,7 @@ matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$"
 
 PCA has no analogous special point. CVA rotation trades class-mean fidelity for target-point fidelity.
 
-### 2.3 Worked examples (thesis §3.4–3.4.1)
+### 2.3 Worked examples (thesis §3.5–3.5.1)
 
 **5-point, 2D→1D toy.**
 
@@ -224,25 +231,25 @@ thesis's numbers and the script's should not be quoted together.
 - After the rotation, the projected point moves into the matching region, and its interpolated value equals the
   true value: the identity of §2.1, demonstrated.
 
-### 2.4 Searching all component pairs (thesis §3.9 p.114, §4.2.1 pp.136–140)
+### 2.4 Searching all component pairs (thesis §3.9.3 p.93, §4.3.1 pp.113–118)
 
 The rotation turns *a given* plane. The thesis's local explanation tries every plane that two of the components
 can span:
 
 - **Every pair is tried.** "the projection matrix is recalculated for all possible two-dimensional biplots formed
   from pairs of components". That is $p!/\bigl(2!(p-2)!\bigr)$ combinations, each selected by a $p\times 2$ matrix
-  $\mathbf{J}_i$ of zeros with ones in the rows of the chosen components (p.139).
+  $\mathbf{J}_i$ of zeros with ones in the rows of the chosen components (p.117).
 - **Each is rotated** so its plane passes through the target. "The new rotated component biplot is created using
-  the first two components of $\mathbf{M}^{new}$" (p.137).
-- **Constraints** (p.113, p.139):
+  the first two components of $\mathbf{M}^{new}$" (p.115).
+- **Constraints** (p.92, p.117):
   - **actionability:** for the Pima data, Pregnancies and Age cannot decrease;
   - **feasibility:** each feature stays within its training range;
   - **plausibility:** the counterfactual "must be selected from a local decision boundary that is within the
     convex hull of the training data", and boundary areas that contain no data points are discarded.
-- **Within a plane**, the nearest boundary point to the target is found on the biplot plane (p.106).
+- **Within a plane**, the nearest boundary point to the target is found on the biplot plane (p.86).
 - **Across planes**, "the nearest counterfactual is then selected as the counterfactual that corresponds to the
   shortest change vector measured as the Mahalanobis distance of the change in the original $p$-dimensional space"
-  (pp.139–140):
+  (pp.117–118):
 
 $$
 \mathbf{d}_i = (\mathbf{z}_{i,cf} - \mathbf{z}_i)(\mathbf{M}_i^{new})^{-}, \qquad
@@ -251,37 +258,37 @@ $$
 
   with $\mathbf{W}$ "the total within groups sums-of-squares-and-products (SSP)".
 - **If no plane yields a constrained counterfactual,** "it is assumed that no constraint counterfactual exists for
-  this data point" (p.140).
+  this data point" (p.118).
 
-**The Pima example** (p.140, Figure 4-11):
+**The Pima example** (p.118, Figure 4.11):
 
 - seven variables give 21 biplots;
 - 11 of them yield constrained counterfactuals;
 - the nearest comes from components 1 and 7.
 
 The thesis's conclusion lists the search as a contribution: it "systematically constructs biplots using all pairs
-of components, thereby approximating different slices of the decision surface" (§4.3, p.148).
+of components, thereby approximating different slices of the decision surface" (§4.4, p.125).
 
 ### 2.5 The distance criterion in the thesis
 
 The thesis fixes the cross-plane criterion **by projection**:
 
-- **p.106 (§3.8.1):** "the nearest counterfactual … is selected as the counterfactual that corresponds to the
+- **p.86 (§3.9.1):** "the nearest counterfactual … is selected as the counterfactual that corresponds to the
   shortest change vector $\mathbf{d}_i$ measured in the full dimensional space using either **Euclidean distance
   for PCA biplots and Mahalanobis distance for CVA biplots**", with
   $\mathbf{d}_i = (\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{V}_2'$ or
   $(\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{M}_2^{-}$.
-- **p.103 (§3.7.3) and p.111 (§3.8.3):** "In the CVA biplot … the Euclidean distances on the biplot plane
+- **p.83 (§3.8.3) and p.91 (§3.9.3):** "In the CVA biplot … the Euclidean distances on the biplot plane
   correspond to Mahalanobis distances in the original feature space." By contrast, a standardised PCA biplot
   "ignores the correlation" between features.
-- **p.113 (§3.9):** PCA is for the initial data investigation. "The CVA biplot is then used to generate local and
+- **p.92 (§3.9.3):** PCA is for the initial data investigation. "The CVA biplot is then used to generate local and
   global interpretations, since it ensures that the estimated counterfactual reflects the shortest Mahalanobis
   distance in the original feature space", with the groups defined by the model's four outcomes
   (TP, TN, FP, FN).
-- **p.148 (§4.3):** the conclusion describes "a dual approach": Mahalanobis distance in the feature space for
+- **p.124 (§4.4):** the conclusion describes a "dual approach": Mahalanobis distance in the feature space for
   selection, and the $L_2$ distance on the plane for consistency with the picture.
 
-**The two halves of the "dual approach" are one quantity under CVA.** The thesis's own p.111 statement says so, and
+**The two halves of the "dual approach" are one quantity under CVA.** The thesis's own p.91 statement says so, and
 §3.4 proves it for every rotated plane. The in-plane $L_2$ step therefore already finds the Mahalanobis-nearest
 point, and the cross-plane comparison ranks planes by the same measure. **Under PCA** the thesis's rule is
 Euclidean throughout; it is the package's default since 2026-11-05 (§3.4).
@@ -464,9 +471,11 @@ stages:
      disagrees with the contour's side of `cutoff`. This is the most expensive filter, which is why (b) and (c)
      run first.
 
-   **No hull polygon.** The search applies no convex-hull polygon. The global biplot's polygon was built for the
-   unrotated plane, so rotation invalidates its coordinates. Only `train_ranges` and `set_filters` constrain the
-   search (`1 Foundation intro documents.txt` §10.4; CLAUDE.md §4).
+   **The hull, rebuilt per plane (since 2026-11-05).** The global biplot's polygon was built for the unrotated
+   plane, so rotation invalidates its coordinates and the search never uses it. With `hull = TRUE` (the default)
+   a convex hull of the training data and the target is built on each rotated plane, and only the contour
+   vertices inside it are kept, before filters (b)-(d) (`../local-convex-hull.md`). Until 2026-11-05 no hull
+   was applied, and that is the search every measurement in this note used: the scripts pin `hull = FALSE`.
 5. **Within-pair nearest vertex.** Among the survivors, the nearest to the target is found by 2D Euclidean distance
    in the rotated plane (`.nearest_idx_block()`). It is the exact minimum, taking the first vertex on an exact tie,
    so the step is deterministic (`../nearest-vertex-tie-break.md`).
@@ -583,7 +592,7 @@ The same in-plane step $\Delta z = (0.7, -0.4)$, sent through each pair's predic
 | (3,4) | 13.099 | 239.3651 | 94.9 | 146 |
 
 In the package's own search on that target, the Mahalanobis selector and the smallest in-plane distance both pick
-pair (3,4); on the loan harness's free search, both pick (3,4). The thesis states the identity in prose (p.111, §2.5).
+pair (3,4); on the loan harness's free search, both pick (3,4). The thesis states the identity in prose (p.91, §2.5).
 
 #### Under PCA they are different metrics
 
@@ -607,7 +616,7 @@ pair (3,4); on the loan harness's free search, both pick (3,4). The thesis state
 |---|---|---|
 | `"auto"` (default) | `"mahalanobis"` | `"euclidean"` |
 | `"mahalanobis"` | the thesis's criterion; ranks the pairs as the in-plane distance does | `W_binary` Mahalanobis; the PCA default until 2026-11-05, not the thesis's rule |
-| `"euclidean"` | Euclidean in X-space on the total-SD scale; a different metric, not the thesis's CVA rule | Euclidean in X-space on the total-SD scale, equal to the in-plane distance at the search point; the thesis's rule (p.106) |
+| `"euclidean"` | Euclidean in X-space on the total-SD scale; a different metric, not the thesis's CVA rule | Euclidean in X-space on the total-SD scale, equal to the in-plane distance at the search point; the thesis's rule (p.86) |
 
 Until 2026-11-05 `"euclidean"` was the in-plane distance itself, identical to `"mahalanobis"` under CVA.
 
@@ -672,7 +681,7 @@ if (is.finite(selector) && selector < best_selector) {
 | rotation | Procrustes, no dilation, columns 1–2 | the same (§3.1) |
 | pairs tried | all $\binom{p}{2}$ | up to `max_pairs = 21L`: all pairs for $p \le 7$ (§3.2) |
 | grid built over | the target and the test data (research code) | the training data's rotated range |
-| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | no hull in the local search (§3.3); no enclosure rule |
+| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | the convex hull of the training data and the target, rebuilt in each rotated plane (`hull = TRUE`, since 2026-11-05; before, no hull, §3.3); no enclosure rule |
 | actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)`, `"integer"` (rounded after the search) |
 | feasibility | `train_ranges` | `train_ranges`, filter (c) |
 | nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
@@ -747,7 +756,9 @@ error.
 
 So "Best pair: (3,4)" in the output, and the wording in any paper, imply an eigenplane that is not what is drawn. It
 is more accurate to describe the search as *sampling $\binom{p}{2}$ planes through the target* than as
-*enumerating eigenplanes*.
+*enumerating eigenplanes*. Since 2026-11-05 the package's help pages and messages say "component pair" and state
+that the selected plane need not coincide with the plane of the two components that name it; Paper 1 uses the
+same wording.
 
 ### 4.3 The local plot's orientation is arbitrary
 
@@ -768,7 +779,7 @@ is more accurate to describe the search as *sampling $\binom{p}{2}$ planes throu
   - Before 2026-10-31 the package's documentation claimed the opposite (that Z-distances are not comparable across
     pairs).
 - **Under PCA the default departed from the thesis (resolved 2026-11-05).**
-  - The thesis's rule is standardised Euclidean (p.106). Until 2026-11-05 the default was `W_binary` Mahalanobis,
+  - The thesis's rule is standardised Euclidean (p.86). Until 2026-11-05 the default was `W_binary` Mahalanobis,
     which selects a different pair on 23% of `17_1`'s rows (§3.4).
   - That default also mixed metrics: within a plane the nearest vertex is chosen by standardised Euclidean
     distance, across planes by `W_binary` Mahalanobis. The point judged "nearest" was not nearest in the measure
@@ -830,13 +841,17 @@ Three counterfactuals leave the drawn plane:
 
 ### 4.8 A target at the centroid
 
-**What inspection suggests** (not measured):
+**Verified on 2026-11-05** (the README's Pima CVA model, with the target at `X_center`):
 
-- if $x_t = 0$, the Procrustes matrix is zero;
-- every pair label then returns the same, unrotated-looking plane;
-- no warning is given.
+- if $x_t = 0$, the Procrustes matrix is zero, so the SVD returns the identity and $\mathbf{A} = \mathbf{I}$;
+- every pair label then returns the unrotated plane of components (1,2): the plane for pair (3,4) equals
+  `V[, 1:2]`;
+- the search still runs and can find a counterfactual.
 
-The guard needs verifying, then a warning (§5.2's edge cases give the convention).
+**The guard (since 2026-11-05):** `bl_find_local_cf()` warns once, before the pair loop, when
+`sqrt(sum(x_target_st^2)) < sqrt(.Machine$double.eps)`: the target lies at the centre of the biplot, so the
+Procrustes rotation is undefined and the local plane is arbitrary. `.bl_rotate()` is unchanged, and so are the
+results. §5.2's edge cases give the convention the proposed minimal rotation would follow.
 
 ### 4.9 Inherent limitations — documented, not to be "fixed"
 
@@ -1003,7 +1018,7 @@ safe to fix.
 $\binom{p}{2}$ points of a $(p-2)$-dimensional continuum, so "best of the labels" is not best of anything well
 defined.
 
-**This is the thesis's own future work.** Its §6.2 (p.172), "Grand Tour of data instead of component selection",
+**This is the thesis's own future work.** Its §6.3 (p.144), "Grand Tour of data instead of component selection",
 proposes extending the search beyond fixed pairs to a smooth sequence of planes. Each frame would be rotated to place
 the target on the biplot, and the candidates scored by Mahalanobis distance. $\mathcal{A}$ has an explicit
 parameterisation, so it can be searched directly.
@@ -1134,7 +1149,7 @@ Each item needs an explicit instruction (CLAUDE.md §9). Ranked as in §4:
    - a `pairs =` argument to force any pair;
    - a `max_pairs` default tied to $\binom{p}{2}$, so the default search covers every pair for any $p$, as the
      thesis's does. The default of 21 already does so up to $p=7$.
-8. **A centroid guard** (§4.8). Verify, then warn.
+8. **A centroid guard** (§4.8). Done on 2026-11-05: verified, and `bl_find_local_cf()` now warns.
 
 ### 6.3 What the proposal does not fix
 
@@ -1452,12 +1467,12 @@ The returned basis was bit-identical across five calls (`17_3` §3).
 
 ## References
 
-- **The thesis:** Rowan, A. (2025), PhD thesis, `../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`:
-  - §3.4–3.4.2 (pp.70–79): the rotation and its CVA variant;
-  - §3.7.3, §3.8.1, §3.8.3 and §3.9 (pp.102–114): PCA versus CVA, the distance criterion, and the procedure;
-  - §4.2.1 (pp.136–140): the search over all component pairs (the Pima example);
-  - §4.3 (p.148): the conclusions;
-  - §6.2 (p.172): the Grand Tour as future work.
+- **The thesis:** Rowan, A. (2026), PhD thesis, final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`):
+  - §3.5–3.5.2 (pp.52–61): the rotation and its CVA variant;
+  - §3.8.3, §3.9.1 and §3.9.3 (pp.82–93): PCA versus CVA, the distance criterion, and the procedure;
+  - §4.3.1 (pp.113–118): the search over all component pairs (the Pima example);
+  - §4.4 (pp.124–125): the conclusions;
+  - §6.3 (p.144): the Grand Tour as future work.
 - **Package source:**
   - `R/local_cf.R`: `.generate_pairs()`, `.bl_rotate()`, `bl_find_local_cf()`, `.restore_fixed()`,
     `.round_integers()`, `.project_local()`;
@@ -1478,5 +1493,5 @@ The returned basis was bit-identical across five calls (`17_3` §3).
   - `3.1 Biplot search - Train data.r` (`Wmat`);
   - `1 Functions for biplot.R` (the CVA call).
 - **biplotEZ** 2.2: `CVA.biplot()` and `CVAlowdim()`, read from the installed package.
-- Cox & Cox (2008), on Procrustes analysis, as cited in the thesis §3.4 (full reference in the thesis's
+- Cox & Cox (2008), on Procrustes analysis, as cited in the thesis §3.5 (full reference in the thesis's
   bibliography).

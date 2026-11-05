@@ -1,12 +1,12 @@
 "change","model","target","setting","quantity","value","source","note"
-"meta",NA,NA,NA,"package_version","0.1.0","meta",NA
+"meta",NA,NA,NA,"package_version","0.2.0","meta",NA
 "meta",NA,NA,NA,"source","load_all","meta",NA
-"meta",NA,NA,NA,"git_sha","540f9ad2b667bd937471f86000b2c8a053dd5279","meta",NA
+"meta",NA,NA,NA,"git_sha","12b38e44012cf9f01a41a088d43717fb083e9654","meta",NA
 "meta",NA,NA,NA,"git_dirty","TRUE","meta",NA
 "meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
 "meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
-"meta",NA,NA,NA,"time","2026-11-05 06:28:15","meta",NA
-"meta",NA,NA,NA,"numbers_rds_git_sha","540f9ad2b667bd937471f86000b2c8a053dd5279","meta","commit at which run_all.R wrote numbers.rds"
+"meta",NA,NA,NA,"time","2026-11-05 15:39:39","meta",NA
+"meta",NA,NA,NA,"numbers_rds_git_sha","12b38e44012cf9f01a41a088d43717fb083e9654","meta","commit at which run_all.R wrote numbers.rds"
 "meta",NA,NA,NA,"target_row_TP","23","meta",NA
 "meta",NA,NA,NA,"target_row_TN","25","meta",NA
 "check",NA,NA,NA,"baseline_reproduces_numbers_rds","TRUE","check",NA
@@ -112,14 +112,14 @@
 "base","4f",NA,"baseline","rule_target_TP","23","toggle",NA
 "base","4f",NA,"baseline","rule_target_TN","25","toggle",NA
 "base","4f","TP","baseline","solution_found","TRUE","toggle",NA
-"base","4f","TP","baseline","best_pair","(2,3)","toggle",NA
-"base","4f","TP","baseline","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"base","4f","TP","baseline","B_pred","0.468","toggle",NA
+"base","4f","TP","baseline","best_pair","(3,4)","toggle",NA
+"base","4f","TP","baseline","sqrt_d2M","1.81939367293617","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"base","4f","TP","baseline","B_pred","0.481","toggle",NA
 "base","4f","TP","baseline","pairs_tried","6","toggle",NA
-"base","4f","TP","baseline","B_x:Pregnancies","10","toggle",NA
-"base","4f","TP","baseline","B_x:Glucose","171.381638738658","toggle",NA
-"base","4f","TP","baseline","B_x:Insulin","104.069707004613","toggle",NA
-"base","4f","TP","baseline","B_x:Age","59.5833240709902","toggle",NA
+"base","4f","TP","baseline","B_x:Pregnancies","6","toggle",NA
+"base","4f","TP","baseline","B_x:Glucose","148.909780779199","toggle",NA
+"base","4f","TP","baseline","B_x:Insulin","106.099101852993","toggle",NA
+"base","4f","TP","baseline","B_x:Age","41.1970020938286","toggle",NA
 "base","4f","TN","baseline","solution_found","TRUE","toggle",NA
 "base","4f","TN","baseline","best_pair","(2,4)","toggle",NA
 "base","4f","TN","baseline","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -133,14 +133,14 @@
 "K1","4f",NA,"b_margin","rule_target_TP","1","toggle",NA
 "K1","4f",NA,"b_margin","rule_target_TN","25","toggle",NA
 "K1","4f","TP","b_margin","solution_found","TRUE","toggle",NA
-"K1","4f","TP","b_margin","best_pair","(2,3)","toggle",NA
-"K1","4f","TP","b_margin","sqrt_d2M","1.42714013946268","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"K1","4f","TP","b_margin","B_pred","0.457","toggle",NA
+"K1","4f","TP","b_margin","best_pair","(3,4)","toggle",NA
+"K1","4f","TP","b_margin","sqrt_d2M","1.82824059832171","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"K1","4f","TP","b_margin","B_pred","0.472","toggle",NA
 "K1","4f","TP","b_margin","pairs_tried","6","toggle",NA
-"K1","4f","TP","b_margin","B_x:Pregnancies","10","toggle",NA
-"K1","4f","TP","b_margin","B_x:Glucose","171.052651288239","toggle",NA
-"K1","4f","TP","b_margin","B_x:Insulin","102.860424463224","toggle",NA
-"K1","4f","TP","b_margin","B_x:Age","59.6151990503148","toggle",NA
+"K1","4f","TP","b_margin","B_x:Pregnancies","6","toggle",NA
+"K1","4f","TP","b_margin","B_x:Glucose","148.761569005662","toggle",NA
+"K1","4f","TP","b_margin","B_x:Insulin","105.817000319474","toggle",NA
+"K1","4f","TP","b_margin","B_x:Age","41.1493350520386","toggle",NA
 "K1","4f","TN","b_margin","solution_found","TRUE","toggle",NA
 "K1","4f","TN","b_margin","best_pair","(2,4)","toggle",NA
 "K1","4f","TN","b_margin","sqrt_d2M","0.417637246487337","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -154,14 +154,14 @@
 "K2","4f",NA,"outlie","rule_target_TP","23","toggle",NA
 "K2","4f",NA,"outlie","rule_target_TN","69","toggle",NA
 "K2","4f","TP","outlie","solution_found","TRUE","toggle",NA
-"K2","4f","TP","outlie","best_pair","(2,3)","toggle",NA
-"K2","4f","TP","outlie","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"K2","4f","TP","outlie","B_pred","0.468","toggle",NA
+"K2","4f","TP","outlie","best_pair","(3,4)","toggle",NA
+"K2","4f","TP","outlie","sqrt_d2M","1.81939367293617","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"K2","4f","TP","outlie","B_pred","0.481","toggle",NA
 "K2","4f","TP","outlie","pairs_tried","6","toggle",NA
-"K2","4f","TP","outlie","B_x:Pregnancies","10","toggle",NA
-"K2","4f","TP","outlie","B_x:Glucose","171.381638738658","toggle",NA
-"K2","4f","TP","outlie","B_x:Insulin","104.069707004613","toggle",NA
-"K2","4f","TP","outlie","B_x:Age","59.5833240709902","toggle",NA
+"K2","4f","TP","outlie","B_x:Pregnancies","6","toggle",NA
+"K2","4f","TP","outlie","B_x:Glucose","148.909780779199","toggle",NA
+"K2","4f","TP","outlie","B_x:Insulin","106.099101852993","toggle",NA
+"K2","4f","TP","outlie","B_x:Age","41.1970020938286","toggle",NA
 "K2","4f","TN","outlie","solution_found","TRUE","toggle",NA
 "K2","4f","TN","outlie","best_pair","(2,4)","toggle",NA
 "K2","4f","TN","outlie","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -175,15 +175,11 @@
 "K3","7f",NA,"thesis_order","weakest3","BMI, DiabetesPedigreeFunction, SkinThickness","toggle",NA
 "K3","4f",NA,"thesis_order","rule_target_TP","10","toggle",NA
 "K3","4f",NA,"thesis_order","rule_target_TN","25","toggle",NA
-"K3","4f","TP","thesis_order","solution_found","TRUE","toggle",NA
-"K3","4f","TP","thesis_order","best_pair","(1,3)","toggle",NA
-"K3","4f","TP","thesis_order","sqrt_d2M","1.7007867353956","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"K3","4f","TP","thesis_order","B_pred","0.497","toggle",NA
+"K3","4f","TP","thesis_order","solution_found","FALSE","toggle",NA
+"K3","4f","TP","thesis_order","best_pair",NA,"toggle","no counterfactual: no whole-number point"
+"K3","4f","TP","thesis_order","sqrt_d2M",NA,"toggle","no counterfactual: no whole-number point"
+"K3","4f","TP","thesis_order","B_pred",NA,"toggle","no counterfactual: no whole-number point"
 "K3","4f","TP","thesis_order","pairs_tried","6","toggle",NA
-"K3","4f","TP","thesis_order","B_x:Pregnancies","7","toggle",NA
-"K3","4f","TP","thesis_order","B_x:Glucose","184.426150245847","toggle",NA
-"K3","4f","TP","thesis_order","B_x:Insulin","93.1937227185655","toggle",NA
-"K3","4f","TP","thesis_order","B_x:Age","58.6711462659422","toggle",NA
 "K3","4f","TN","thesis_order","solution_found","TRUE","toggle",NA
 "K3","4f","TN","thesis_order","best_pair","(2,4)","toggle",NA
 "K3","4f","TN","thesis_order","sqrt_d2M","0.39447635456193","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -199,15 +195,11 @@
 "K2","4f","TN","outlie","same_as_baseline","TRUE","toggle","run 1: same solution, pair, distance and counterfactual"
 "K3","4f","TP","thesis_order","same_as_baseline","FALSE","toggle","run 1: same solution, pair, distance and counterfactual"
 "K3","4f","TN","thesis_order","same_as_baseline","FALSE","toggle","run 1: same solution, pair, distance and counterfactual"
-"M4","4f","TP","max_pairs = 1","solution_found","TRUE","toggle",NA
-"M4","4f","TP","max_pairs = 1","best_pair","(1,2)","toggle",NA
-"M4","4f","TP","max_pairs = 1","sqrt_d2M","1.98794831873915","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"M4","4f","TP","max_pairs = 1","B_pred","0.473","toggle",NA
+"M4","4f","TP","max_pairs = 1","solution_found","FALSE","toggle",NA
+"M4","4f","TP","max_pairs = 1","best_pair",NA,"toggle","no counterfactual: no whole-number point"
+"M4","4f","TP","max_pairs = 1","sqrt_d2M",NA,"toggle","no counterfactual: no whole-number point"
+"M4","4f","TP","max_pairs = 1","B_pred",NA,"toggle","no counterfactual: no whole-number point"
 "M4","4f","TP","max_pairs = 1","pairs_tried","1","toggle",NA
-"M4","4f","TP","max_pairs = 1","B_x:Pregnancies","7","toggle",NA
-"M4","4f","TP","max_pairs = 1","B_x:Glucose","191.492818297504","toggle",NA
-"M4","4f","TP","max_pairs = 1","B_x:Insulin","89.9570286486072","toggle",NA
-"M4","4f","TP","max_pairs = 1","B_x:Age","59.5163971471448","toggle",NA
 "M4","4f","TN","max_pairs = 1","solution_found","TRUE","toggle",NA
 "M4","4f","TN","max_pairs = 1","best_pair","(1,2)","toggle",NA
 "M4","4f","TN","max_pairs = 1","sqrt_d2M","0.439082342632928","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -218,14 +210,14 @@
 "M4","4f","TN","max_pairs = 1","B_x:Insulin","130.46504726592","toggle",NA
 "M4","4f","TN","max_pairs = 1","B_x:Age","39.7003820365342","toggle",NA
 "M4","4f","TP","max_pairs = 10","solution_found","TRUE","toggle",NA
-"M4","4f","TP","max_pairs = 10","best_pair","(2,3)","toggle",NA
-"M4","4f","TP","max_pairs = 10","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"M4","4f","TP","max_pairs = 10","B_pred","0.468","toggle",NA
+"M4","4f","TP","max_pairs = 10","best_pair","(3,4)","toggle",NA
+"M4","4f","TP","max_pairs = 10","sqrt_d2M","1.81939367293617","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M4","4f","TP","max_pairs = 10","B_pred","0.481","toggle",NA
 "M4","4f","TP","max_pairs = 10","pairs_tried","6","toggle",NA
-"M4","4f","TP","max_pairs = 10","B_x:Pregnancies","10","toggle",NA
-"M4","4f","TP","max_pairs = 10","B_x:Glucose","171.381638738658","toggle",NA
-"M4","4f","TP","max_pairs = 10","B_x:Insulin","104.069707004613","toggle",NA
-"M4","4f","TP","max_pairs = 10","B_x:Age","59.5833240709902","toggle",NA
+"M4","4f","TP","max_pairs = 10","B_x:Pregnancies","6","toggle",NA
+"M4","4f","TP","max_pairs = 10","B_x:Glucose","148.909780779199","toggle",NA
+"M4","4f","TP","max_pairs = 10","B_x:Insulin","106.099101852993","toggle",NA
+"M4","4f","TP","max_pairs = 10","B_x:Age","41.1970020938286","toggle",NA
 "M4","4f","TN","max_pairs = 10","solution_found","TRUE","toggle",NA
 "M4","4f","TN","max_pairs = 10","best_pair","(2,4)","toggle",NA
 "M4","4f","TN","max_pairs = 10","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -236,14 +228,14 @@
 "M4","4f","TN","max_pairs = 10","B_x:Insulin","132.753443463723","toggle",NA
 "M4","4f","TN","max_pairs = 10","B_x:Age","39.7072606749544","toggle",NA
 "M4","4f","TP","max_pairs = 21","solution_found","TRUE","toggle",NA
-"M4","4f","TP","max_pairs = 21","best_pair","(2,3)","toggle",NA
-"M4","4f","TP","max_pairs = 21","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"M4","4f","TP","max_pairs = 21","B_pred","0.468","toggle",NA
+"M4","4f","TP","max_pairs = 21","best_pair","(3,4)","toggle",NA
+"M4","4f","TP","max_pairs = 21","sqrt_d2M","1.81939367293617","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M4","4f","TP","max_pairs = 21","B_pred","0.481","toggle",NA
 "M4","4f","TP","max_pairs = 21","pairs_tried","6","toggle",NA
-"M4","4f","TP","max_pairs = 21","B_x:Pregnancies","10","toggle",NA
-"M4","4f","TP","max_pairs = 21","B_x:Glucose","171.381638738658","toggle",NA
-"M4","4f","TP","max_pairs = 21","B_x:Insulin","104.069707004613","toggle",NA
-"M4","4f","TP","max_pairs = 21","B_x:Age","59.5833240709902","toggle",NA
+"M4","4f","TP","max_pairs = 21","B_x:Pregnancies","6","toggle",NA
+"M4","4f","TP","max_pairs = 21","B_x:Glucose","148.909780779199","toggle",NA
+"M4","4f","TP","max_pairs = 21","B_x:Insulin","106.099101852993","toggle",NA
+"M4","4f","TP","max_pairs = 21","B_x:Age","41.1970020938286","toggle",NA
 "M4","4f","TN","max_pairs = 21","solution_found","TRUE","toggle",NA
 "M4","4f","TN","max_pairs = 21","best_pair","(2,4)","toggle",NA
 "M4","4f","TN","max_pairs = 21","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
@@ -259,30 +251,30 @@
 "M4","7f",NA,NA,"position_of_pair_1_7_in_package_order","16","computed","pairs ordered (1,2), (1,3), (2,3), (1,4), ..."
 "M5","4f","TP","unconstrained","auto_resolves_to","mahalanobis","stored",NA
 "M5","4f","TP","unconstrained / mahalanobis","solution_found","TRUE","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","best_pair","(2,3)","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","sqrt_d2M","1.50176150701552","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M5","4f","TP","unconstrained / mahalanobis","best_pair","(3,4)","toggle",NA
+"M5","4f","TP","unconstrained / mahalanobis","sqrt_d2M","1.84430065788971","toggle","Mahalanobis distance from the target to the reported counterfactual"
 "M5","4f","TP","unconstrained / mahalanobis","B_pred","0.499","toggle",NA
 "M5","4f","TP","unconstrained / mahalanobis","pairs_tried","6","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","B_x:Pregnancies","10.5092490381653","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","B_x:Glucose","171.381638738658","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","B_x:Insulin","104.069707004613","toggle",NA
-"M5","4f","TP","unconstrained / mahalanobis","B_x:Age","59.5833240709902","toggle",NA
+"M5","4f","TP","unconstrained / mahalanobis","B_x:Pregnancies","6.40734848624811","toggle",NA
+"M5","4f","TP","unconstrained / mahalanobis","B_x:Glucose","148.909780779199","toggle",NA
+"M5","4f","TP","unconstrained / mahalanobis","B_x:Insulin","106.099101852993","toggle",NA
+"M5","4f","TP","unconstrained / mahalanobis","B_x:Age","41.1970020938286","toggle",NA
 "M5","4f","TP","unconstrained","same_pair_as_plane_distance","TRUE","stored","Mahalanobis choice against the smallest dist_z"
-"M5","4f","TP","unconstrained","ratio_min","308.999999999999","stored","all_distances_mahalanobis / all_distances^2 over the pairs with a boundary point"
+"M5","4f","TP","unconstrained","ratio_min","309","stored","all_distances_mahalanobis / all_distances^2 over the pairs with a boundary point"
 "M5","4f","TP","unconstrained","ratio_max","309","stored",NA
 "M5","4f","TP","unconstrained","pairs_with_point","6","stored",NA
 "M5","4f","TP","run 1","auto_resolves_to","mahalanobis","stored",NA
 "M5","4f","TP","run 1 / mahalanobis","solution_found","TRUE","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","best_pair","(2,3)","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"M5","4f","TP","run 1 / mahalanobis","B_pred","0.468","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","best_pair","(3,4)","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","sqrt_d2M","1.81939367293617","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M5","4f","TP","run 1 / mahalanobis","B_pred","0.481","toggle",NA
 "M5","4f","TP","run 1 / mahalanobis","pairs_tried","6","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","B_x:Pregnancies","10","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","B_x:Glucose","171.381638738658","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","B_x:Insulin","104.069707004613","toggle",NA
-"M5","4f","TP","run 1 / mahalanobis","B_x:Age","59.5833240709902","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","B_x:Pregnancies","6","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","B_x:Glucose","148.909780779199","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","B_x:Insulin","106.099101852993","toggle",NA
+"M5","4f","TP","run 1 / mahalanobis","B_x:Age","41.1970020938286","toggle",NA
 "M5","4f","TP","run 1","same_pair_as_plane_distance","TRUE","stored","Mahalanobis choice against the smallest dist_z"
-"M5","4f","TP","run 1","ratio_min","308.999999999999","stored","all_distances_mahalanobis / all_distances^2 over the pairs with a boundary point"
+"M5","4f","TP","run 1","ratio_min","309","stored","all_distances_mahalanobis / all_distances^2 over the pairs with a boundary point"
 "M5","4f","TP","run 1","ratio_max","309","stored",NA
 "M5","4f","TP","run 1","pairs_with_point","6","stored",NA
 "M5","4f","TN","unconstrained","auto_resolves_to","mahalanobis","stored",NA
@@ -317,20 +309,20 @@
 "check",NA,NA,NA,"cva_ratio_equals_n_minus_g","TRUE","check",NA
 "M5P","4f","TP","run 1","auto_resolves_to","euclidean","stored",NA
 "M5P","4f","TP","run 1 / euclidean (auto)","solution_found","TRUE","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","best_pair","(1,3)","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","sqrt_d2M","1.39809567601429","toggle","Mahalanobis distance from the target to the reported counterfactual"
-"M5P","4f","TP","run 1 / euclidean (auto)","B_pred","0.496","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","best_pair","(3,4)","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","sqrt_d2M","2.04731677235686","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M5P","4f","TP","run 1 / euclidean (auto)","B_pred","0.488","toggle",NA
 "M5P","4f","TP","run 1 / euclidean (auto)","pairs_tried","6","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Pregnancies","10","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Glucose","175.692651546458","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Insulin","106.643741266702","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Age","59.8301488942541","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Pregnancies","5","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Glucose","149.782164411961","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Insulin","236.522208246926","toggle",NA
+"M5P","4f","TP","run 1 / euclidean (auto)","B_x:Age","40.3299550555887","toggle",NA
 "M5P","4f","TP","run 1 / mahalanobis","solution_found","FALSE","toggle",NA
 "M5P","4f","TP","run 1 / mahalanobis","best_pair",NA,"toggle","no counterfactual: no whole-number point"
 "M5P","4f","TP","run 1 / mahalanobis","sqrt_d2M",NA,"toggle","no counterfactual: no whole-number point"
 "M5P","4f","TP","run 1 / mahalanobis","B_pred",NA,"toggle","no counterfactual: no whole-number point"
 "M5P","4f","TP","run 1 / mahalanobis","pairs_tried","6","toggle",NA
-"M5P","4f","TP","run 1 / euclidean (auto)","dist_x","1.53082940889743","toggle","search point"
+"M5P","4f","TP","run 1 / euclidean (auto)","dist_x","1.63009303995761","toggle","search point"
 "M5P","4f","TP","run 1","same_pair","FALSE","toggle",NA
 "M5P","4f","TP","run 1","max_abs_dist_x_minus_dist_z","8.88178419700125e-16","stored","standardised PCA: the X-space distance equals the plane distance"
 "M5P","4f","TN","run 1","auto_resolves_to","euclidean","stored",NA
@@ -358,56 +350,318 @@
 "check",NA,NA,NA,"pca_default_chooses_smallest_dist_x","TRUE","check",NA
 "M5P","4f",NA,NA,"sweep_test_rows","79","computed",NA
 "M5P","4f",NA,NA,"sweep_rows_with_cf","79","computed",NA
-"M5P","4f",NA,NA,"sweep_rows_pair_differs","57","computed","Euclidean (X) and Mahalanobis rules choose different pairs"
+"M5P","4f",NA,NA,"sweep_rows_pair_differs","51","computed","Euclidean (X) and Mahalanobis rules choose different pairs"
 "M1P","7f",NA,NA,"auto_resolves_to","euclidean","stored",NA
 "M1P","7f",NA,"total SD (auto)","weakest3","BMI, DiabetesPedigreeFunction, SkinThickness","toggle",NA
 "M1P","7f",NA,"within-class SD","weakest3","BMI, DiabetesPedigreeFunction, SkinThickness","toggle",NA
 "M1P","7f",NA,NA,"same_ranks","FALSE","toggle",NA
+"M6","4f","TP","run1 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TP","run1 / hull","best_pair","(3,4)","stored",NA
+"M6","4f","TP","run1 / hull","sqrt_d2M","1.81939367293617","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run1 / hull","B_pred","0.481","stored",NA
+"M6","4f","TP","run1 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run1 / hull","B_x:Pregnancies","6","stored",NA
+"M6","4f","TP","run1 / hull","B_x:Glucose","148.909780779199","stored",NA
+"M6","4f","TP","run1 / hull","B_x:Insulin","106.099101852993","stored",NA
+"M6","4f","TP","run1 / hull","B_x:Age","41.1970020938286","stored",NA
+"M6","4f","TP","run1 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TP","run1 / no hull","best_pair","(2,3)","toggle",NA
+"M6","4f","TP","run1 / no hull","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run1 / no hull","B_pred","0.468","toggle",NA
+"M6","4f","TP","run1 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run1 / no hull","B_x:Pregnancies","10","toggle",NA
+"M6","4f","TP","run1 / no hull","B_x:Glucose","171.381638738658","toggle",NA
+"M6","4f","TP","run1 / no hull","B_x:Insulin","104.069707004613","toggle",NA
+"M6","4f","TP","run1 / no hull","B_x:Age","59.5833240709902","toggle",NA
+"M6","4f","TP","run1 / hull","d_M_search","1.84430065788971","stored","the search point, before any restore or rounding"
+"M6","4f","TP","run1 / no hull","d_M_search","1.50176150701552","toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run1","same_result","FALSE","toggle",NA
+"M6","4f","TP","run2 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TP","run2 / hull","best_pair",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run2 / hull","sqrt_d2M",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run2 / hull","B_pred",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run2 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run2 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TP","run2 / no hull","best_pair","(2,3)","toggle",NA
+"M6","4f","TP","run2 / no hull","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run2 / no hull","B_pred","0.468","toggle",NA
+"M6","4f","TP","run2 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run2 / no hull","B_x:Pregnancies","10","toggle",NA
+"M6","4f","TP","run2 / no hull","B_x:Glucose","171.381638738658","toggle",NA
+"M6","4f","TP","run2 / no hull","B_x:Insulin","104.069707004613","toggle",NA
+"M6","4f","TP","run2 / no hull","B_x:Age","59.5833240709902","toggle",NA
+"M6","4f","TP","run2 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TP","run2 / no hull","d_M_search","1.50176150701552","toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run2","same_result","FALSE","toggle",NA
+"M6","4f","TP","run3 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TP","run3 / hull","best_pair",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / hull","sqrt_d2M",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / hull","B_pred",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run3 / no hull","solution_found","FALSE","toggle",NA
+"M6","4f","TP","run3 / no hull","best_pair",NA,"toggle","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / no hull","sqrt_d2M",NA,"toggle","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / no hull","B_pred",NA,"toggle","no counterfactual: no boundary point"
+"M6","4f","TP","run3 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run3 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TP","run3 / no hull","d_M_search",NA,"toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run3","same_result","TRUE","toggle",NA
+"M6","4f","TP","run4 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TP","run4 / hull","best_pair",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run4 / hull","sqrt_d2M",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run4 / hull","B_pred",NA,"stored","no counterfactual: no boundary point"
+"M6","4f","TP","run4 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run4 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TP","run4 / no hull","best_pair","(1,2)","toggle",NA
+"M6","4f","TP","run4 / no hull","sqrt_d2M","1.98794831873915","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run4 / no hull","B_pred","0.473","toggle",NA
+"M6","4f","TP","run4 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run4 / no hull","B_x:Pregnancies","7","toggle",NA
+"M6","4f","TP","run4 / no hull","B_x:Glucose","191.492818297504","toggle",NA
+"M6","4f","TP","run4 / no hull","B_x:Insulin","89.9570286486072","toggle",NA
+"M6","4f","TP","run4 / no hull","B_x:Age","59.5163971471448","toggle",NA
+"M6","4f","TP","run4 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TP","run4 / no hull","d_M_search","1.92360035721568","toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run4","same_result","FALSE","toggle",NA
+"M6","4f","TP","run5 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TP","run5 / hull","best_pair",NA,"stored","no counterfactual: no whole-number point"
+"M6","4f","TP","run5 / hull","sqrt_d2M",NA,"stored","no counterfactual: no whole-number point"
+"M6","4f","TP","run5 / hull","B_pred",NA,"stored","no counterfactual: no whole-number point"
+"M6","4f","TP","run5 / hull","pairs_tried","1","stored",NA
+"M6","4f","TP","run5 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TP","run5 / no hull","best_pair","(1,2)","toggle",NA
+"M6","4f","TP","run5 / no hull","sqrt_d2M","1.98794831873915","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run5 / no hull","B_pred","0.473","toggle",NA
+"M6","4f","TP","run5 / no hull","pairs_tried","1","toggle",NA
+"M6","4f","TP","run5 / no hull","B_x:Pregnancies","7","toggle",NA
+"M6","4f","TP","run5 / no hull","B_x:Glucose","191.492818297504","toggle",NA
+"M6","4f","TP","run5 / no hull","B_x:Insulin","89.9570286486072","toggle",NA
+"M6","4f","TP","run5 / no hull","B_x:Age","59.5163971471448","toggle",NA
+"M6","4f","TP","run5 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TP","run5 / no hull","d_M_search","1.92360035721568","toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run5","same_result","FALSE","toggle",NA
+"M6","4f","TP","run6 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TP","run6 / hull","best_pair","(3,4)","stored",NA
+"M6","4f","TP","run6 / hull","sqrt_d2M","1.81939367293617","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run6 / hull","B_pred","0.481","stored",NA
+"M6","4f","TP","run6 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run6 / hull","B_x:Pregnancies","6","stored",NA
+"M6","4f","TP","run6 / hull","B_x:Glucose","148.909780779199","stored",NA
+"M6","4f","TP","run6 / hull","B_x:Insulin","106.099101852993","stored",NA
+"M6","4f","TP","run6 / hull","B_x:Age","41.1970020938286","stored",NA
+"M6","4f","TP","run6 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TP","run6 / no hull","best_pair","(2,3)","toggle",NA
+"M6","4f","TP","run6 / no hull","sqrt_d2M","1.41925618153705","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TP","run6 / no hull","B_pred","0.468","toggle",NA
+"M6","4f","TP","run6 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run6 / no hull","B_x:Pregnancies","10","toggle",NA
+"M6","4f","TP","run6 / no hull","B_x:Glucose","171.381638738658","toggle",NA
+"M6","4f","TP","run6 / no hull","B_x:Insulin","104.069707004613","toggle",NA
+"M6","4f","TP","run6 / no hull","B_x:Age","59.5833240709902","toggle",NA
+"M6","4f","TP","run6 / hull","d_M_search","1.84430065788971","stored","the search point, before any restore or rounding"
+"M6","4f","TP","run6 / no hull","d_M_search","1.50176150701552","toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run6","same_result","FALSE","toggle",NA
+"M6","4f","TP","run7 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TP","run7 / hull","best_pair",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / hull","sqrt_d2M",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / hull","B_pred",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / hull","pairs_tried","6","stored",NA
+"M6","4f","TP","run7 / no hull","solution_found","FALSE","toggle",NA
+"M6","4f","TP","run7 / no hull","best_pair",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / no hull","sqrt_d2M",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / no hull","B_pred",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TP","run7 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TP","run7 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TP","run7 / no hull","d_M_search",NA,"toggle","the search point, before any restore or rounding"
+"M6","4f","TP","run7","same_result","TRUE","toggle",NA
+"M6","4f","TN","run1 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TN","run1 / hull","best_pair","(2,4)","stored",NA
+"M6","4f","TN","run1 / hull","sqrt_d2M","0.419144512286938","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run1 / hull","B_pred","0.548","stored",NA
+"M6","4f","TN","run1 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run1 / hull","B_x:Pregnancies","11","stored",NA
+"M6","4f","TN","run1 / hull","B_x:Glucose","131.006739004106","stored",NA
+"M6","4f","TN","run1 / hull","B_x:Insulin","132.753443463723","stored",NA
+"M6","4f","TN","run1 / hull","B_x:Age","39.7072606749544","stored",NA
+"M6","4f","TN","run1 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TN","run1 / no hull","best_pair","(2,4)","toggle",NA
+"M6","4f","TN","run1 / no hull","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run1 / no hull","B_pred","0.548","toggle",NA
+"M6","4f","TN","run1 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run1 / no hull","B_x:Pregnancies","11","toggle",NA
+"M6","4f","TN","run1 / no hull","B_x:Glucose","131.006739004106","toggle",NA
+"M6","4f","TN","run1 / no hull","B_x:Insulin","132.753443463723","toggle",NA
+"M6","4f","TN","run1 / no hull","B_x:Age","39.7072606749544","toggle",NA
+"M6","4f","TN","run1 / hull","d_M_search","0.140475717454266","stored","the search point, before any restore or rounding"
+"M6","4f","TN","run1 / no hull","d_M_search","0.140475717454266","toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run1","same_result","TRUE","toggle",NA
+"M6","4f","TN","run2 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TN","run2 / hull","best_pair","(2,4)","stored",NA
+"M6","4f","TN","run2 / hull","sqrt_d2M","0.419144512286938","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run2 / hull","B_pred","0.548","stored",NA
+"M6","4f","TN","run2 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run2 / hull","B_x:Pregnancies","11","stored",NA
+"M6","4f","TN","run2 / hull","B_x:Glucose","131.006739004106","stored",NA
+"M6","4f","TN","run2 / hull","B_x:Insulin","132.753443463723","stored",NA
+"M6","4f","TN","run2 / hull","B_x:Age","39.7072606749544","stored",NA
+"M6","4f","TN","run2 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TN","run2 / no hull","best_pair","(2,4)","toggle",NA
+"M6","4f","TN","run2 / no hull","sqrt_d2M","0.419144512286938","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run2 / no hull","B_pred","0.548","toggle",NA
+"M6","4f","TN","run2 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run2 / no hull","B_x:Pregnancies","11","toggle",NA
+"M6","4f","TN","run2 / no hull","B_x:Glucose","131.006739004106","toggle",NA
+"M6","4f","TN","run2 / no hull","B_x:Insulin","132.753443463723","toggle",NA
+"M6","4f","TN","run2 / no hull","B_x:Age","39.7072606749544","toggle",NA
+"M6","4f","TN","run2 / hull","d_M_search","0.140475717454266","stored","the search point, before any restore or rounding"
+"M6","4f","TN","run2 / no hull","d_M_search","0.140475717454266","toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run2","same_result","TRUE","toggle",NA
+"M6","4f","TN","run3 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TN","run3 / hull","best_pair",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / hull","sqrt_d2M",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / hull","B_pred",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run3 / no hull","solution_found","FALSE","toggle",NA
+"M6","4f","TN","run3 / no hull","best_pair",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / no hull","sqrt_d2M",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / no hull","B_pred",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run3 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run3 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TN","run3 / no hull","d_M_search",NA,"toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run3","same_result","TRUE","toggle",NA
+"M6","4f","TN","run4 / hull","solution_found","FALSE","stored",NA
+"M6","4f","TN","run4 / hull","best_pair",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / hull","sqrt_d2M",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / hull","B_pred",NA,"stored","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run4 / no hull","solution_found","FALSE","toggle",NA
+"M6","4f","TN","run4 / no hull","best_pair",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / no hull","sqrt_d2M",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / no hull","B_pred",NA,"toggle","no counterfactual: fixed restore fails"
+"M6","4f","TN","run4 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run4 / hull","d_M_search",NA,"stored","the search point, before any restore or rounding"
+"M6","4f","TN","run4 / no hull","d_M_search",NA,"toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run4","same_result","TRUE","toggle",NA
+"M6","4f","TN","run5 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TN","run5 / hull","best_pair","(1,2)","stored",NA
+"M6","4f","TN","run5 / hull","sqrt_d2M","0.439082342632928","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run5 / hull","B_pred","0.55","stored",NA
+"M6","4f","TN","run5 / hull","pairs_tried","1","stored",NA
+"M6","4f","TN","run5 / hull","B_x:Pregnancies","11","stored",NA
+"M6","4f","TN","run5 / hull","B_x:Glucose","132.379193230817","stored",NA
+"M6","4f","TN","run5 / hull","B_x:Insulin","130.46504726592","stored",NA
+"M6","4f","TN","run5 / hull","B_x:Age","39.7003820365342","stored",NA
+"M6","4f","TN","run5 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TN","run5 / no hull","best_pair","(1,2)","toggle",NA
+"M6","4f","TN","run5 / no hull","sqrt_d2M","0.439082342632928","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run5 / no hull","B_pred","0.55","toggle",NA
+"M6","4f","TN","run5 / no hull","pairs_tried","1","toggle",NA
+"M6","4f","TN","run5 / no hull","B_x:Pregnancies","11","toggle",NA
+"M6","4f","TN","run5 / no hull","B_x:Glucose","132.379193230817","toggle",NA
+"M6","4f","TN","run5 / no hull","B_x:Insulin","130.46504726592","toggle",NA
+"M6","4f","TN","run5 / no hull","B_x:Age","39.7003820365342","toggle",NA
+"M6","4f","TN","run5 / hull","d_M_search","0.174513528495194","stored","the search point, before any restore or rounding"
+"M6","4f","TN","run5 / no hull","d_M_search","0.174513528495194","toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run5","same_result","TRUE","toggle",NA
+"M6","4f","TN","run6 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TN","run6 / hull","best_pair","(3,4)","stored",NA
+"M6","4f","TN","run6 / hull","sqrt_d2M","0.365608705014718","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run6 / hull","B_pred","0.5","stored",NA
+"M6","4f","TN","run6 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run6 / hull","B_x:Pregnancies","11","stored",NA
+"M6","4f","TN","run6 / hull","B_x:Glucose","128.941150343845","stored",NA
+"M6","4f","TN","run6 / hull","B_x:Insulin","120.777867693025","stored",NA
+"M6","4f","TN","run6 / hull","B_x:Age","40.1210043628717","stored",NA
+"M6","4f","TN","run6 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TN","run6 / no hull","best_pair","(3,4)","toggle",NA
+"M6","4f","TN","run6 / no hull","sqrt_d2M","0.365608705014718","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run6 / no hull","B_pred","0.5","toggle",NA
+"M6","4f","TN","run6 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run6 / no hull","B_x:Pregnancies","11","toggle",NA
+"M6","4f","TN","run6 / no hull","B_x:Glucose","128.941150343845","toggle",NA
+"M6","4f","TN","run6 / no hull","B_x:Insulin","120.777867693025","toggle",NA
+"M6","4f","TN","run6 / no hull","B_x:Age","40.1210043628717","toggle",NA
+"M6","4f","TN","run6 / hull","d_M_search","0.378413107565085","stored","the search point, before any restore or rounding"
+"M6","4f","TN","run6 / no hull","d_M_search","0.378413107565085","toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run6","same_result","TRUE","toggle",NA
+"M6","4f","TN","run7 / hull","solution_found","TRUE","stored",NA
+"M6","4f","TN","run7 / hull","best_pair","(2,3)","stored",NA
+"M6","4f","TN","run7 / hull","sqrt_d2M","0.291090655495022","stored","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run7 / hull","B_pred","0.512","stored",NA
+"M6","4f","TN","run7 / hull","pairs_tried","6","stored",NA
+"M6","4f","TN","run7 / hull","B_x:Pregnancies","10","stored",NA
+"M6","4f","TN","run7 / hull","B_x:Glucose","128.971804215736","stored",NA
+"M6","4f","TN","run7 / hull","B_x:Insulin","149.252054091358","stored",NA
+"M6","4f","TN","run7 / hull","B_x:Age","39.0408215324613","stored",NA
+"M6","4f","TN","run7 / no hull","solution_found","TRUE","toggle",NA
+"M6","4f","TN","run7 / no hull","best_pair","(2,3)","toggle",NA
+"M6","4f","TN","run7 / no hull","sqrt_d2M","0.291090655495022","toggle","Mahalanobis distance from the target to the reported counterfactual"
+"M6","4f","TN","run7 / no hull","B_pred","0.512","toggle",NA
+"M6","4f","TN","run7 / no hull","pairs_tried","6","toggle",NA
+"M6","4f","TN","run7 / no hull","B_x:Pregnancies","10","toggle",NA
+"M6","4f","TN","run7 / no hull","B_x:Glucose","128.971804215736","toggle",NA
+"M6","4f","TN","run7 / no hull","B_x:Insulin","149.252054091358","toggle",NA
+"M6","4f","TN","run7 / no hull","B_x:Age","39.0408215324613","toggle",NA
+"M6","4f","TN","run7 / hull","d_M_search","0.29628799676701","stored","the search point, before any restore or rounding"
+"M6","4f","TN","run7 / no hull","d_M_search","0.29628799676701","toggle","the search point, before any restore or rounding"
+"M6","4f","TN","run7","same_result","TRUE","toggle",NA
+"M6","4f",NA,NA,"sweep_test_rows","79","computed",NA
+"M6","4f",NA,NA,"sweep_cf_found_hull","79","computed",NA
+"M6","4f",NA,NA,"sweep_cf_found_no_hull","79","computed",NA
+"M6","4f",NA,NA,"sweep_unchanged","68","computed",NA
+"M6","4f",NA,NA,"sweep_moved","11","computed",NA
+"M6","4f",NA,NA,"sweep_moved_median_ratio","1.04541041505139","computed","search distance with the hull / without, over the moved rows"
+"M6","4f",NA,NA,"sweep_moved_max_ratio","1.44912664800893","computed",NA
 "P212","4f",NA,NA,"K_nonzero_eigenvalues","3","stored",NA
 "P212","4f",NA,NA,"p_minus_K","1","stored",NA
 "P212","7f",NA,NA,"p_minus_K","4","stored",NA
-"P212","4f","TP","run1","best_pair","(2,3)","stored","Pregnancies integer only"
-"P212","4f","TP","run1","uses_component_beyond_K","FALSE","stored","Pregnancies integer only"
-"P212","4f","TP","run2","best_pair","(2,3)","stored","cannot decrease"
-"P212","4f","TP","run2","uses_component_beyond_K","FALSE","stored","cannot decrease"
+"P212","4f","TP","run1","best_pair","(3,4)","stored","Pregnancies integer only"
+"P212","4f","TP","run1","uses_component_beyond_K","TRUE","stored","Pregnancies integer only"
+"P212","4f","TP","run2","best_pair",NA,"stored","cannot decrease"
+"P212","4f","TP","run2","uses_component_beyond_K",NA,"stored","cannot decrease"
 "P212","4f","TP","run3","best_pair",NA,"stored","both fixed"
 "P212","4f","TP","run3","uses_component_beyond_K",NA,"stored","both fixed"
-"P212","4f","TP","run4","best_pair","(1,2)","stored","mixed"
-"P212","4f","TP","run4","uses_component_beyond_K","FALSE","stored","mixed"
-"P212","4f","TP","run5","best_pair","(1,2)","stored","pinned pair (1,2)"
-"P212","4f","TP","run5","uses_component_beyond_K","FALSE","stored","pinned pair (1,2)"
-"P212","4f","TP","run6","best_pair","(2,3)","stored","cannot increase"
-"P212","4f","TP","run6","uses_component_beyond_K","FALSE","stored","cannot increase"
+"P212","4f","TP","run4","best_pair",NA,"stored","mixed"
+"P212","4f","TP","run4","uses_component_beyond_K",NA,"stored","mixed"
+"P212","4f","TP","run5","best_pair",NA,"stored","pinned pair (1,2)"
+"P212","4f","TP","run5","uses_component_beyond_K",NA,"stored","pinned pair (1,2)"
+"P212","4f","TP","run6","best_pair","(3,4)","stored","cannot increase"
+"P212","4f","TP","run6","uses_component_beyond_K","TRUE","stored","cannot increase"
+"P212","4f","TP","run7","best_pair",NA,"stored","fixed with a direction"
+"P212","4f","TP","run7","uses_component_beyond_K",NA,"stored","fixed with a direction"
 "M7","4f","TP","run3","solution_found","FALSE","stored",NA
 "M7","4f","TP","run3","no_solution","no boundary point","stored",NA
-"M7","4f","TP","run3","boundary_point_found","FALSE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance"
-"M7","4f","TP","run4","solution_found","TRUE","stored",NA
-"M7","4f","TP","run4","no_solution",NA,"stored","counterfactual found"
-"M7","4f","TP","run4","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance"
-"M7","4f","TP","run4","restore_applied","TRUE","stored",NA
-"M7","4f","TP","run4","d_M_search","1.92360035721568","stored",NA
-"M7","4f","TP","run4","B_pred_search","0.499","stored",NA
-"M7","4f","TP","run4","B_pred_restored","0.473","stored",NA
-"M7","4f","TP","run4","observed:Pregnancies","7","stored",NA
-"M7","4f","TP","run4","search_value:Pregnancies","7.41965729820973","stored",NA
+"M7","4f","TP","run3","boundary_point_found","FALSE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
+"M7","4f","TP","run4","solution_found","FALSE","stored",NA
+"M7","4f","TP","run4","no_solution","no boundary point","stored",NA
+"M7","4f","TP","run4","boundary_point_found","FALSE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
+"M7","4f","TP","run7","solution_found","FALSE","stored",NA
+"M7","4f","TP","run7","no_solution","fixed restore fails","stored",NA
+"M7","4f","TP","run7","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
+"M7","4f","TP","run7","restore_applied","FALSE","stored",NA
+"M7","4f","TP","run7","d_M_search","1.8469821071388","stored",NA
+"M7","4f","TP","run7","B_pred_search","0.499","stored",NA
+"M7","4f","TP","run7","B_pred_restored","0.526","stored",NA
+"M7","4f","TP","run7","observed:Pregnancies","7","stored",NA
+"M7","4f","TP","run7","search_value:Pregnancies","6.51507698047222","stored",NA
 "M8","4f","TP","run1","rounding_applied","TRUE","stored",NA
-"M8","4f","TP","run1","d_M_search","1.50176150701552","stored",NA
-"M8","4f","TP","run1","d_M_rounded","1.41925618153705","stored",NA
+"M8","4f","TP","run1","d_M_search","1.84430065788971","stored",NA
+"M8","4f","TP","run1","d_M_rounded","1.81939367293617","stored",NA
 "M8","4f","TP","run1","B_pred_search","0.499","stored",NA
-"M8","4f","TP","run1","B_pred_rounded","0.468","stored",NA
+"M8","4f","TP","run1","B_pred_rounded","0.481","stored",NA
 "M8","4f","TP","run1","n_candidates","2","stored",NA
 "M8","4f","TP","run1","n_valid","1","stored",NA
-"M8","4f","TP","run1","search_value:Pregnancies","10.5092490381653","stored",NA
-"M8","4f","TP","run1","rounded_value:Pregnancies","10","stored",NA
-"M8","4f","TP","run5","rounding_applied","TRUE","stored",NA
-"M8","4f","TP","run5","d_M_search","1.92360035721568","stored",NA
-"M8","4f","TP","run5","d_M_rounded","1.98794831873915","stored",NA
+"M8","4f","TP","run1","search_value:Pregnancies","6.40734848624811","stored",NA
+"M8","4f","TP","run1","rounded_value:Pregnancies","6","stored",NA
+"M8","4f","TP","run5","rounding_applied","FALSE","stored",NA
+"M8","4f","TP","run5","d_M_search","1.9333654143964","stored",NA
+"M8","4f","TP","run5","d_M_rounded",NA,"stored","rounding not applied: no whole-number point"
 "M8","4f","TP","run5","B_pred_search","0.499","stored",NA
-"M8","4f","TP","run5","B_pred_rounded","0.473","stored",NA
+"M8","4f","TP","run5","B_pred_rounded",NA,"stored","rounding not applied: no whole-number point"
 "M8","4f","TP","run5","n_candidates","2","stored",NA
-"M8","4f","TP","run5","n_valid","1","stored",NA
-"M8","4f","TP","run5","search_value:Pregnancies","7.41965729820973","stored",NA
-"M8","4f","TP","run5","rounded_value:Pregnancies","7","stored",NA
+"M8","4f","TP","run5","n_valid","0","stored",NA
+"M8","4f","TP","run5","search_value:Pregnancies","4.61723981201138","stored",NA
+"M8","4f","TP","run5","rounded_value:Pregnancies",NA,"stored","rounding not applied: no whole-number point"
 "P212","4f","TN","run1","best_pair","(2,4)","stored","Pregnancies integer only"
 "P212","4f","TN","run1","uses_component_beyond_K","TRUE","stored","Pregnancies integer only"
 "P212","4f","TN","run2","best_pair","(2,4)","stored","cannot decrease"
@@ -420,9 +674,11 @@
 "P212","4f","TN","run5","uses_component_beyond_K","FALSE","stored","pinned pair (1,2)"
 "P212","4f","TN","run6","best_pair","(3,4)","stored","cannot increase"
 "P212","4f","TN","run6","uses_component_beyond_K","TRUE","stored","cannot increase"
+"P212","4f","TN","run7","best_pair","(2,3)","stored","fixed with a direction"
+"P212","4f","TN","run7","uses_component_beyond_K","FALSE","stored","fixed with a direction"
 "M7","4f","TN","run3","solution_found","FALSE","stored",NA
 "M7","4f","TN","run3","no_solution","fixed restore fails","stored",NA
-"M7","4f","TN","run3","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance"
+"M7","4f","TN","run3","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
 "M7","4f","TN","run3","restore_applied","FALSE","stored",NA
 "M7","4f","TN","run3","d_M_search","0.149523626280379","stored",NA
 "M7","4f","TN","run3","B_pred_search","0.501","stored",NA
@@ -433,13 +689,22 @@
 "M7","4f","TN","run3","search_value:Age","39.4768428623175","stored",NA
 "M7","4f","TN","run4","solution_found","FALSE","stored",NA
 "M7","4f","TN","run4","no_solution","fixed restore fails","stored",NA
-"M7","4f","TN","run4","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance"
+"M7","4f","TN","run4","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
 "M7","4f","TN","run4","restore_applied","FALSE","stored",NA
 "M7","4f","TN","run4","d_M_search","0.140475717454266","stored",NA
 "M7","4f","TN","run4","B_pred_search","0.5","stored",NA
 "M7","4f","TN","run4","B_pred_restored","0.487","stored",NA
 "M7","4f","TN","run4","observed:Pregnancies","10","stored",NA
 "M7","4f","TN","run4","search_value:Pregnancies","10.20820760175","stored",NA
+"M7","4f","TN","run7","solution_found","TRUE","stored",NA
+"M7","4f","TN","run7","no_solution",NA,"stored","counterfactual found"
+"M7","4f","TN","run7","boundary_point_found","TRUE","stored","FALSE: no pair has a boundary point within the 0.5 tolerance inside the hull"
+"M7","4f","TN","run7","restore_applied","TRUE","stored",NA
+"M7","4f","TN","run7","d_M_search","0.29628799676701","stored",NA
+"M7","4f","TN","run7","B_pred_search","0.501","stored",NA
+"M7","4f","TN","run7","B_pred_restored","0.512","stored",NA
+"M7","4f","TN","run7","observed:Pregnancies","10","stored",NA
+"M7","4f","TN","run7","search_value:Pregnancies","9.82767085297459","stored",NA
 "M8","4f","TN","run1","rounding_applied","TRUE","stored",NA
 "M8","4f","TN","run1","d_M_search","0.140475717454266","stored",NA
 "M8","4f","TN","run1","d_M_rounded","0.419144512286938","stored",NA
@@ -462,28 +727,23 @@
 "M9","4f","TP","run1","n_no_effect","0","observed",NA
 "M9","4f","TP","run1","no_effect_vars","none","observed",NA
 "M9","4f","TP","run1","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
-"M10","4f","TP","run1","greedy_n_changed","2","computed",NA
-"M10","4f","TP","run1","greedy_vars","Age, Insulin","computed",NA
-"M10","4f","TP","run1","greedy_pred","0.381","computed",NA
+"M10","4f","TP","run1","greedy_n_changed","4","computed",NA
+"M10","4f","TP","run1","greedy_vars","Glucose, Insulin, Age, Pregnancies","computed",NA
+"M10","4f","TP","run1","greedy_pred","0.481","computed",NA
 "M10","4f","TP","run1","greedy_valid","TRUE","computed",NA
-"M10","4f","TP","run1","all_supports_n_changed","3","computed",NA
-"M10","4f","TP","run1","all_supports_vars","Glucose, Insulin, Age","computed",NA
-"M10","4f","TP","run1","all_supports_pred","0.287","computed",NA
+"M10","4f","TP","run1","all_supports_n_changed","4","computed",NA
+"M10","4f","TP","run1","all_supports_vars","Pregnancies, Age, Insulin, Glucose","computed",NA
+"M10","4f","TP","run1","all_supports_pred","0.481","computed",NA
 "M10","4f","TP","run1","all_supports_valid","TRUE","computed",NA
-"M10","4f","TP","run1","contradicts_vars","Pregnancies","computed",NA
-"M9","4f","TP","run2","n_no_effect","0","observed",NA
-"M9","4f","TP","run2","no_effect_vars","none","observed",NA
-"M9","4f","TP","run2","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
+"M10","4f","TP","run1","contradicts_vars","none","computed",NA
+"M9","4f","TP","run2","n_no_effect",NA,"observed","no counterfactual"
 "M9","4f","TP","run3","n_no_effect",NA,"observed","no counterfactual"
-"M9","4f","TP","run4","n_no_effect","1","observed",NA
-"M9","4f","TP","run4","no_effect_vars","Pregnancies","observed",NA
-"M9","4f","TP","run4","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
-"M9","4f","TP","run5","n_no_effect","1","observed",NA
-"M9","4f","TP","run5","no_effect_vars","Pregnancies","observed",NA
-"M9","4f","TP","run5","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
+"M9","4f","TP","run4","n_no_effect",NA,"observed","no counterfactual"
+"M9","4f","TP","run5","n_no_effect",NA,"observed","no counterfactual"
 "M9","4f","TP","run6","n_no_effect","0","observed",NA
 "M9","4f","TP","run6","no_effect_vars","none","observed",NA
 "M9","4f","TP","run6","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
+"M9","4f","TP","run7","n_no_effect",NA,"observed","no counterfactual"
 "M9","4f","TN",NA,"target_pred_class","0","stored",NA
 "M9","4f","TN","run1","n_no_effect","0","observed",NA
 "M9","4f","TN","run1","no_effect_vars","none","observed",NA
@@ -508,12 +768,15 @@
 "M9","4f","TN","run6","n_no_effect","0","observed",NA
 "M9","4f","TN","run6","no_effect_vars","none","observed",NA
 "M9","4f","TN","run6","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
+"M9","4f","TN","run7","n_no_effect","1","observed",NA
+"M9","4f","TN","run7","no_effect_vars","Pregnancies","observed",NA
+"M9","4f","TN","run7","sparse_would_differ","FALSE","computed","under the thesis code's zero rule"
 "target","4f","TP",NA,"pred_prob","0.963","stored",NA
 "target","4f","TP",NA,"x_obs:Pregnancies","7","stored",NA
 "target","4f","TP",NA,"x_obs:Glucose","181","stored",NA
 "target","4f","TP",NA,"x_obs:Insulin","192","stored",NA
 "target","4f","TP",NA,"x_obs:Age","51","stored",NA
-"I5","4f","TP",NA,"run2_equals_run1","TRUE","stored",NA
+"I5","4f","TP",NA,"run2_equals_run1","FALSE","stored",NA
 "target","4f","TN",NA,"pred_prob","0.374","stored",NA
 "target","4f","TN",NA,"x_obs:Pregnancies","10","stored",NA
 "target","4f","TN",NA,"x_obs:Glucose","129","stored",NA

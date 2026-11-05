@@ -57,6 +57,14 @@ stop_if_not_positive_integer <- function(x, arg_name) {
 }
 
 # --------------------------------------------------------------------------
+# Confusion colours
+# The thesis colour scheme for the four prediction outcomes, shared by every
+# plot method so that a colour means the same outcome in every biplot.
+# --------------------------------------------------------------------------
+
+.confusion_cols <- c(TP = "red", TN = "blue", FP = "purple", FN = "orange")
+
+# --------------------------------------------------------------------------
 # Distance metric
 # The thesis measures distances by Euclidean distance under PCA and by
 # Mahalanobis distance under CVA (thesis section 3.9.1, p.86).

@@ -339,7 +339,8 @@ The comparisons run on the stored values, which are in model units. For `bl_resu
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results_v2,
   set_filters = flt,
-  bl_target   = tgt
+  bl_target   = tgt,
+  hull        = TRUE
 )
 ```
 
@@ -349,14 +350,15 @@ bl_local <- bl_find_local_cf(
 |---|---|---|---|
 | `bl_target` | required | `tgt` | The observation to explain (Step 10a) |
 | `set_filters` | `NULL` | `flt` | Actionability constraints (Step 10b); `NULL` searches without constraints (Step 15) |
-| `max_pairs` | `21L` | default | Eigenvector pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
+| `hull` | `TRUE` | `TRUE` | Keeps only boundary points inside the convex hull of the training data and the target on each rotated plane (the thesis's plausibility rule, §4.3.1; Stage E, filter 2); `FALSE` drops the rule |
+| `max_pairs` | `21L` | default | Component pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
 | `m` | `200L` | default | Grid resolution per pair |
 | `distance` | `"auto"` | default | Cross-pair selector, by the thesis rule: under CVA (as here) `"mahalanobis"`, the squared Mahalanobis distance in X-space; under PCA `"euclidean"`, the X-space Euclidean distance with each feature divided by its total SD |
 | `verbose` | `TRUE` | default | Prints progress messages |
 
 Full argument list: `?bl_find_local_cf`.
 
-**Why this function exists:** The global `bl_find_boundary()` uses the original biplot projection (fixed `proj_dims = c(1, 2)`). For a single target, we can do better: for each eigenvector pair, rotate the biplot so the target observation is aligned with that pair's plane, then search across the pairs to find whichever rotation brings the boundary closest. This local rotation maximises the chance of finding a valid counterfactual.
+**Why this function exists:** The global `bl_find_boundary()` uses the original biplot projection (fixed `proj_dims = c(1, 2)`). For a single target, we can do better: for each component pair, rotate the biplot so the target observation is aligned with that pair's plane, then search across the pairs to find whichever rotation brings the boundary closest. This local rotation maximises the chance of finding a valid counterfactual.
 
 **`bl_local$bl_counterfactual` (companion to `bl_local$bl_target`):** the result carries a
 `"bl_counterfactual"` object packaging the boundary point (`x_cf = B_x` model units, `z_cf`,
@@ -376,7 +378,7 @@ x_target_st  = (x_obs - X_center) / sv    # sv = 1s for CVA (standardise = FALSE
 X_train_st   = scale(train_data[, var_names], center = X_center, scale = FALSE)
 ```
 
-**Generate pairs:** `.generate_pairs(p, max_pairs)` produces up to `max_pairs` eigenvector index pairs in canonical order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), (1,5), … With p = 4 there are only 6 pairs, (1,2) to (3,4), so all 6 are tried. Each pair defines a 2D projection plane from the full p-dimensional loading matrix.
+**Generate pairs:** `.generate_pairs(p, max_pairs)` produces up to `max_pairs` component index pairs in canonical order: (1,2), (1,3), (2,3), (1,4), (2,4), (3,4), (1,5), … With p = 4 there are only 6 pairs, (1,2) to (3,4), so all 6 are tried. Each pair labels one plane through the target; since the Procrustes rotation turns the plane, the selected plane need not coincide with the plane spanned by the two components that name it.
 
 **For each pair `(i, j)`, the loop does:**
 
@@ -384,7 +386,7 @@ X_train_st   = scale(train_data[, var_names], center = X_center, scale = FALSE)
 
 **File:** `R/local_cf.R` (private helper)
 
-The rotation aligns the biplot so the target observation is aligned with the plane of the chosen eigenvector pair. This is done via SVD:
+The rotation aligns the biplot so the target observation is aligned with the plane of the chosen component pair. This is done via SVD:
 
 ```
 Y = rbind(-x_target_st, rep(0, p), x_target_st)   # 3 × p: [-target, 0, target]
@@ -421,6 +423,15 @@ xseq    = seq(z_range[1]-pad, z_range[2]+pad, length.out = m)
 Zgrid   = expand.grid(xseq, xseq)          # m² × 2
 ```
 
+With `hull = TRUE` the same projections also give the plane's convex hull, which filter 2 of Stage E uses:
+
+```
+hull_poly = .build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val,
+                                outlie = 1)       # the full hull, rebuilt per pair
+```
+
+The global biplot's hull polygon (from `bl_build_grid()`) cannot be used here, because its coordinates belong to the unrotated plane; the hull is rebuilt on each rotated plane from the training data and the target, as Appendix A of the thesis does (`documentation/local-convex-hull.md`).
+
 The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The global grid built in `bl_build_grid()` takes its range differently, from the biplot's own plotting window (`.bl_get_plot_bounds()`; see `review_section4_to_6.md` Section 6.2).
 
 #### Stage C — Back-project grid and score
@@ -438,21 +449,23 @@ ct_local = contourLines(xseq, yseq, matrix(grid_prob, ncol=m),
 ```
 `b_margin = 0.01`, read from `bl_results_v2$b_margin` (set in its `bl_build_result()` call; `bl_find_local_cf()` has no `b_margin` argument), so contours at 0.49 and 0.51.
 
-#### Stage E — Filter contour segments (four successive filters)
+#### Stage E — Filter contour segments (five successive filters)
 
 For each contour segment in `ct_local`:
 
 1. **Opposing-class filter:** Keep only segments where `seg_class != target_pred_class`. A class-0 target (predicted safe) needs class-1 contours, where it would flip to "default"; a class-1 target needs class-0 contours.
 
-2. **Back-project + actionability:** Back-project the segment to X-space, then apply the `set_filters` constraints via `.apply_actionability()` (when supplied). These are usually the most selective filter, so they run first, and a segment with no surviving vertex is skipped at once:
+2. **Hull (plausibility):** with `hull = TRUE`, `.poly_clip(Mi, hull_poly)` keeps the segment's vertices inside this plane's convex hull (Stage B), in 2D, before any back-projection; a segment with no vertex inside is skipped. This is the thesis's rule that the counterfactual comes from a local decision boundary within the convex hull of the training data (§4.3.1, p.117). In the harness the nearest boundary points already lie inside the hull, so `hull = FALSE` gives the same counterfactual.
+
+3. **Back-project + actionability:** Back-project the segment to X-space, then apply the `set_filters` constraints via `.apply_actionability()` (when supplied). These are usually the most selective filter, so they run before the feasibility check, and a segment with no surviving vertex is skipped at once:
    - `"decrease"`: `B_x[nm] <= x_obs[nm]`
    - `"increase"`: `B_x[nm] >= x_obs[nm]`
    - `"fixed"`: `abs(B_x[nm] - x_obs[nm]) <= 0.5`
    - `c(min, max)`: range check
 
-3. **Feasibility:** apply the `train_ranges` filter to the vertices that survived step 2.
+4. **Feasibility:** apply the `train_ranges` filter to the vertices that survived step 3.
 
-4. **Model consistency:** Re-score the surviving back-projected points; keep only rows where prediction agrees with contour's probability level.
+5. **Model consistency:** Re-score the surviving back-projected points; keep only rows where prediction agrees with contour's probability level.
 
 If all segments are eliminated, the pair is skipped.
 
@@ -521,7 +534,7 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 | `dist_x` | numeric scalar | X-space Euclidean distance (each feature divided by its total SD), for the winning pair |
 | `distance` | character | The selector used, after `"auto"` is resolved (`"mahalanobis"` here) |
 | `Z_target` | matrix (1 × 2) | Target position in rotated Z-space |
-| `best_pair` | integer (length 2) | Winning eigenvector pair, e.g. `c(1L, 2L)` |
+| `best_pair` | integer (length 2) | Winning component pair, e.g. `c(1L, 2L)` |
 | `Vr_rot` | matrix (p × 2) | Rotated loading matrix for best pair |
 | `tVr_rot` | matrix (2 × p) | Inverse loading matrix for best pair |
 | `Z_train_rot` | matrix (n × 2) | Training data in rotated Z-space |
@@ -531,11 +544,13 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 | `ct_local` | list | Raw contour list from `contourLines()` |
 | `xseq`, `yseq` | numeric (m) | Grid axis sequences |
 | `min_val`, `max_val` | numeric | Grid axis limits |
+| `hull_polygon` | matrix (k × 2) or NULL | Vertices of the convex hull on the winning plane (19 in the harness run); `NULL` with `hull = FALSE` |
 | `all_distances` | named numeric | Best Z-distance per pair tried (NA if no solution) |
 | `all_distances_x` | named numeric | X-space Euclidean distance per pair tried (NA if no solution) |
 | `all_distances_mahalanobis` | named numeric | Squared Mahalanobis distance per pair tried (NA if no solution) |
+| `hull` | logical | The `hull` argument (`TRUE` here) |
 | `solution_found` | logical | `TRUE` if at least one valid boundary was found |
-| `blocking_constraint` | character or NULL | Reason message if no solution found: no boundary point met the constraints, or the fixed restore or the integer rounding failed (Stage H) |
+| `blocking_constraint` | character or NULL | Reason message if no solution found: no boundary point met the constraints (with `hull = TRUE` the message adds that the points must lie inside the hull), or the fixed restore or the integer rounding failed (Stage H) |
 | `bl_target` | `bl_target` | The `tgt` object |
 | `bl_counterfactual` | `bl_counterfactual` or NULL | The boundary point, packaged like `bl_target` (see above) |
 | `bl_result` | `bl_result` | Reference to `bl_results_v2` |
@@ -1097,14 +1112,15 @@ flt  [bl_filters]
   ├── constraints = list(loan_amnt="fixed", loan_int_rate="increase", credit_score=c("increase", "integer"))
   └── bl_target = tgt
      │
-     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 21
+     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt, hull=TRUE)   # max_pairs = 21
      │
-     │  [for each of the 6 eigenvector pairs (p = 4)]:
+     │  [for each of the 6 component pairs (p = 4)]:
      │    .bl_rotate() → Vr_rot, tVr_rot (SVD-based local rotation)
+     │    .build_hull_polygon() → hull of training data + target on this plane
      │    build m×m rotated grid → Xgrid (back-projected)
      │    score through XGBoost → grid_prob
      │    extract contour lines → ct_local
-     │    filter: opposing class, set_filters, train_ranges, consistency
+     │    filter: opposing class, hull, set_filters, train_ranges, consistency
      │    .nearest_idx_block() → nearest boundary vertex
      │    update best if dist_mah improves (the default selector under CVA)
      │  [after the loop]: .restore_fixed() → loan_amnt back to 12,000, still 0.547 → used
@@ -1173,9 +1189,9 @@ bl_sparse  [bl_sparse_result]
 
 ## Key Methodological Points
 
-1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 11) rotates the projection specifically around the target observation and tries multiple eigenvector pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
+1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 11) rotates the projection specifically around the target observation and tries multiple component pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
 
-2. **The convex hull is NOT applied in Phase 3.** Because each eigenvector pair rotation invalidates the original grid polygon, `bl_find_local_cf()` uses `train_ranges` (per-feature min/max) and `set_filters` actionability constraints instead of the Z-space hull. The hull was the right constraint in global space; in locally-rotated space it would be incorrect.
+2. **Phase 3 rebuilds the convex hull on each rotated plane.** Each pair's rotation invalidates the global grid's polygon, whose coordinates belong to the unrotated plane, so `bl_find_local_cf()` never uses it. With `hull = TRUE` (the default) it builds a new hull from the training data and the target on each rotated plane and keeps only the boundary points inside it (the thesis's plausibility rule, §4.3.1), then applies the `set_filters` actionability constraints and `train_ranges` (per-feature min/max). In this harness run the hull changes nothing: the nearest valid boundary points already lie inside it. `hull = FALSE` drops the rule. See `documentation/local-convex-hull.md`.
 
 3. **Shapley values attribute the full CF movement.** The Shapley values sum to approximately `pred_boundary - pred_prob` — the total prediction change from observation to boundary. Each Shapley value is that feature's fair share of causing the model to change its mind.
 

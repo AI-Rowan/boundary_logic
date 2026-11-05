@@ -481,9 +481,11 @@ print(flt)
 ### Step 13 — Find local counterfactual: `bl_find_local_cf()`
 
 `bl_find_local_cf()` rotates the biplot around the target, builds a local
-prediction grid, applies `train_ranges` and the actionability filters,
-and finds the nearest opposing-class boundary point — repeating across
-eigenvector pairs and keeping the pair whose counterfactual has the
+prediction grid, keeps the boundary points inside the convex hull of the
+training data and the target on the rotated plane (`hull = TRUE`, the
+thesis's plausibility rule), applies the actionability filters and
+`train_ranges`, and finds the nearest opposing-class boundary point —
+repeating across component pairs and keeping the pair whose counterfactual has the
 smallest squared Mahalanobis distance from the target in feature space.
 After the search it restores any `"fixed"` feature the search moved and,
 for an `"integer"` feature, rounds the counterfactual to whole values; the
@@ -493,7 +495,8 @@ adjusted point is re-checked, and the print explains each step in a note.
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results_v2,
   bl_target   = tgt,
-  set_filters = flt
+  set_filters = flt,
+  hull        = TRUE
 )
 print(bl_local)
 ```

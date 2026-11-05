@@ -11,7 +11,8 @@ bl_find_local_cf(
   max_pairs = 21L,
   m = 200L,
   distance = c("auto", "mahalanobis", "euclidean"),
-  verbose = TRUE
+  verbose = TRUE,
+  hull = TRUE
 )
 }
 \arguments{
@@ -23,7 +24,7 @@ bl_find_local_cf(
 \item{set_filters}{A \code{"bl_filters"} object from
 \code{\link{set_filters}}, or \code{NULL} (no actionability constraints).}
 
-\item{max_pairs}{Integer; maximum number of eigenvector pairs to try.
+\item{max_pairs}{Integer; maximum number of component pairs to try.
 Default \code{21L}: every pair for up to 7 features
 (\code{choose(7, 2) = 21}). With more features, the pairs with the
 highest components are left out.}
@@ -38,6 +39,11 @@ highest components are left out.}
 above.}
 
 \item{verbose}{Logical; print progress messages. Default \code{TRUE}.}
+
+\item{hull}{Logical; keep only boundary points inside the convex hull
+of the training data and the target on each rotated plane (see
+\strong{Constraints}). Default \code{TRUE}; \code{FALSE} searches without
+this rule.}
 }
 \value{
 A list of class \code{"bl_local_result"} with the following fields:
@@ -63,7 +69,7 @@ boundary in X-space, for \code{best_pair} only (per-pair values are in
 \item{distance}{Character; the selection metric used (\code{"mahalanobis"}
 or \code{"euclidean"}), after \code{"auto"} is resolved.}
 \item{Z_target}{1 x 2 matrix; target coordinates in rotated Z-space.}
-\item{best_pair}{Integer vector of length 2; winning eigenvector pair.}
+\item{best_pair}{Integer vector of length 2; winning component pair.}
 \item{Vr_rot}{p x 2 rotated loading matrix for the best pair.}
 \item{tVr_rot}{2 x p inverse loading matrix for the best pair.}
 \item{Z_train_rot}{n x 2 matrix; training data in rotated Z-space.}
@@ -73,11 +79,15 @@ or \code{"euclidean"}), after \code{"auto"} is resolved.}
 \item{ct_local}{Raw contour list from \code{grDevices::contourLines}.}
 \item{xseq, yseq}{Grid axis sequences.}
 \item{min_val, max_val}{Grid axis limits.}
+\item{hull_polygon}{Two-column matrix; the vertices of the convex hull
+on the plane of \code{best_pair} (rotated Z-space), or \code{NULL}
+when \code{hull = FALSE} or no solution is found.}
 \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
 \item{all_distances_x}{Named numeric vector; X-space Euclidean distance
 (total-SD scale) per pair tried.}
 \item{all_distances_mahalanobis}{Named numeric vector; squared
 Mahalanobis distance per pair tried.}
+\item{hull}{Logical; the \code{hull} argument.}
 \item{solution_found}{Logical.}
 \item{blocking_constraint}{Character message if no solution, else NULL:
 why no boundary point satisfied the constraints, why the restored
@@ -115,7 +125,7 @@ and \code{search_point} (the point before rounding).}
 }
 }
 \description{
-Searches across multiple eigenvector pairs for the closest decision boundary
+Searches across multiple component pairs for the closest decision boundary
 to the target observation in the rotated biplot space. For each pair, the
 loading matrix is rotated so that the target observation is aligned with the
 plane of that pair (see \strong{Rotation}), then a fine grid is scored and
@@ -128,21 +138,34 @@ The rotation adapts \code{Biplot_rotation()} from the research script
 branch of the repository). An SVD-based orthogonal rotation
 matrix \eqn{A} is computed such that the rotated loading matrix aligns the
 target observation with the projection plane defined by \code{proj_pair}.
-This gives each eigenvector pair the best possible chance of revealing a
-nearby boundary.
+This gives each component pair the best possible chance of revealing a
+nearby boundary. Each pair of components labels one plane through the
+target point; since the Procrustes rotation turns the plane, the selected
+plane need not coincide with the plane spanned by the two components that
+name it.
 }
 
 \section{Constraints}{
 
-The Z-space training hull polygon is \strong{not} applied here because the
-per-pair rotation invalidates the polygon from \code{bl_build_grid()}.
-Two constraint types are applied instead:
+The convex hull polygon of the global biplot (from \code{bl_build_grid()})
+is \strong{not} used here, because the per-pair rotation invalidates its
+coordinates. Three constraint types are applied instead, in this order:
 \describe{
-\item{train_ranges}{Back-projected X-space values must lie within the
-per-variable ranges observed in the training data.}
+\item{hull}{When \code{hull = TRUE} (the default), a boundary vertex must
+lie inside the convex hull of the training data and the target,
+projected onto the rotated plane of that pair. The hull is rebuilt for
+every pair, as in Appendix A of the thesis, and applies its
+plausibility rule (section 4.3.1): the counterfactual is selected from
+a local decision boundary within the convex hull of the training data.
+\code{hull = FALSE} drops this rule.}
 \item{set_filters}{Actionability constraints supplied via
 \code{\link{set_filters}}.}
+\item{train_ranges}{Back-projected X-space values must lie within the
+per-variable ranges observed in the training data.}
 }
+The hull applies to the boundary points on the plane. The restored
+(\code{"fixed"}) and rounded (\code{"integer"}) points lie off the plane,
+and are checked against the constraints and \code{train_ranges} only.
 }
 
 \section{Fixed constraints}{
@@ -187,7 +210,7 @@ rounded together (\eqn{2^{12}} candidates).
 
 \section{Cross-pair selection criterion}{
 
-The best eigenvector pair is selected by minimum distance from the target
+The best component pair is selected by minimum distance from the target
 to the nearest valid boundary vertex, measured in X-space with
 \eqn{v = B_x - x_{obs}}. Two distance metrics are available:
 \describe{

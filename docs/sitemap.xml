@@ -6,7 +6,9 @@
 <url><loc>/CLAUDE.html</loc></url>
 <url><loc>/index.html</loc></url>
 <url><loc>/LICENSE-text.html</loc></url>
+<url><loc>/news/index.html</loc></url>
 <url><loc>/progress.html</loc></url>
+<url><loc>/reference/bl_apply_scaling.html</loc></url>
 <url><loc>/reference/bl_assemble.html</loc></url>
 <url><loc>/reference/bl_build_grid.html</loc></url>
 <url><loc>/reference/bl_build_projection.html</loc></url>
@@ -22,6 +24,7 @@
 <url><loc>/reference/bl_project_points.html</loc></url>
 <url><loc>/reference/bl_robustness.html</loc></url>
 <url><loc>/reference/bl_select_target.html</loc></url>
+<url><loc>/reference/bl_set_scaling.html</loc></url>
 <url><loc>/reference/bl_shapley.html</loc></url>
 <url><loc>/reference/bl_surrogate.html</loc></url>
 <url><loc>/reference/bl_wrap_data.html</loc></url>
@@ -35,6 +38,7 @@
 <url><loc>/reference/dot-points_in_polygon.html</loc></url>
 <url><loc>/reference/dot-poly_clip.html</loc></url>
 <url><loc>/reference/dot-pred_function.html</loc></url>
+<url><loc>/reference/dot-resolve_distance.html</loc></url>
 <url><loc>/reference/dot-svm_pred.html</loc></url>
 <url><loc>/reference/get_filter_logical_vector.html</loc></url>
 <url><loc>/reference/get_variable_ranges.html</loc></url>
@@ -48,6 +52,7 @@
 <url><loc>/reference/plot.bl_sparse_result.html</loc></url>
 <url><loc>/reference/plot.bl_surrogate.html</loc></url>
 <url><loc>/reference/plot_biplotEZ.html</loc></url>
+<url><loc>/reference/print.bl_counterfactual.html</loc></url>
 <url><loc>/reference/print.bl_filters.html</loc></url>
 <url><loc>/reference/print.bl_local_result.html</loc></url>
 <url><loc>/reference/print.bl_shapley.html</loc></url>

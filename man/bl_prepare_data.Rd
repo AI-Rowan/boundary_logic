@@ -11,7 +11,7 @@ bl_prepare_data(
   feature_cols = NULL,
   train_fraction = 0.8,
   seed = 121L,
-  hull_fraction = 0.9,
+  hull_fraction = 1,
   verbose = TRUE
 )
 }
@@ -36,8 +36,9 @@ training. \code{1} uses every row for training; \code{bl_assemble()} then sets
 Default \code{121}.}
 
 \item{hull_fraction}{Numeric in (0, 1]; fraction argument for the convex
-hull polygon filter applied to training data. Values below \code{1} trim the
-most extreme points; \code{1} retains all points. Default \code{0.9}.}
+hull polygon filter applied to training data. \code{1} retains all points;
+values below \code{1} trim the most extreme points (see \strong{Outlier removal}).
+Default \code{1} (no outlier removal).}
 
 \item{verbose}{Logical; if \code{TRUE}, prints a one-line summary of rows
 retained and removed by the hull filter. Default \code{TRUE}.}
@@ -63,11 +64,30 @@ no conversion was applied.}
 \description{
 Converts a multiclass or binary class column to a numeric 0/1 indicator,
 selects feature columns, produces a reproducible train/test split, and
-removes outliers from the training set using a convex hull polygon filter.
-Outlier filtering is integrated: pass \code{hull_fraction} to control how
-aggressively the hull trims the outermost training points (default \code{0.9}
-removes approximately the outermost 10\%).
+optionally removes outliers from the training set using a convex hull
+polygon filter. Outlier filtering is integrated but off by default
+(\code{hull_fraction = 1} keeps every training row), as in the thesis, where
+outlier removal is optional.
 }
+\section{Outlier removal}{
+
+\code{hull_fraction} is the fraction of the training points the convex hull
+encloses, on a two-component PCA of the standardised training features.
+Rows outside the hull are removed from the training data before the model
+is fitted; the test data is never filtered.
+\itemize{
+\item \code{hull_fraction = 1} (the default) keeps every training row. The
+thesis's Pima example removes no outliers, and Paper 1 uses this
+setting.
+\item \code{hull_fraction = 0.9} removes approximately the outermost 10\% of the
+training rows, as the thesis's loan example does; the package's loan
+harness and vignette set it.
+}
+Choose a value below 1 when extreme training rows would stretch the biplot
+and its prediction grid; \code{\link[=bl_filter_outliers]{bl_filter_outliers()}} can try other fractions
+after \code{\link[=bl_wrap_data]{bl_wrap_data()}}.
+}
+
 \section{Multiclass to binary conversion}{
 
 If your data has more than two classes (e.g., \code{datasets::iris} has three Species),
@@ -82,7 +102,8 @@ If \code{target_class = NULL}, the class column must already be numeric 0/1.
 }
 
 \examples{
-# Binary class, versicolor vs rest, default hull filter (0.9)
+# Binary class, versicolor vs rest, with the outermost 10\% of the training
+# rows removed (the default, hull_fraction = 1, keeps them all)
 bl_dat <- bl_prepare_data(datasets::iris,
                            class_col    = "Species",
                            target_class = "versicolor",
