@@ -751,8 +751,7 @@ unconstrained run (*Pregnancies* `"integer"`).
     warning were added);
   - the Shapley labels read "observed -> change".
 
-**Open coding issues** are recorded in the package's `documentation/known-issues.md`; those that bear on
-the method are listed in Section 5.
+**Future work.** The open items that bear on the method are listed in Section 5.
 
 # Future work
 
@@ -793,8 +792,7 @@ would remove the dependence.
 second search could move the free variables along the search direction, with the fixed variables held
 exactly, until the model crosses the boundary; building the local biplot in the actionable variables
 only is the larger alternative. After an integer rounding, the other variables could compensate,
-reducing the distance cost of Section 3.8, and a step size other than 1 could be allowed. Both are
-recorded in `known-issues.md` (§1.5 to §1.7).
+reducing the distance cost of Section 3.8, and a step size other than 1 could be allowed.
 
 **Feasibility as a constraint inside the search.** The constraints and the training ranges filter the
 vertices of the boundary contour, so the nearest feasible point may lie between two vertices. Treating

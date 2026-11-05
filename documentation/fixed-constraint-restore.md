@@ -123,8 +123,8 @@ The target sits at the training minimum of Pregnancies (0) and near that of Age
 prediction from 0.499 to 0.561. With Pregnancies alone fixed (run 4) the restore
 fails too (0.513), so the TP target has no counterfactual in either run; the TN
 target's restores in runs 3 and 4 both succeed. On the 4-feature model the
-example now uses, the TN target's restores fail in both runs instead
-(`known-issues.md` §1.5).
+example now uses, the TN target's restores fail in both runs instead (the
+follow-up search is future work: `methodology-changes/methodology-changes.qmd`, Section 5).
 
 ## 5. Rounding "integer" features
 

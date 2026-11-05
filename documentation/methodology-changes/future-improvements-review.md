@@ -6,7 +6,8 @@ Date last edited: 2026-11-05
 **Author of the replies:** Adriaan Rowan
 **Prepared by:** Claude, from the package's notes as of commit `12b38e4` (branch `paper_nr1_changes`)
 **Companion documents** (paths are relative to the package root):
-- `documentation/known-issues.md`: the source of Part A;
+- `documentation/known-issues.md`: the source of Part A (removed on 2026-11-05 once every item was
+  decided; in git history at `c13fe44`);
 - `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`, §4 and §6: the rotation's
   problems and further work;
 - `documentation/fixed-constraint-restore.md`, §8: the follow-up searches for `"fixed"` and
@@ -903,7 +904,7 @@ plane spanned by the two components that name it."
 - Future improvement: B1, B4, B6, B8, B12, B13, B14, B15, B16, B22 and B23.
 - Future improvement, with your comment: B17 and B18 (sentences below).
 - Future improvement, with a paper sentence on which distance is quoted: B7 (sentence below).
-- No action: B19 and B20. They are removed from CLAUDE.md §9 when `known-issues.md` is retired.
+- No action: B19 and B20. They were removed from CLAUDE.md §9 on 2026-11-05.
 - Now, before the release: B21 and B24 (one question each below).
 - Now, as paper wording only: B3 (one question below).
 
@@ -1173,7 +1174,7 @@ G2: B21 joins the design-document-only items.
 ## Part C: for information, no reply needed
 
 **Already resolved.** These items were fixed before or during the Task D list, and become design
-decisions in the final document (`documentation/known-issues.md` §2):
+decisions in the final document (the former `documentation/known-issues.md` §2):
 - the deterministic nearest boundary vertex, which also removed the dependence on earlier calls;
 - the cutoff passed to the grid;
 - `rotate_deg` removed from the local plots;

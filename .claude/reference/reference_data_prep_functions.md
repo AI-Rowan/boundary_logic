@@ -26,14 +26,15 @@ outlier filtering. Returns a `"bl_filter_result"` ready for `bl_fit_model()` and
 ```r
 bl_prepare_data(data, class_col, target_class = NULL,
                 feature_cols = NULL, train_fraction = 0.8, seed = 121L,
-                hull_fraction = 0.9, verbose = TRUE)
+                hull_fraction = 1, verbose = TRUE)
 ```
 
 Key parameters:
 - `class_col` — target column name; renamed to `"class"` internally
 - `target_class` — value to map to 1 (all others -> 0); if `NULL`, column must already be 0/1
-- `hull_fraction = 0.9` — fraction of training points retained by the convex hull filter;
-  `1` keeps all points (polygon still built); default removes outermost ~10%
+- `hull_fraction = 1` — fraction of training points retained by the convex hull filter. The
+  default `1` keeps all points (polygon still built; no outlier removal, since 2026-11-05, was
+  `0.9`); `0.9` removes the outermost ~10%, as the loan harness and vignette set it
 - `train_fraction = 1` — all rows go to `train_data`, `test_data` is empty (exploratory use)
 - **Always shuffles** rows regardless of `train_fraction`
 
