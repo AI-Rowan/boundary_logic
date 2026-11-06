@@ -11,7 +11,7 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **Paper 1 work is on branch `paper_nr1_changes`** (branched from `method_developments` at
   `b7aee65` on 2026-10-29, pushed with upstream). Start Paper 1 sessions on that branch
   (CLAUDE.md §10).
-- **`paper_nr1_changes` is pushed up to the sessions 10–11 commit** (2026-11-06: `.poly_clip()` once,
+- **`paper_nr1_changes` is pushed up to `9bc8e1c`**, the sessions 10–11 commit (2026-11-06: `.poly_clip()` once,
   the `set_filters()` switches, the local plot's hull trim, the final thesis in `documentation/`),
   after `c13fe44` (2026-11-05: the hull on each rotated plane, version 0.2.0) and its clean-up commit
   `ee64c3a`. Commit and push only when the user says so.
@@ -109,7 +109,7 @@ archived as `.claude/reference/filter-switches-in-set-filters-plan.md` (IMPLEMEN
   fails from Git Bash; Figure 7(a)'s source; the local plot's hull trim.
 - **Status:** 527 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0. Harness, rotation scripts and
   Pima numbers unchanged.
-- **Committed and pushed** (2026-11-06, on the user's instruction): sessions 10 and 11 in one commit
+- **Committed and pushed** (2026-11-06, on the user's instruction): sessions 10 and 11 as `9bc8e1c`
   on `paper_nr1_changes`, with the new thesis PDF, the two PDF deletions, `man/dot-grid_in_hull.Rd`,
   `tests/testthat/test-hull_utils.R` and the four new `.claude/reference/` plans. The pkgdown site
   (`docs/`) is stale until the next `build_site()`.
