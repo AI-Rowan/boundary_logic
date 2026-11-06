@@ -97,3 +97,26 @@
   sp::coordinates(Z_sp) <- ~x + y
   !is.na(sp::over(Z_sp, poly))
 }
+
+
+#' Test whether points lie inside a hull given by its vertices
+#'
+#' Rebuilds the `SpatialPolygons` object from stored hull vertices (as
+#' `.build_hull_polygon()` builds it) and applies `.points_in_polygon()`, the
+#' rule the global grid uses to keep its points inside the hull. Used by
+#' `plot.bl_local_result()` to colour the local grid only inside the hull of
+#' its plane (`bl_local_result$hull_polygon`).
+#'
+#' @param Z           n x 2 matrix of (x, y) coordinates.
+#' @param hull_coords Two-column matrix of hull vertices, or `NULL`.
+#'
+#' @return Logical vector of length n; all `TRUE` when `hull_coords` is `NULL`.
+#' @keywords internal
+.grid_in_hull <- function(Z, hull_coords) {
+  Z <- as.matrix(Z)
+  if (is.null(hull_coords)) return(rep(TRUE, nrow(Z)))
+  poly <- sp::SpatialPolygons(
+    list(sp::Polygons(list(sp::Polygon(as.matrix(hull_coords))), ID = "polygon"))
+  )
+  unname(.points_in_polygon(Z, poly))   # sp::over() names its result
+}

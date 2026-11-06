@@ -462,6 +462,12 @@ encodes the business constraints:
     `list(c(min, max), "integer")`. The counterfactual is rounded after
     the search and re-checked; without it a feature is continuous.
 
+`set_filters()` also holds the thesis's two other rules, both on by
+default: **plausibility** (`hull = TRUE`, the counterfactual lies inside
+the convex hull of the training data and the target on the rotated plane)
+and **feasibility** (`train_ranges = TRUE`, every feature stays within its
+training range). `FALSE` drops a rule.
+
 Here `person_age` is fixed (not actionable), while `loan_int_rate` and
 `credit_score` are constrained to increase. Only variables still in the
 reduced model may be named.
@@ -482,9 +488,9 @@ print(flt)
 
 `bl_find_local_cf()` rotates the biplot around the target, builds a local
 prediction grid, keeps the boundary points inside the convex hull of the
-training data and the target on the rotated plane (`hull = TRUE`, the
-thesis's plausibility rule), applies the actionability filters and
-`train_ranges`, and finds the nearest opposing-class boundary point —
+training data and the target on the rotated plane (the plausibility rule),
+applies the actionability filters and the training ranges (the feasibility
+rule), and finds the nearest opposing-class boundary point —
 repeating across component pairs and keeping the pair whose counterfactual has the
 smallest squared Mahalanobis distance from the target in feature space.
 After the search it restores any `"fixed"` feature the search moved and,
@@ -495,8 +501,7 @@ adjusted point is re-checked, and the print explains each step in a note.
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results_v2,
   bl_target   = tgt,
-  set_filters = flt,
-  hull        = TRUE
+  set_filters = flt
 )
 print(bl_local)
 ```
@@ -508,7 +513,10 @@ print(bl_local)
 `plot(bl_local)` renders the rotated plane of the selected eigenvector
 pair (the one with the smallest Mahalanobis distance to the boundary),
 showing the target (filled circle) and the counterfactual (grey cross
-with arrow).
+with arrow). As on the global biplot, the prediction colours are drawn
+only inside the convex hull of the training data and the target on this
+plane: the coloured area is where the search could choose boundary
+points, and boundary lines in the white area lie outside it.
 
 ```{r step14-local-biplot}
 plot(bl_local,
@@ -557,10 +565,13 @@ plot(bl_sparse)
 
 ------------------------------------------------------------------------
 
-## Alternative: unconstrained local search
+## Alternative: local search without actionability constraints
 
-Running `bl_find_local_cf()` without actionability constraints gives the
-geometrically nearest boundary point — a useful baseline.
+Running `bl_find_local_cf()` without a `set_filters()` object gives the
+nearest boundary point within the convex hull and the training ranges,
+with no actionability constraint — a useful baseline.
+`set_filters(tgt, hull = FALSE, train_ranges = FALSE)` drops those two
+rules as well and gives the unconstrained counterfactual.
 
 ```{r step17-unconstrained}
 bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
@@ -801,7 +812,7 @@ the score, Boundary Logic for acting on it.
 | 2 | 9 | `bl_surrogate()` | Spatial surrogate model |
 | 2 | 10 | `bl_robustness()` | Prune weak variables, refit |
 | 3 | 11 | `bl_predict()` + `bl_select_target()` | Select target applicant |
-| 3 | 12 | `set_filters()` | Encode actionability constraints |
+| 3 | 12 | `set_filters()` | Encode actionability constraints and the plausibility and feasibility switches |
 | 3 | 13 | `bl_find_local_cf()` | Nearest constrained counterfactual |
 | 3 | 14 | `plot(bl_local)` | Local biplot |
 | 3 | 15 | `bl_shapley()` | Shapley attribution of the flip |

@@ -9,14 +9,32 @@
   in Appendix A of the thesis, and only the boundary points inside it are kept,
   before the actionability, `train_ranges` and model filters. The global
   biplot's hull polygon is still not used, since the rotation invalidates it.
-  The new argument `hull = TRUE` is the default; `hull = FALSE` reproduces the
-  earlier search exactly. The result gains the fields `hull` and
-  `hull_polygon` (the winning plane's hull), and the no-solution message names
-  the hull. Results change where the nearest boundary point lay outside the
-  hull: on the Pima example (Paper 1), 11 of the 79 test targets move, none
-  loses its counterfactual, and the TP target's constrained runs that hold
-  *Age* now have none. The loan harness is unchanged. Decided by Adriaan Rowan
-  on 2026-11-05; see `documentation/local-convex-hull.md`.
+  The switch is `set_filters(..., hull = TRUE)`, the default, also when no
+  `set_filters()` object is passed; `hull = FALSE` reproduces the earlier
+  search exactly. The result gains the fields `hull` and `hull_polygon` (the
+  winning plane's hull, stored also with the hull switched off, for the
+  plot), and the no-solution message names the hull. Results
+  change where the nearest boundary point lay outside the hull: on the Pima
+  example (Paper 1), 11 of the 79 test targets move, none loses its
+  counterfactual, and the TP target's constrained runs that hold *Age* now
+  have none. The loan harness is unchanged. Decided by Adriaan Rowan on
+  2026-11-05; see `documentation/local-convex-hull.md`.
+* `set_filters()` now holds all three of the thesis's constraints on a
+  counterfactual (section 4.3.1, p.116): actionability (the per-variable
+  constraints), plausibility (`hull = TRUE`, above) and feasibility
+  (`train_ranges = TRUE`, every feature within its training range). The
+  training-range rule had no switch before. Both switches are on by default,
+  and `set_filters = NULL` in `bl_find_local_cf()` keeps them on, so no
+  existing result changes. `set_filters(tgt, hull = FALSE, train_ranges =
+  FALSE)` with no per-variable constraint gives the unconstrained
+  counterfactual (thesis p.115). With `train_ranges = FALSE` the restored
+  `"fixed"` and rounded `"integer"` points are not checked against the ranges
+  either. The result gains the logical field `train_ranges`; a search with a
+  rule switched off prints `Not applied`, and `print(<bl_filters>)` shows both
+  switches. `bl_find_local_cf()`'s `hull` argument (added earlier in this
+  version) is removed: pass `set_filters = set_filters(tgt, hull = FALSE)`.
+  A feature named `hull` or `train_ranges` cannot be constrained through
+  `set_filters()`. Decided by Adriaan Rowan on 2026-11-06.
 * `bl_prepare_data()`'s `hull_fraction` default is now `1` (no outlier removal;
   it was `0.9`), as in the thesis, where outlier removal is optional. Pass
   `hull_fraction = 0.9` to remove the outermost 10% of the training rows, as the
@@ -103,6 +121,14 @@
 
 ## New features
 
+* `plot.bl_local_result()` (and `plot.bl_sparse_result()` through it) colours
+  the prediction grid only inside the convex hull of the training data and
+  the target on the plane when the search applied the hull, as the global
+  biplot colours only inside its hull: the coloured area is where the search
+  could choose boundary points, and boundary lines in the white area lie
+  outside it. The new argument `trim_to_hull` (`NULL`, the default, follows
+  the search; `TRUE` also shows the hull of a search with the hull switched
+  off; `FALSE` colours the whole grid). Display only.
 * `set_filters()` accepts an `"integer"` constraint for a whole-number
   feature (a count or a score): `"integer"` alone, with a direction,
   `c("increase", "integer")`, or with a range, `list(c(min, max),
@@ -194,6 +220,9 @@
 
 ## Bug fixes and other improvements
 
+* `.poly_clip()`, the internal hull filter, is defined once, in
+  `R/hull_utils.R`. The copy in `R/boundary.R` was never used (the other
+  replaced it at load time) and is removed. Results are unchanged.
 * Every biplot now uses the thesis colours for the four prediction outcomes:
   TP red, TN blue, FP purple, FN orange. `plot.bl_projection()` (through
   `bl_build_projection()`'s `point_col`) used green, steel blue, orange and

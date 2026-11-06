@@ -12,5 +12,6 @@
 \item{...}{Currently ignored.}
 }
 \description{
-Print method for bl_filters
+Prints each per-variable constraint, then whether the plausibility
+(\code{hull}) and feasibility (\code{train_ranges}) rules are on.
 }

@@ -253,8 +253,13 @@ Key design decision — local CF hull rule:
   Instead, with hull = TRUE (the default since 2026-11-05, decided by the
   author), the convex hull of the training data and the target is rebuilt
   on each rotated plane and only the boundary points inside it are kept,
-  as the thesis requires (p.117, Appendix A). set_filters and train_ranges
-  then constrain the search. hull = FALSE gives the earlier search.
+  as the thesis requires (p.117, Appendix A). The actionability constraints
+  and train_ranges then constrain the search. All three of the thesis's
+  rules (actionability, feasibility, plausibility; p.116) are set in
+  set_filters(): the per-variable constraints, train_ranges = TRUE and
+  hull = TRUE (both on by default, also with no filter object; since
+  2026-11-06). hull = FALSE gives the earlier search; both FALSE with no
+  constraint gives the unconstrained counterfactual (p.115).
 
 E. Variable Contribution and Robustness Analysis (R/boundary_plot.R)
 ---------------------------------------------------------------
@@ -524,9 +529,9 @@ Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
   When bl_find_local_cf() rotates the biplot plane for a component pair,
   the original Z-space convex hull polygon coordinates are no longer valid.
   Do not apply that polygon in the local search. The local search rebuilds
-  a hull on each rotated plane instead (hull = TRUE, since 2026-11-05;
-  documentation/local-convex-hull.md), then applies set_filters and
-  train_ranges.
+  a hull on each rotated plane instead (set_filters(hull = TRUE), since
+  2026-11-05; documentation/local-convex-hull.md), then applies the
+  actionability constraints and train_ranges.
 
 10.5 Model type coupling
   The package should not become dependent on one classifier. New model

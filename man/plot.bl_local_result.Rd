@@ -7,6 +7,7 @@
 \method{plot}{bl_local_result}(
   x,
   no_grid = FALSE,
+  trim_to_hull = NULL,
   plot_points = FALSE,
   no_contour = FALSE,
   cex_z = 0.5,
@@ -35,6 +36,13 @@
 
 \item{no_grid}{Logical; if \code{TRUE} the prediction grid is hidden.
 Default \code{FALSE}.}
+
+\item{trim_to_hull}{Logical or \code{NULL}; colour the prediction grid
+only inside the convex hull on this plane (\code{x$hull_polygon}).
+\code{NULL} (default) trims when the search applied the hull
+(\code{x$hull}); \code{TRUE} trims also for a search with the hull
+switched off, to show where the hull lies; \code{FALSE} colours the whole
+grid. An object without \code{hull_polygon} is never trimmed.}
 
 \item{plot_points}{Logical; if \code{FALSE} (default) training points are
 hidden (show only the target and counterfactual). Set to \code{TRUE} to
@@ -129,5 +137,9 @@ is shown as a filled circle coloured by the confusion scheme when its true
 class is known (\code{bl_target$class_obs}, resolved by
 \code{\link{bl_select_target}} from the target's own row), or red/blue by
 predicted class when it is not. The nearest boundary point is shown as a cross
-with an arrow.
+with an arrow. When the search applied the convex hull (\code{x$hull}), the
+prediction grid is coloured only inside the hull of the training data and
+the target on this plane, as the global biplot colours only inside its hull:
+the coloured area is where the search could choose boundary points, and
+boundary lines in the white area lie outside it.
 }

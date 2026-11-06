@@ -11,8 +11,7 @@ bl_find_local_cf(
   max_pairs = 21L,
   m = 200L,
   distance = c("auto", "mahalanobis", "euclidean"),
-  verbose = TRUE,
-  hull = TRUE
+  verbose = TRUE
 )
 }
 \arguments{
@@ -22,7 +21,11 @@ bl_find_local_cf(
 \code{\link{bl_select_target}}.}
 
 \item{set_filters}{A \code{"bl_filters"} object from
-\code{\link{set_filters}}, or \code{NULL} (no actionability constraints).}
+\code{\link{set_filters}}: the actionability constraints and the
+\code{hull} (plausibility) and \code{train_ranges} (feasibility)
+switches. \code{NULL} (the default) is the same as
+\code{set_filters(bl_target)}: no actionability constraint, with the hull
+and the training ranges still applied.}
 
 \item{max_pairs}{Integer; maximum number of component pairs to try.
 Default \code{21L}: every pair for up to 7 features
@@ -39,11 +42,6 @@ highest components are left out.}
 above.}
 
 \item{verbose}{Logical; print progress messages. Default \code{TRUE}.}
-
-\item{hull}{Logical; keep only boundary points inside the convex hull
-of the training data and the target on each rotated plane (see
-\strong{Constraints}). Default \code{TRUE}; \code{FALSE} searches without
-this rule.}
 }
 \value{
 A list of class \code{"bl_local_result"} with the following fields:
@@ -80,14 +78,22 @@ or \code{"euclidean"}), after \code{"auto"} is resolved.}
 \item{xseq, yseq}{Grid axis sequences.}
 \item{min_val, max_val}{Grid axis limits.}
 \item{hull_polygon}{Two-column matrix; the vertices of the convex hull
-on the plane of \code{best_pair} (rotated Z-space), or \code{NULL}
-when \code{hull = FALSE} or no solution is found.}
+of the training data and the target on the plane of \code{best_pair}
+(rotated Z-space), or \code{NULL} when no solution is found. It is
+stored also when the \code{hull} switch is off (the search then did
+not use it), so that \code{plot(..., trim_to_hull = TRUE)} can show
+it.}
 \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
 \item{all_distances_x}{Named numeric vector; X-space Euclidean distance
 (total-SD scale) per pair tried.}
 \item{all_distances_mahalanobis}{Named numeric vector; squared
 Mahalanobis distance per pair tried.}
-\item{hull}{Logical; the \code{hull} argument.}
+\item{hull}{Logical; whether the hull (plausibility) rule applied: the
+\code{hull} switch of \code{set_filters}, \code{TRUE} when
+\code{set_filters} is \code{NULL}.}
+\item{train_ranges}{Logical; whether the training-range (feasibility)
+rule applied, likewise. Not the ranges themselves, which are in
+\code{bl_result$train_ranges}.}
 \item{solution_found}{Logical.}
 \item{blocking_constraint}{Character message if no solution, else NULL:
 why no boundary point satisfied the constraints, why the restored
@@ -149,23 +155,32 @@ name it.
 
 The convex hull polygon of the global biplot (from \code{bl_build_grid()})
 is \strong{not} used here, because the per-pair rotation invalidates its
-coordinates. Three constraint types are applied instead, in this order:
+coordinates. Three constraint types, all set through
+\code{\link{set_filters}}, are applied instead, in this order:
 \describe{
-\item{hull}{When \code{hull = TRUE} (the default), a boundary vertex must
-lie inside the convex hull of the training data and the target,
-projected onto the rotated plane of that pair. The hull is rebuilt for
-every pair, as in Appendix A of the thesis, and applies its
-plausibility rule (section 4.3.1): the counterfactual is selected from
-a local decision boundary within the convex hull of the training data.
-\code{hull = FALSE} drops this rule.}
-\item{set_filters}{Actionability constraints supplied via
+\item{hull (plausibility)}{When the \code{hull} switch is on (the
+default), a boundary vertex must lie inside the convex hull of the
+training data and the target, projected onto the rotated plane of that
+pair. The hull is rebuilt for every pair, as in Appendix A of the
+thesis, and applies its plausibility rule (section 4.3.1): the
+counterfactual is selected from a local decision boundary within the
+convex hull of the training data. \code{set_filters(..., hull = FALSE)}
+drops this rule.}
+\item{actionability}{The per-variable constraints of
 \code{\link{set_filters}}.}
-\item{train_ranges}{Back-projected X-space values must lie within the
-per-variable ranges observed in the training data.}
+\item{train_ranges (feasibility)}{When the \code{train_ranges} switch is
+on (the default), back-projected X-space values must lie within the
+per-variable ranges observed in the training data.
+\code{set_filters(..., train_ranges = FALSE)} drops this rule.}
 }
+With both switches off and no per-variable constraint, the search finds
+the unconstrained counterfactual (thesis p.115). Every boundary point must
+also be scored on the other side of the cutoff by the model; that check is
+not a constraint and always applies.
 The hull applies to the boundary points on the plane. The restored
 (\code{"fixed"}) and rounded (\code{"integer"}) points lie off the plane,
-and are checked against the constraints and \code{train_ranges} only.
+and are checked against the constraints and, when the switch is on,
+\code{train_ranges} only.
 }
 
 \section{Fixed constraints}{
@@ -175,7 +190,8 @@ units, because a vertex of the 2D boundary contour rarely holds a feature at
 exactly its observed value. After the best pair is chosen, each fixed
 feature the search moved is set back to its observed value and the point is
 re-scored. If the restored point still crosses the decision boundary and
-lies within \code{train_ranges}, it becomes the counterfactual
+lies within \code{train_ranges} (when that switch is on), it becomes the
+counterfactual
 (\code{B_x}, \code{B_z}, \code{B_pred}). Otherwise no counterfactual holds
 the fixed features, and none is reported: \code{solution_found} is
 \code{FALSE}, and \code{blocking_constraint} gives the fixed values the
@@ -195,7 +211,8 @@ feature whose counterfactual value is not a whole number in raw units, the
 whole numbers just below and just above are tried, and every combination
 of them is a candidate. A candidate is valid when the model still scores
 it on the other side of the cutoff, it meets every \code{set_filters()}
-constraint and it lies within \code{train_ranges}. The valid candidate
+constraint and it lies within \code{train_ranges} (when that switch is
+on). The valid candidate
 nearest the target in X-space, by the same distance as the pair search
 (Mahalanobis, or Euclidean on the total-SD scale), is the
 counterfactual (\code{B_x}, \code{B_z}, \code{B_pred}); on a tie, the

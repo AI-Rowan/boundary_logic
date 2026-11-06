@@ -29,10 +29,8 @@ This note uses $\mathbf{W}$ only to choose the plane under CVA, or under PCA wit
 
 **Sources:**
 
-- **The thesis:** the final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`, kept outside the
-  repository in `Explain XAI code/reference-materials/`), cited by section and printed page (printed page = PDF
-  page − 16). Until 2026-11-05 this note cited the 30 September 2025 draft
-  (`../Adriaan Rowan - 13551361 - Thesis - 30 Sept 2025.pdf`), whose section numbers and pages differ.
+- **The thesis:** the final version of 27 February 2026 (`../FINAL_ADRIAAN ROWAN_27022026.pdf`, in the
+  repository's `documentation/` folder), cited by section and printed page (printed page = PDF page − 16).
 - **The research code:** branch `origin/original_PhD_code`, cited as `scripts/<file>:<line>`.
 - **Package source:** `R/local_cf.R` and `R/projection.R`.
 - **Package design documents:** `1 Foundation intro documents.txt` and `2 implementation_summary.txt`.
@@ -59,9 +57,9 @@ the details. In brief:
   until 2026-11-05. Since then the default follows the thesis by projection (§3.4, §4.4), and the scripts pin
   `distance = "mahalanobis"` so that every number here is reproduced unchanged (re-run on 2026-11-05).
 - **Which search:** since 2026-11-05 `bl_find_local_cf()` keeps only boundary points inside the convex hull of the
-  training data and the target on each rotated plane (`hull = TRUE`, `documentation/local-convex-hull.md`). The
-  measurements here concern the rotation and the pair search before that filter, so the scripts also pin
-  `hull = FALSE`, the search they measured.
+  training data and the target on each rotated plane (`set_filters(hull = TRUE)`,
+  `documentation/local-convex-hull.md`). The measurements here concern the rotation and the pair search before
+  that filter, so the scripts also pin `set_filters(tgt, hull = FALSE)`, the search they measured.
 
 ---
 
@@ -102,7 +100,7 @@ explained. The search (§2.4) then chooses among the planes the rotation can pro
 The thesis defines the method in three places:
 
 - **the rotation:** §3.5–3.5.2 (pp.52–61);
-- **the choice of projection and distance:** §3.8.3–3.9.3 (pp.82–93);
+- **the choice of projection and distance:** §3.8.3–3.10 (pp.82–93);
 - **the search over component pairs:** §4.3.1 (pp.113–118).
 
 The research code that produced the thesis's results is on the branch `origin/original_PhD_code` (§2.6).
@@ -200,8 +198,8 @@ $$
 (\mathbf{M}^{new})^{-} = \mathbf{A}(\mathbf{M}^{opt})^{-1}
 $$
 
-**The general rule.** "The only change required between using either the CVA and PCA biplots is replacing the
-matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$" (§3.9.3, p.92).
+**The general rule.** "The only change required between using either the CVA or the PCA biplots is replacing the
+matrices $\mathbf{V}$ and $\mathbf{V}'$ with $\mathbf{M}$ and $\mathbf{M}^{-1}$" (§3.10, p.92).
 
 **The cost specific to CVA.**
 
@@ -231,7 +229,7 @@ thesis's numbers and the script's should not be quoted together.
 - After the rotation, the projected point moves into the matching region, and its interpolated value equals the
   true value: the identity of §2.1, demonstrated.
 
-### 2.4 Searching all component pairs (thesis §3.9.3 p.93, §4.3.1 pp.113–118)
+### 2.4 Searching all component pairs (thesis §3.10 p.93, §4.3.1 pp.113–118)
 
 The rotation turns *a given* plane. The thesis's local explanation tries every plane that two of the components
 can span:
@@ -256,7 +254,8 @@ $$
 \hat{\mathbf{x}}_{cf}:\ \min_i\ \mathbf{d}_i'\mathbf{W}^{-1}\mathbf{d}_i,
 $$
 
-  with $\mathbf{W}$ "the total within groups sums-of-squares-and-products (SSP)".
+  with $\mathbf{W}$ "the total within-group SSP" (p.118), the within-groups sums-of-squares-and-products
+  matrix.
 - **If no plane yields a constrained counterfactual,** "it is assumed that no constraint counterfactual exists for
   this data point" (p.118).
 
@@ -274,15 +273,15 @@ of components, thereby approximating different slices of the decision surface" (
 The thesis fixes the cross-plane criterion **by projection**:
 
 - **p.86 (§3.9.1):** "the nearest counterfactual … is selected as the counterfactual that corresponds to the
-  shortest change vector $\mathbf{d}_i$ measured in the full dimensional space using either **Euclidean distance
+  shortest change vector $\mathbf{d}_i$ measured in the full dimensional space using **Euclidean distance
   for PCA biplots and Mahalanobis distance for CVA biplots**", with
   $\mathbf{d}_i = (\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{V}_2'$ or
   $(\mathbf{z}_{i,cf}-\mathbf{z}_{i,0})\mathbf{M}_2^{-}$.
 - **p.83 (§3.8.3) and p.91 (§3.9.3):** "In the CVA biplot … the Euclidean distances on the biplot plane
   correspond to Mahalanobis distances in the original feature space." By contrast, a standardised PCA biplot
   "ignores the correlation" between features.
-- **p.92 (§3.9.3):** PCA is for the initial data investigation. "The CVA biplot is then used to generate local and
-  global interpretations, since it ensures that the estimated counterfactual reflects the shortest Mahalanobis
+- **p.92 (§3.10):** PCA is for the initial data investigation. "The CVA biplot is then used to generate local and
+  global interpretations, as it ensures that the estimated counterfactual reflects the shortest Mahalanobis
   distance in the original feature space", with the groups defined by the model's four outcomes
   (TP, TN, FP, FN).
 - **p.124 (§4.4):** the conclusion describes a "dual approach": Mahalanobis distance in the feature space for
@@ -472,10 +471,11 @@ stages:
      run first.
 
    **The hull, rebuilt per plane (since 2026-11-05).** The global biplot's polygon was built for the unrotated
-   plane, so rotation invalidates its coordinates and the search never uses it. With `hull = TRUE` (the default)
-   a convex hull of the training data and the target is built on each rotated plane, and only the contour
-   vertices inside it are kept, before filters (b)-(d) (`../local-convex-hull.md`). Until 2026-11-05 no hull
-   was applied, and that is the search every measurement in this note used: the scripts pin `hull = FALSE`.
+   plane, so rotation invalidates its coordinates and the search never uses it. With `set_filters(hull = TRUE)`
+   (the default) a convex hull of the training data and the target is built on each rotated plane, and only the
+   contour vertices inside it are kept, before filters (b)-(d) (`../local-convex-hull.md`). Until 2026-11-05 no
+   hull was applied, and that is the search every measurement in this note used: the scripts pin
+   `set_filters(tgt, hull = FALSE)`.
 5. **Within-pair nearest vertex.** Among the survivors, the nearest to the target is found by 2D Euclidean distance
    in the rotated plane (`.nearest_idx_block()`). It is the exact minimum, taking the first vertex on an exact tie,
    so the step is deterministic (`../nearest-vertex-tie-break.md`).
@@ -681,7 +681,7 @@ if (is.finite(selector) && selector < best_selector) {
 | rotation | Procrustes, no dilation, columns 1–2 | the same (§3.1) |
 | pairs tried | all $\binom{p}{2}$ | up to `max_pairs = 21L`: all pairs for $p \le 7$ (§3.2) |
 | grid built over | the target and the test data (research code) | the training data's rotated range |
-| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | the convex hull of the training data and the target, rebuilt in each rotated plane (`hull = TRUE`, since 2026-11-05; before, no hull, §3.3); no enclosure rule |
+| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | the convex hull of the training data and the target, rebuilt in each rotated plane (`set_filters(hull = TRUE)`, since 2026-11-05; before, no hull, §3.3); no enclosure rule |
 | actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)`, `"integer"` (rounded after the search) |
 | feasibility | `train_ranges` | `train_ranges`, filter (c) |
 | nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
@@ -1467,9 +1467,10 @@ The returned basis was bit-identical across five calls (`17_3` §3).
 
 ## References
 
-- **The thesis:** Rowan, A. (2026), PhD thesis, final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`):
+- **The thesis:** Rowan, A. (2026), PhD thesis, final version of 27 February 2026 (`../FINAL_ADRIAAN ROWAN_27022026.pdf`):
   - §3.5–3.5.2 (pp.52–61): the rotation and its CVA variant;
-  - §3.8.3, §3.9.1 and §3.9.3 (pp.82–93): PCA versus CVA, the distance criterion, and the procedure;
+  - §3.8.3, §3.9.1, §3.9.3 and §3.10 (pp.82–93): PCA versus CVA, the distance criterion, distances on the
+    plane, and the procedure;
   - §4.3.1 (pp.113–118): the search over all component pairs (the Pima example);
   - §4.4 (pp.124–125): the conclusions;
   - §6.3 (p.144): the Grand Tour as future work.

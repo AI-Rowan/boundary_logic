@@ -1,7 +1,7 @@
 # Technical Note: Restoring "fixed" Features and Rounding "integer" Features after the Local Search
 
 **Author:** Adriaan Rowan
-**Date:** 2026-10-29; revised 2026-11-04 (strict `"fixed"`; the `"integer"` constraint, §5)
+**Date:** 2026-10-29; revised 2026-11-04 (strict `"fixed"`; the `"integer"` constraint, §5); 2026-11-06 (the `train_ranges` switch of `set_filters()`)
 **Package:** `boundarylogic`
 **Branch:** `paper_nr1_changes`
 **Location:** `documentation/fixed-constraint-restore.md`
@@ -28,6 +28,11 @@ should not change. `bl_find_local_cf()` handles it in two steps:
 | No `"fixed"` constraint, or the search did not move the fixed feature | The search's boundary point |
 | The restored point crosses the boundary and is within `train_ranges` | The restored point: fixed features at their observed values |
 | The restored point does not cross, or leaves `train_ranges` | **No solution** (`solution_found = FALSE`), with the reason |
+
+The `train_ranges` checks in this table, and in the rounding (§5), apply while
+the feasibility switch of `set_filters()` is on (`train_ranges = TRUE`, the
+default; also with no filter object). With `train_ranges = FALSE` the search,
+the restore and the rounding all skip the training ranges.
 
 The last row is the 2026-11-04 change (§4). Before it, the search's point was
 kept, so a reported counterfactual could move a "fixed" feature by up to 0.5. A
@@ -70,7 +75,8 @@ point with its fixed features put back. This:
   before (they describe how the pair was chosen);
 - changes only the features marked fixed, so the `"increase"`, `"decrease"` and
   range constraints, which the search point already met, still hold;
-- applies the same `train_ranges` feasibility check as the search.
+- applies the same `train_ranges` feasibility check as the search (none when
+  `set_filters(..., train_ranges = FALSE)` switches it off).
 
 ## 4. The strict rule: a failed restore means no solution
 
@@ -155,7 +161,8 @@ as continuous, and the counterfactual it finds is then put onto whole values.
    that an `"increase"` or `"decrease"` check is not upset by rounding error.
 3. **The checks.** Each candidate is re-scored and kept only when its predicted
    class differs from the target's, it meets every `set_filters()` constraint
-   (directions, ranges, `"fixed"`) and it lies within `train_ranges`.
+   (directions, ranges, `"fixed"`) and it lies within `train_ranges` (when that
+   switch is on).
 4. **The choice.** The valid candidate nearest the target in X-space by the
    search's own distance (`.cf_sq_distance()`: squared Mahalanobis, or for
    `distance = "euclidean"`, the default under PCA, the Euclidean distance

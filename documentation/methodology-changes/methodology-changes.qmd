@@ -222,7 +222,8 @@ column says whether a change belongs to the core methodology (Section 3), is a c
 | 31 Oct 2026 | `49c9067` | Pair cap raised to 21; the Phase 2 Mahalanobis check | Core (3.4); code |
 | 4 Nov 2026 | `67a1424` | Strict `"fixed"`; the `"integer"` constraint; Mahalanobis distance returned by the global search | Core (3.7, 3.8); code |
 | 5 Nov 2026 | `12b38e4` | The thesis's distance rule by projection (`distance = "auto"`): Euclidean under PCA, Mahalanobis under CVA, in the pair comparison and the variable importance | Core (3.1, 3.5) |
-| 5 Nov 2026 | uncommitted | The convex hull of the training data and the target rebuilt on each rotated plane in the local search (`hull = TRUE`), as the thesis requires; outlier removal off by default (`hull_fraction = 1`); one colour scheme for every biplot; a warning for a target at the centre of the biplot | Core (3.6, 3.11); code |
+| 5 Nov 2026 | `c13fe44` | The convex hull of the training data and the target rebuilt on each rotated plane in the local search (`hull = TRUE`), as the thesis requires; outlier removal off by default (`hull_fraction = 1`); one colour scheme for every biplot; a warning for a target at the centre of the biplot | Core (3.6, 3.11); code |
+| 6 Nov 2026 | uncommitted | The hull and training-range switches held in `set_filters()` with the actionability constraints (`hull = TRUE`, `train_ranges = TRUE`, both on by default); the training ranges gain a switch; no result changes | Code |
 
 : Table 1. Dated changes to the method since the thesis.
 
@@ -251,7 +252,7 @@ unchanged steps are listed in Section 4.
 | Pairs of components | All $p(p-1)/2$ pairs (p.117) | At most `max_pairs = 21` | Changed (3.4) |
 | Nearest point on one plane | Euclidean distance on the plane (p.75) | The same | Unchanged |
 | Comparison across pairs | Mahalanobis (CVA) or Euclidean (PCA) in the full space (p.86, p.117) | The same, by `distance = "auto"` (since 5 Nov 2026) | Restored (3.5) |
-| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | The convex hull of the training data and the target, rebuilt on each rotated plane (`hull = TRUE`) | Restored (3.6) |
+| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | The convex hull of the training data and the target, rebuilt on each rotated plane (`set_filters(hull = TRUE)`) | Restored (3.6) |
 | Actionability | Boundary points filtered by the constraints (p.88) | `set_filters()`, with a `"fixed"` restore | Changed (3.7) |
 | Whole-number variables | Treated as continuous (p.87, p.119) | `"integer"` constraint | Changed (3.8) |
 | Shapley values | All orderings of the change (§4.3.2, p.121) | Exact computation, the same values | Unchanged |
@@ -483,7 +484,11 @@ points were filtered by the actionability constraints and the training ranges on
 that the rotation invalidates the hull of the global biplot, is correct for that hull, but it does not
 cover a hull rebuilt on each rotated plane. Since 5 November 2026 the convex hull of the training data
 and the target is rebuilt on each rotated plane, as in Appendix A, and only the boundary points inside it
-are kept, before the other filters (`hull = TRUE`, the default; `hull = FALSE` gives the earlier search).
+are kept, before the other filters (`set_filters(hull = TRUE)`, the default; `hull = FALSE` gives the
+earlier search). Since 6 November 2026 `set_filters()` holds the switches for all three of the thesis's
+rules (actionability, feasibility and plausibility, p.116): `train_ranges = FALSE` drops the training
+ranges, and both switches off give the unconstrained counterfactual (p.115). A search without a filter
+object keeps both rules.
 There is no enclosure rule, since the text does not require one for the local search.
 
 **Reason.** The text requires the hull for plausibility, and Appendix A builds it on each rotated

@@ -548,7 +548,14 @@ names(loan_encoded)
     #loan_percent_income     = "fixed",       #
     loan_amnt      = "fixed",    # make not actionable
     loan_int_rate  = "increase",        # set by the lender, not the applicant
-    credit_score = c("increase","integer")   # a whole-number score
+    credit_score = c("increase","integer"),   # a whole-number score
+    # The thesis's other two rules (both on by default): plausibility keeps
+    # only boundary points inside the convex hull of the training data and
+    # the target on each rotated plane; feasibility keeps every feature
+    # within its training range. FALSE drops a rule; both FALSE with no
+    # constraint above gives the unconstrained counterfactual.
+    hull           = TRUE,
+    train_ranges   = TRUE
   )
   print(flt)
 }
@@ -556,14 +563,12 @@ names(loan_encoded)
 
 # ---- Step 11: Find local counterfactual via biplot rotation ----------
 {
-  # hull = TRUE (the default) keeps only boundary points inside the convex
-  # hull of the training data and the target on each rotated plane, the
-  # thesis's plausibility rule; hull = FALSE drops it.
+  # flt (Step 10) carries the actionability constraints and the plausibility
+  # (hull) and feasibility (train_ranges) switches.
   bl_local <- bl_find_local_cf(
     bl_result   = bl_results_v2,
     set_filters = flt,
-    bl_target   = tgt,
-    hull        = TRUE
+    bl_target   = tgt
     )
   # print(bl_local) ends with the observed vs counterfactual table (one row
   # per feature, with its Step 10 constraint, in raw loan units) and notes
@@ -622,11 +627,16 @@ names(loan_encoded)
 
 
 # ===========================================================
-# ALTERNATIVE: unconstrained local search
+# ALTERNATIVE: local search without actionability constraints
 # ===========================================================
 
-# ---- Step 15 (optional): Unconstrained local search ------------------
+# ---- Step 15 (optional): Local search without actionability constraints ---
 {
+  # No set_filters object: no actionability constraint, but the plausibility
+  # (hull) and feasibility (train_ranges) rules still apply. The fully
+  # unconstrained counterfactual (thesis p.115) is
+  # bl_find_local_cf(bl_results_v2, tgt,
+  #   set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE)).
   bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
   print(bl_local_free)
   plot(bl_local_free,

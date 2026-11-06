@@ -190,6 +190,30 @@
   }, logical(1L))]
 }
 
+#' The plausibility and feasibility switches of a set_filters() object
+#'
+#' @param set_filters A `"bl_filters"` object, or `NULL`.
+#' @return A list: `hull` (plausibility) and `train_ranges` (feasibility),
+#'   each `TRUE` or `FALSE`. `NULL`, or a `"bl_filters"` object without a
+#'   field (built by hand, or before the switches existed), gives `TRUE`: the
+#'   thesis rule, so a search without a filter object stays constrained.
+#' @noRd
+.filter_switches <- function(set_filters) {
+  sw <- function(x) if (is.null(x)) TRUE else isTRUE(x)
+  list(hull         = sw(set_filters[["hull"]]),
+       train_ranges = sw(set_filters[["train_ranges"]]))
+}
+
+#' Check that a set_filters() switch is TRUE or FALSE
+#' @noRd
+.check_switch <- function(x, nm) {
+  if (!is.logical(x) || length(x) != 1L || is.na(x))
+    stop(sprintf(paste(
+      "'%s' must be TRUE or FALSE. A feature named '%s' cannot be",
+      "constrained through set_filters()."), nm, nm), call. = FALSE)
+  invisible(x)
+}
+
 
 #' Warn when a data-frame target lies outside the training ranges
 #'
@@ -218,7 +242,8 @@
 
   msg <- sprintf(paste(
     "The target lies outside the training range for: %s.",
-    "The local search looks for counterfactuals within that range."),
+    "By default the local search looks for counterfactuals within that",
+    "range (set_filters(..., train_ranges = FALSE) drops this rule)."),
     paste(out_now, collapse = ", "))
   if (!is.null(bl_result$scaling)) {
     out_conv <- tryCatch(out_of_range(bl_apply_scaling(x_obs, bl_result)),
@@ -359,11 +384,38 @@ bl_select_target <- function(bl_result, target, data = NULL) {
 }
 
 
-#' Set actionability constraints for local counterfactual search
+#' Set the constraints for the local counterfactual search
 #'
-#' Defines per-variable constraints that restrict the counterfactual search in
-#' \code{\link{bl_find_local_cf}}. Constraints are applied in X-space
-#' after back-projecting contour segments.
+#' Defines the constraints that restrict the counterfactual search in
+#' \code{\link{bl_find_local_cf}}: per-variable actionability constraints,
+#' and the switches for the feasibility (\code{train_ranges}) and
+#' plausibility (\code{hull}) rules.
+#'
+#' @section Actionability, feasibility and plausibility:
+#' The thesis asks a counterfactual to be actionable, feasible and plausible
+#' (defined in section 3.9.2, pp.88-90; applied in section 4.3.1, p.116):
+#' \describe{
+#'   \item{Actionability}{Each feature changes only as the person can change
+#'     it: the per-variable constraints in \code{...} (for example, age cannot
+#'     decrease). None is set by default.}
+#'   \item{Feasibility}{Each feature stays within the range observed in the
+#'     training data (\code{bl_result$train_ranges}). Switched by
+#'     \code{train_ranges}; on by default.}
+#'   \item{Plausibility}{The counterfactual comes from a local decision
+#'     boundary within the convex hull of the training data (p.117), so it
+#'     lies in a region the training data covers: on each rotated plane, the
+#'     hull of the training data and the target. Switched by \code{hull}; on
+#'     by default.}
+#' }
+#' Per-variable constraints and the training ranges are applied in X-space,
+#' after the boundary points are back-projected; the hull is applied on the
+#' rotated plane. \code{hull = FALSE} and \code{train_ranges = FALSE} with no
+#' per-variable constraint give the unconstrained counterfactual (thesis
+#' p.115): the nearest point on the model's local decision boundary, even
+#' outside the training data. Passing no filter object to
+#' \code{\link{bl_find_local_cf}} (\code{set_filters = NULL}) is the same as
+#' \code{set_filters(bl_target)}: no actionability constraint, with the
+#' feasibility and plausibility rules on.
 #'
 #' @param bl_target A \code{"bl_target"} object from
 #'   \code{\link{bl_select_target}}.
@@ -403,18 +455,33 @@ bl_select_target <- function(bl_result, target, data = NULL) {
 #'       \code{"fixed"} feature stays at its observed value and is not
 #'       rounded.}
 #'   }
+#' @param hull Logical; the plausibility rule. \code{TRUE} (the default)
+#'   keeps only the boundary points inside the convex hull of the training
+#'   data and the target on each rotated plane; \code{FALSE} drops the rule.
+#'   Must be named. A feature called \code{hull} cannot be constrained
+#'   through \code{set_filters()}.
+#' @param train_ranges Logical; the feasibility rule. \code{TRUE} (the
+#'   default) keeps only the boundary points whose features all lie within
+#'   their training ranges (\code{bl_result$train_ranges}), and checks the
+#'   restored \code{"fixed"} and rounded \code{"integer"} points against them
+#'   too; \code{FALSE} drops the rule. Must be named. A feature called
+#'   \code{train_ranges} cannot be constrained through \code{set_filters()}.
 #'
 #' @return A list of class \code{"bl_filters"} with fields:
 #'   \describe{
 #'     \item{constraints}{Named list of per-variable constraints.}
 #'     \item{bl_target}{The \code{"bl_target"} object passed in.}
+#'     \item{hull}{Logical; the plausibility switch.}
+#'     \item{train_ranges}{Logical; the feasibility switch.}
 #'   }
 #'
 #' @export
-set_filters <- function(bl_target, ...) {
+set_filters <- function(bl_target, ..., hull = TRUE, train_ranges = TRUE) {
   if (!inherits(bl_target, "bl_target"))
     stop("'bl_target' must be a 'bl_target' object from bl_select_target().",
          call. = FALSE)
+  .check_switch(hull, "hull")
+  .check_switch(train_ranges, "train_ranges")
 
   constraints <- list(...)
   var_names   <- names(bl_target$x_obs)
@@ -430,7 +497,8 @@ set_filters <- function(bl_target, ...) {
   for (nm in names(constraints)) .parse_constraint(constraints[[nm]], nm)
 
   structure(
-    list(constraints = constraints, bl_target = bl_target),
+    list(constraints = constraints, bl_target = bl_target,
+         hull = hull, train_ranges = train_ranges),
     class = "bl_filters"
   )
 }
@@ -459,23 +527,32 @@ set_filters <- function(bl_target, ...) {
 #' @section Constraints:
 #' The convex hull polygon of the global biplot (from \code{bl_build_grid()})
 #' is \strong{not} used here, because the per-pair rotation invalidates its
-#' coordinates. Three constraint types are applied instead, in this order:
+#' coordinates. Three constraint types, all set through
+#' \code{\link{set_filters}}, are applied instead, in this order:
 #' \describe{
-#'   \item{hull}{When \code{hull = TRUE} (the default), a boundary vertex must
-#'     lie inside the convex hull of the training data and the target,
-#'     projected onto the rotated plane of that pair. The hull is rebuilt for
-#'     every pair, as in Appendix A of the thesis, and applies its
-#'     plausibility rule (section 4.3.1): the counterfactual is selected from
-#'     a local decision boundary within the convex hull of the training data.
-#'     \code{hull = FALSE} drops this rule.}
-#'   \item{set_filters}{Actionability constraints supplied via
+#'   \item{hull (plausibility)}{When the \code{hull} switch is on (the
+#'     default), a boundary vertex must lie inside the convex hull of the
+#'     training data and the target, projected onto the rotated plane of that
+#'     pair. The hull is rebuilt for every pair, as in Appendix A of the
+#'     thesis, and applies its plausibility rule (section 4.3.1): the
+#'     counterfactual is selected from a local decision boundary within the
+#'     convex hull of the training data. \code{set_filters(..., hull = FALSE)}
+#'     drops this rule.}
+#'   \item{actionability}{The per-variable constraints of
 #'     \code{\link{set_filters}}.}
-#'   \item{train_ranges}{Back-projected X-space values must lie within the
-#'     per-variable ranges observed in the training data.}
+#'   \item{train_ranges (feasibility)}{When the \code{train_ranges} switch is
+#'     on (the default), back-projected X-space values must lie within the
+#'     per-variable ranges observed in the training data.
+#'     \code{set_filters(..., train_ranges = FALSE)} drops this rule.}
 #' }
+#' With both switches off and no per-variable constraint, the search finds
+#' the unconstrained counterfactual (thesis p.115). Every boundary point must
+#' also be scored on the other side of the cutoff by the model; that check is
+#' not a constraint and always applies.
 #' The hull applies to the boundary points on the plane. The restored
 #' (\code{"fixed"}) and rounded (\code{"integer"}) points lie off the plane,
-#' and are checked against the constraints and \code{train_ranges} only.
+#' and are checked against the constraints and, when the switch is on,
+#' \code{train_ranges} only.
 #'
 #' @section Fixed constraints:
 #' During the search a \code{"fixed"} feature may move by up to 0.5 in model
@@ -483,7 +560,8 @@ set_filters <- function(bl_target, ...) {
 #' exactly its observed value. After the best pair is chosen, each fixed
 #' feature the search moved is set back to its observed value and the point is
 #' re-scored. If the restored point still crosses the decision boundary and
-#' lies within \code{train_ranges}, it becomes the counterfactual
+#' lies within \code{train_ranges} (when that switch is on), it becomes the
+#' counterfactual
 #' (\code{B_x}, \code{B_z}, \code{B_pred}). Otherwise no counterfactual holds
 #' the fixed features, and none is reported: \code{solution_found} is
 #' \code{FALSE}, and \code{blocking_constraint} gives the fixed values the
@@ -501,7 +579,8 @@ set_filters <- function(bl_target, ...) {
 #' whole numbers just below and just above are tried, and every combination
 #' of them is a candidate. A candidate is valid when the model still scores
 #' it on the other side of the cutoff, it meets every \code{set_filters()}
-#' constraint and it lies within \code{train_ranges}. The valid candidate
+#' constraint and it lies within \code{train_ranges} (when that switch is
+#' on). The valid candidate
 #' nearest the target in X-space, by the same distance as the pair search
 #' (Mahalanobis, or Euclidean on the total-SD scale), is the
 #' counterfactual (\code{B_x}, \code{B_z}, \code{B_pred}); on a tie, the
@@ -545,7 +624,11 @@ set_filters <- function(bl_target, ...) {
 #' @param bl_target   A \code{"bl_target"} object from
 #'   \code{\link{bl_select_target}}.
 #' @param set_filters A \code{"bl_filters"} object from
-#'   \code{\link{set_filters}}, or \code{NULL} (no actionability constraints).
+#'   \code{\link{set_filters}}: the actionability constraints and the
+#'   \code{hull} (plausibility) and \code{train_ranges} (feasibility)
+#'   switches. \code{NULL} (the default) is the same as
+#'   \code{set_filters(bl_target)}: no actionability constraint, with the hull
+#'   and the training ranges still applied.
 #' @param max_pairs   Integer; maximum number of component pairs to try.
 #'   Default \code{21L}: every pair for up to 7 features
 #'   (\code{choose(7, 2) = 21}). With more features, the pairs with the
@@ -558,10 +641,6 @@ set_filters <- function(bl_target, ...) {
 #'   \code{"euclidean"}. See \strong{Cross-pair selection criterion} section
 #'   above.
 #' @param verbose     Logical; print progress messages. Default \code{TRUE}.
-#' @param hull        Logical; keep only boundary points inside the convex hull
-#'   of the training data and the target on each rotated plane (see
-#'   \strong{Constraints}). Default \code{TRUE}; \code{FALSE} searches without
-#'   this rule.
 #'
 #' @return A list of class \code{"bl_local_result"} with the following fields:
 #'   \describe{
@@ -597,14 +676,22 @@ set_filters <- function(bl_target, ...) {
 #'     \item{xseq, yseq}{Grid axis sequences.}
 #'     \item{min_val, max_val}{Grid axis limits.}
 #'     \item{hull_polygon}{Two-column matrix; the vertices of the convex hull
-#'       on the plane of \code{best_pair} (rotated Z-space), or \code{NULL}
-#'       when \code{hull = FALSE} or no solution is found.}
+#'       of the training data and the target on the plane of \code{best_pair}
+#'       (rotated Z-space), or \code{NULL} when no solution is found. It is
+#'       stored also when the \code{hull} switch is off (the search then did
+#'       not use it), so that \code{plot(..., trim_to_hull = TRUE)} can show
+#'       it.}
 #'     \item{all_distances}{Named numeric vector; Z-distance per pair tried.}
 #'     \item{all_distances_x}{Named numeric vector; X-space Euclidean distance
 #'       (total-SD scale) per pair tried.}
 #'     \item{all_distances_mahalanobis}{Named numeric vector; squared
 #'       Mahalanobis distance per pair tried.}
-#'     \item{hull}{Logical; the \code{hull} argument.}
+#'     \item{hull}{Logical; whether the hull (plausibility) rule applied: the
+#'       \code{hull} switch of \code{set_filters}, \code{TRUE} when
+#'       \code{set_filters} is \code{NULL}.}
+#'     \item{train_ranges}{Logical; whether the training-range (feasibility)
+#'       rule applied, likewise. Not the ranges themselves, which are in
+#'       \code{bl_result$train_ranges}.}
 #'     \item{solution_found}{Logical.}
 #'     \item{blocking_constraint}{Character message if no solution, else NULL:
 #'       why no boundary point satisfied the constraints, why the restored
@@ -649,8 +736,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
                                    max_pairs   = 21L,
                                    m           = 200L,
                                    distance    = c("auto", "mahalanobis", "euclidean"),
-                                   verbose     = TRUE,
-                                   hull        = TRUE) {
+                                   verbose     = TRUE) {
 
   if (!inherits(bl_result, "bl_result"))
     stop("'bl_result' must be a 'bl_result' object.", call. = FALSE)
@@ -660,8 +746,10 @@ bl_find_local_cf <- function(bl_result, bl_target,
   if (!is.null(set_filters) && !inherits(set_filters, "bl_filters"))
     stop("'set_filters' must be a 'bl_filters' object from set_filters() or NULL.",
          call. = FALSE)
-  if (!is.logical(hull) || length(hull) != 1L || is.na(hull))
-    stop("'hull' must be TRUE or FALSE.", call. = FALSE)
+  # The plausibility (hull) and feasibility (train_ranges) switches; NULL
+  # keeps both on (thesis section 4.3.1).
+  switches <- .filter_switches(set_filters)
+  hull     <- switches$hull
   # "auto": Euclidean under PCA, Mahalanobis under CVA (thesis section 3.9.1)
   distance <- .resolve_distance(distance[1L], bl_result)
 
@@ -673,7 +761,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
   b_margin     <- bl_result$b_margin
   var_names    <- bl_result$var_names
   p            <- bl_result$num_vars
-  train_ranges <- bl_result$train_ranges
+  # NULL when the feasibility switch is off: every range check below skips.
+  train_ranges <- if (switches$train_ranges) bl_result$train_ranges else NULL
   metric_inv   <- bl_result$metric_inv
 
   # Fall back to Euclidean if metric_inv is missing (older bl_result objects)
@@ -938,22 +1027,38 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
   solution_found <- !is.null(best_result)
 
+  # The winning plane's hull is stored also when the hull rule is off, so the
+  # local plot can show where it lies (plot.bl_local_result(trim_to_hull =
+  # TRUE)). Built as in the loop above; the search did not use it.
+  if (solution_found && !hull) {
+    hp <- .build_hull_polygon(rbind(best_result$Z_train_rot, best_result$Z_target),
+                              best_result$min_val, best_result$max_val,
+                              outlie = 1)
+    best_result$hull_polygon <- hp@polygons[[1L]]@Polygons[[1L]]@coords
+  }
+
   if (!solution_found) {
-    hull_text <- if (hull) paste(
-      "Boundary points must also lie inside the convex hull of the training",
-      "data on each plane (hull = FALSE drops this rule)."
-    ) else NULL
+    # The plausibility and feasibility rules that applied, and how to drop
+    # them.
+    rule_text <- c(
+      if (hull) paste(
+        "Boundary points must also lie inside the convex hull of the training",
+        "data on each plane (set_filters(..., hull = FALSE) drops this rule)."),
+      if (is.list(train_ranges)) paste(
+        "Boundary points must also lie within the training ranges",
+        "(set_filters(..., train_ranges = FALSE) drops this rule).")
+    )
     if (!is.null(set_filters) && length(set_filters$constraints) > 0L) {
       blocking <- paste(c(
         "No counterfactual satisfying all constraints was found across",
-        nrow(pairs), "component pair(s).", hull_text,
+        nrow(pairs), "component pair(s).", rule_text,
         "Try relaxing or removing actionability filters in set_filters()."
       ), collapse = " ")
     } else {
       blocking <- paste(c(
         "No counterfactual found across", nrow(pairs), "component pair(s).",
         "The decision boundary may not cross the projected feature space.",
-        hull_text, "Try increasing max_pairs."
+        rule_text, "Try increasing max_pairs."
       ), collapse = " ")
     }
     message("bl_find_local_cf: ", blocking)
@@ -978,12 +1083,13 @@ bl_find_local_cf <- function(bl_result, bl_target,
 
   # Restore "fixed" features the search moved (post-selection; the pair choice
   # is unchanged). The restored point must still cross the boundary and lie
-  # within train_ranges; otherwise no counterfactual holds the fixed features
-  # and none is reported.
+  # within train_ranges (when that rule is on); otherwise no counterfactual
+  # holds the fixed features and none is reported.
   fixed_check <- NULL
   if (solution_found) {
     rf <- .restore_fixed(best_result, x_obs, var_names, set_filters,
-                         bl_result, bl_target, sv)
+                         bl_result, bl_target, sv,
+                         train_ranges = train_ranges)
     if (!is.null(rf)) {
       fixed_check <- rf$fixed_check
       if (fixed_check$applied) {
@@ -1009,7 +1115,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
   integer_check <- NULL
   if (solution_found) {
     ri <- .round_integers(best_result, x_obs, var_names, set_filters,
-                          bl_result, bl_target, sv, distance, metric_inv, X_sd)
+                          bl_result, bl_target, sv, distance, metric_inv, X_sd,
+                          train_ranges = train_ranges)
     if (!is.null(ri)) {
       integer_check <- ri$integer_check
       if (integer_check$applied) {
@@ -1049,6 +1156,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
         all_distances_mahalanobis = all_distances_mahalanobis,
         distance                  = distance,
         hull                      = hull,
+        train_ranges              = switches$train_ranges,
         solution_found            = solution_found,
         blocking_constraint       = blocking,
         bl_target                 = bl_target,
@@ -1117,11 +1225,14 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @param bl_target   The `bl_target` (for its predicted class).
 #' @param sv          Per-feature scale used by the search (`X_sd` when
 #'   standardised, otherwise 1s).
+#' @param train_ranges The training ranges to check (`bl_result$train_ranges`),
+#'   or `NULL` when the feasibility switch of `set_filters()` is off.
 #' @return `NULL` when the search moved no fixed feature; otherwise a list with
 #'   `best_result` (updated when the restore is applied) and `fixed_check`.
 #' @noRd
 .restore_fixed <- function(best_result, x_obs, var_names, set_filters,
-                           bl_result, bl_target, sv) {
+                           bl_result, bl_target, sv,
+                           train_ranges = bl_result$train_ranges) {
   cons <- if (!is.null(set_filters)) set_filters$constraints else NULL
   if (length(cons) == 0L) return(NULL)
   fixed <- .fixed_vars(cons)
@@ -1142,8 +1253,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
   )[[1L]]
 
   crosses  <- as.integer(pred_r >= bl_result$cutoff) != bl_target$pred_class
-  in_range <- if (is.list(bl_result$train_ranges)) {
-    get_filter_logical_vector(B_x_r, bl_result$train_ranges)[[1L]]
+  in_range <- if (is.list(train_ranges)) {
+    get_filter_logical_vector(B_x_r, train_ranges)[[1L]]
   } else {
     TRUE
   }
@@ -1216,7 +1327,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @noRd
 .round_integers <- function(best_result, x_obs, var_names, set_filters,
                             bl_result, bl_target, sv, distance, metric_inv,
-                            X_sd = bl_result$X_sd) {
+                            X_sd = bl_result$X_sd,
+                            train_ranges = bl_result$train_ranges) {
   cons  <- if (!is.null(set_filters)) set_filters$constraints else NULL
   ivars <- .integer_vars(cons)
   if (length(ivars) == 0L) return(NULL)
@@ -1265,8 +1377,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
     new_data   = cand
   )
   crosses  <- as.integer(pred >= bl_result$cutoff) != bl_target$pred_class
-  in_range <- if (is.list(bl_result$train_ranges)) {
-    get_filter_logical_vector(cand, bl_result$train_ranges)
+  in_range <- if (is.list(train_ranges)) {
+    get_filter_logical_vector(cand, train_ranges)
   } else {
     rep(TRUE, nrow(cand))
   }
@@ -1584,11 +1696,21 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' class is known (\code{bl_target$class_obs}, resolved by
 #' \code{\link{bl_select_target}} from the target's own row), or red/blue by
 #' predicted class when it is not. The nearest boundary point is shown as a cross
-#' with an arrow.
+#' with an arrow. When the search applied the convex hull (\code{x$hull}), the
+#' prediction grid is coloured only inside the hull of the training data and
+#' the target on this plane, as the global biplot colours only inside its hull:
+#' the coloured area is where the search could choose boundary points, and
+#' boundary lines in the white area lie outside it.
 #'
 #' @param x               A \code{"bl_local_result"} object.
 #' @param no_grid         Logical; if \code{TRUE} the prediction grid is hidden.
 #'   Default \code{FALSE}.
+#' @param trim_to_hull    Logical or \code{NULL}; colour the prediction grid
+#'   only inside the convex hull on this plane (\code{x$hull_polygon}).
+#'   \code{NULL} (default) trims when the search applied the hull
+#'   (\code{x$hull}); \code{TRUE} trims also for a search with the hull
+#'   switched off, to show where the hull lies; \code{FALSE} colours the whole
+#'   grid. An object without \code{hull_polygon} is never trimmed.
 #' @param plot_points     Logical; if \code{FALSE} (default) training points are
 #'   hidden (show only the target and counterfactual). Set to \code{TRUE} to
 #'   also show training data. To overlay test or holdout data instead, use
@@ -1656,6 +1778,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' @export
 plot.bl_local_result <- function(x,
                                  no_grid           = FALSE,
+                                 trim_to_hull      = NULL,
                                  plot_points       = FALSE,
                                  no_contour        = FALSE,
                                  cex_z             = 0.5,
@@ -1802,9 +1925,14 @@ plot.bl_local_result <- function(x,
     plot()
 
   # ---- Step 2: prediction grid -----------------------------------------
+  # Coloured only inside the plane's hull when trimming, as the global
+  # biplot is (display only; the stored grid is complete).
   if (!isTRUE(no_grid)) {
-    graphics::points(x_grid[, 1L], x_grid[, 2L],
-                     col = x$col_value, pch = 15L, cex = 0.5)
+    trim <- if (is.null(trim_to_hull)) isTRUE(x$hull) else isTRUE(trim_to_hull)
+    keep <- if (trim) .grid_in_hull(x_grid, x$hull_polygon) else
+      rep(TRUE, nrow(x_grid))
+    graphics::points(x_grid[keep, 1L], x_grid[keep, 2L],
+                     col = x$col_value[keep], pch = 15L, cex = 0.5)
   }
 
   # ---- Step 3: training points (confusion colours) ---------------------
@@ -1925,6 +2053,11 @@ print.bl_local_result <- function(x, ...) {
     cat("  Reason         : ",
         paste(reason, collapse = paste0("\n", strrep(" ", 19L))), "\n", sep = "")
   }
+  # Only a search with a rule switched off says so; the default prints as before.
+  dropped <- c(if (isFALSE(x$hull)) "hull (plausibility)",
+               if (isFALSE(x$train_ranges)) "train_ranges (feasibility)")
+  if (length(dropped))
+    cat(sprintf("  Not applied    : %s\n", paste(dropped, collapse = ", ")))
   # The comparison table sets the decimals that the Target and
   # Counterfactual blocks then share.
   cmp    <- NULL
@@ -2041,6 +2174,9 @@ print.bl_counterfactual <- function(x, digits = NULL, ...) {
 
 #' Print method for bl_filters
 #'
+#' Prints each per-variable constraint, then whether the plausibility
+#' (\code{hull}) and feasibility (\code{train_ranges}) rules are on.
+#'
 #' @param x A \code{"bl_filters"} object.
 #' @param ... Currently ignored.
 #' @export
@@ -2053,5 +2189,9 @@ print.bl_filters <- function(x, ...) {
     for (k in seq_along(labels))
       cat(sprintf("  %-20s : %s\n", names(x$constraints)[k], labels[k]))
   }
+  sw     <- .filter_switches(x)
+  on_off <- function(v) if (v) "on" else "off"
+  cat(sprintf("  Plausibility (hull)        : %s\n", on_off(sw$hull)))
+  cat(sprintf("  Feasibility (train_ranges) : %s\n", on_off(sw$train_ranges)))
   invisible(x)
 }

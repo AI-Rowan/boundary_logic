@@ -11,9 +11,10 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **Paper 1 work is on branch `paper_nr1_changes`** (branched from `method_developments` at
   `b7aee65` on 2026-10-29, pushed with upstream). Start Paper 1 sessions on that branch
   (CLAUDE.md §10).
-- **`paper_nr1_changes` is pushed up to `c13fe44`** (2026-11-05: the hull on each rotated plane, the
-  approximation-gap experiment, the review fixes, version 0.2.0), plus the clean-up commit after it
-  (`known-issues.md` removed, CLAUDE.md, this file). Commit and push only when the user says so.
+- **`paper_nr1_changes` is pushed up to the sessions 10–11 commit** (2026-11-06: `.poly_clip()` once,
+  the `set_filters()` switches, the local plot's hull trim, the final thesis in `documentation/`),
+  after `c13fe44` (2026-11-05: the hull on each rotated plane, version 0.2.0) and its clean-up commit
+  `ee64c3a`. Commit and push only when the user says so.
 - **`main` was last merged and pushed on 2026-08-03; `method_developments` is at `b7aee65`.** Merging
   `paper_nr1_changes` back, the `v0.2.0` tag the paper will pin, and reinstalling the package
   locally wait for the user's instruction.
@@ -28,18 +29,118 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 - **The methodology note** (`documentation/methodology-changes/methodology-changes.qmd` / `.docx`) is
   organised as "Changes made" (history, core methodology §3.1–3.12, code improvements) and "Future
   work", with no approval boxes. The supervisor has not seen it yet.
-- **The local search applies the convex hull on each rotated plane** (`hull = TRUE`, since
-  2026-11-05; `documentation/local-convex-hull.md`). The plane under-determination (rotation note
-  §4.1) stays documented and deliberately not actioned (CLAUDE.md §9).
-- **Test status: 465 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are biplotEZ 2-class CVA notices).
-  **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-11-05, run on a copy of the package files).
+- **The local search applies the convex hull on each rotated plane** (since 2026-11-05;
+  `documentation/local-convex-hull.md`). Since 2026-11-06 its switch, and a new one for the training
+  ranges, are in `set_filters()` (`hull = TRUE`, `train_ranges = TRUE`); `set_filters = NULL` keeps
+  both on. The plane under-determination (rotation note §4.1) stays documented and deliberately not
+  actioned (CLAUDE.md §9).
+- **Test status: 527 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are biplotEZ 2-class CVA notices).
+  **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-11-06, session 11).
 - **Verification:** run R as `.R` files (`Rscript.exe <driver>.R`), with drivers that
   `devtools::load_all()` the repo. **The installed `boundarylogic` is stale** (2026-09-10).
 - **`.claude/plans/` is gitignored** (local only); `.claude/reference/` is tracked.
 
 ---
 
-## Session summary (2026-11-05, session 9, latest): every open item decided; the hull restored
+## Session summary (2026-11-06, session 11, latest): the switches in `set_filters()`, the hull on the local plot, the final thesis
+
+**Plan:** `.claude/plans/poly-clip-is-defined-twice-dynamic-garden.md` (the plan-mode file name),
+archived as `.claude/reference/filter-switches-in-set-filters-plan.md` (IMPLEMENTED banner).
+
+- **Done:** `set_filters(bl_target, ..., hull = TRUE, train_ranges = TRUE)` holds all three of the
+  thesis's rules: actionability, plausibility and feasibility (p.116). `bl_find_local_cf(hull = )`
+  is removed. The training ranges gain a switch (before, the only way off was
+  `bl_result$train_ranges <- NULL`). `train_ranges = FALSE` also skips the range checks of
+  `.restore_fixed()` and `.round_integers()` (new `train_ranges` argument). Both off with no
+  constraint gives the unconstrained counterfactual (p.115).
+- **Key decisions (user):**
+  - the switches are named `hull` and `train_ranges`, documented as plausibility and feasibility;
+  - the old `hull` argument is removed (0.2.0 untagged);
+  - `set_filters = NULL` keeps both rules on, so no existing result changes
+    (`local-convex-hull.md` §6 gives the reasons).
+- **New:** private `.filter_switches()`, `.check_switch()`; result field `train_ranges`; `Not applied`
+  print line when a rule is off; `print(<bl_filters>)` shows both switches; reworded no-solution message
+  and target-range warning.
+- **Callers updated:** harness (Step 10 sets both switches; the Step 15 title fixed), vignette,
+  README, rotation scripts `17_1`-`17_3`, Pima `04` and `05`.
+- **Verified unchanged against `HEAD`:**
+  - the loan harness;
+  - the rotation scripts;
+  - the Pima outputs (`table1.csv`, `numbers.rds` apart from the message wording, `full_space_gap`,
+    `method-change-effects.csv` apart from the meta rows).
+- **Verification runs:** Pima `tests.R` 13/13, `04` 6/6, `05` both checks. `review.html` and the
+  methodology note `.docx` were re-rendered.
+- **New behaviour (harness):** for the external applicant (credit score below the training range),
+  √d²_M is 1.7026 by default, 0.8521 with `train_ranges = FALSE` and 0.4750 with both off.
+- **Docs updated:** NEWS, the implementation summary, the Foundation document, CLAUDE.md (§2, §4 new
+  rule, §6), `local-convex-hull.md` (§6 new), `fixed-constraint-restore.md`, the rotation note, the
+  methodology note, the walkthrough `review_section9_to_15.md`, `review.qmd`.
+- **Then, the local plot shows the hull** (plan archived as
+  `.claude/reference/local-plot-hull-trim-plan.md`):
+  - `plot.bl_local_result(trim_to_hull = NULL)` colours the grid only inside the plane's hull when the
+    search applied it, as Figure 5(a) does globally (`.grid_in_hull()`, `R/hull_utils.R`);
+    `bl_find_local_cf()` stores `hull_polygon` also with the hull off;
+  - Pima Figure 7(a) is now a plot: the TP target's run 4 searched without the hull (pair (1,2), Age
+    51 → 59.5), its cross in the white area; the caption says why there is no counterfactual
+    (`03_local.R` `run4_no_hull`, `numbers.rds` `run4_no_hull`);
+  - the user chose: look like Figure 5(a), no legend, captions only;
+  - figures 5(b), 7(a), 7(b), 7(c), 9(a), 9(b) changed: the Paper 1 plan must take them in.
+- **Last, the final thesis in the repository** (plan archived as
+  `.claude/reference/final-thesis-citations-plan.md`):
+  - **The user's change:** `documentation/FINAL_ADRIAAN ROWAN_27022026.pdf` added (untracked;
+    byte-identical to `../Explain XAI code/reference-materials/1 FINAL_ADRIAAN ROWAN_27022026.pdf`, which
+    the notes already cited, so no page moved); the 30 September 2025 draft and
+    `XAI PhD presentation - March 2026.pdf` deleted (both tracked; nothing cites the presentation).
+  - **Audit:** two read-only passes checked every thesis citation against the final PDF. All 27 in
+    `R/`, NEWS, README, the vignette and tests matched, and about 60 in the documents did. Fixed:
+    - draft and old-location mentions (CLAUDE.md §6, the rotation note, the boundary-distance note);
+    - the draft's §3.9.3 for text now in §3.10 (rotation note, 5 places; CLAUDE.md §2's section list);
+    - exact quotes (rotation note pp.86, 92, 118; boundary-distance p.103; local-convex-hull p.115,
+      now a paraphrase since the thesis writes "unconstraint");
+    - `17_3`'s printed label "thesis (§2.3)" → "thesis (§3.5, p.55)";
+    - stale links to the rotation note's old §5.3/§5.9, now Appendix A.2 (CLAUDE.md §6,
+      `nearest-vertex-tie-break.md`).
+  - **Added:** §3.9.2 (pp.88–90), where the thesis defines the three rules, next to p.116 in
+    `set_filters()`'s roxygen, `local-convex-hull.md` §6 and the walkthrough.
+  - **Kept, by the user's decision:** draft mentions in the archived plans and in
+    `future-improvements-review.md` (history records). The documents name the thesis "the final
+    version of 27 February 2026".
+- **CLAUDE.md** (`/revise-claude-md`): the thesis PDF path and page anchors; `Rscript -e` with `|`
+  fails from Git Bash; Figure 7(a)'s source; the local plot's hull trim.
+- **Status:** 527 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0. Harness, rotation scripts and
+  Pima numbers unchanged.
+- **Committed and pushed** (2026-11-06, on the user's instruction): sessions 10 and 11 in one commit
+  on `paper_nr1_changes`, with the new thesis PDF, the two PDF deletions, `man/dot-grid_in_hull.Rd`,
+  `tests/testthat/test-hull_utils.R` and the four new `.claude/reference/` plans. The pkgdown site
+  (`docs/`) is stale until the next `build_site()`.
+- **Next step:**
+  1. The methodology note prints the commit it was measured at (`ee64c3a` "with uncommitted
+     changes"): re-run `run_all.R` and `04_method-change-effects.R`, then re-render the note, so it
+     names the new commit (CLAUDE.md §5).
+  2. Then session 9's "Next session" below (update the Paper 1 plan). The paper plan should also take
+     in the switches (the unconstrained counterfactual is now one call), the changed local figures
+     (5(b), 7(a), 7(b), 7(c), 9(a), 9(b)) and the final thesis's page numbers.
+
+---
+
+## Session summary (2026-11-05, session 10): `.poly_clip()` defined once
+
+**Plan:** `.claude/plans/poly-clip-is-defined-twice-dynamic-garden.md`, archived as
+`.claude/reference/poly-clip-single-definition-plan.md` (IMPLEMENTED banner).
+
+- **Done:** removed the copy of `.poly_clip()` in `R/boundary.R`. It was dead code: R loads
+  `boundary.R` before `hull_utils.R`, so the `hull_utils.R` copy always replaced it. The live function
+  is identical before and after (checked with `deparse()`).
+- **New test:** `tests/testthat/test-hull_utils.R` (5 blocks, 8 expectations).
+- **Docs updated:** `man/dot-poly_clip.Rd` (regenerated), the implementation summary, CLAUDE.md
+  (§2 archive list, §6), `review_section7_to_8.md` and NEWS.
+- **Left stale by choice:** the pkgdown page `docs/reference/dot-poly_clip.html` and
+  `docs/search.json`, until the next full `build_site()`.
+- **Status:** 473 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0. Committed with session 11.
+
+---
+
+## Session summary (2026-11-05, session 9): every open item decided; the hull restored
 
 **Plan:** `.claude/plans/cryptic-snuggling-bee.md`, archived as
 `.claude/reference/future-improvements-hull-plan.md` (IMPLEMENTED banner).

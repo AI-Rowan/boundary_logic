@@ -84,7 +84,7 @@ For each raw contour segment:
 ```
 Mi_clipped = rows of Mi where sp::point.in.polygon(Mi, polygon) > 0
 ```
-This is done via `.poly_clip()` (defined in `R/boundary.R`), which uses `sp::point.in.polygon()` to test each contour vertex against the polygon.
+This is done via `.poly_clip()` (defined in `R/hull_utils.R`), which uses `sp::point.in.polygon()` to test each contour vertex against the polygon.
 
 Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_type` — the probability level of each contour (either `cutoff - b_margin` = 0.499 or `cutoff + b_margin` = 0.501, because `b_margin = 0.001`).
 

@@ -2,9 +2,9 @@
 % Please edit documentation in R/local_cf.R
 \name{set_filters}
 \alias{set_filters}
-\title{Set actionability constraints for local counterfactual search}
+\title{Set the constraints for the local counterfactual search}
 \usage{
-set_filters(bl_target, ...)
+set_filters(bl_target, ..., hull = TRUE, train_ranges = TRUE)
 }
 \arguments{
 \item{bl_target}{A \code{"bl_target"} object from
@@ -46,16 +46,60 @@ values and the sparse counterfactual use whole values too. A
 \code{"fixed"} feature stays at its observed value and is not
 rounded.}
 }}
+
+\item{hull}{Logical; the plausibility rule. \code{TRUE} (the default)
+keeps only the boundary points inside the convex hull of the training
+data and the target on each rotated plane; \code{FALSE} drops the rule.
+Must be named. A feature called \code{hull} cannot be constrained
+through \code{set_filters()}.}
+
+\item{train_ranges}{Logical; the feasibility rule. \code{TRUE} (the
+default) keeps only the boundary points whose features all lie within
+their training ranges (\code{bl_result$train_ranges}), and checks the
+restored \code{"fixed"} and rounded \code{"integer"} points against them
+too; \code{FALSE} drops the rule. Must be named. A feature called
+\code{train_ranges} cannot be constrained through \code{set_filters()}.}
 }
 \value{
 A list of class \code{"bl_filters"} with fields:
 \describe{
 \item{constraints}{Named list of per-variable constraints.}
 \item{bl_target}{The \code{"bl_target"} object passed in.}
+\item{hull}{Logical; the plausibility switch.}
+\item{train_ranges}{Logical; the feasibility switch.}
 }
 }
 \description{
-Defines per-variable constraints that restrict the counterfactual search in
-\code{\link{bl_find_local_cf}}. Constraints are applied in X-space
-after back-projecting contour segments.
+Defines the constraints that restrict the counterfactual search in
+\code{\link{bl_find_local_cf}}: per-variable actionability constraints,
+and the switches for the feasibility (\code{train_ranges}) and
+plausibility (\code{hull}) rules.
 }
+\section{Actionability, feasibility and plausibility}{
+
+The thesis asks a counterfactual to be actionable, feasible and plausible
+(defined in section 3.9.2, pp.88-90; applied in section 4.3.1, p.116):
+\describe{
+\item{Actionability}{Each feature changes only as the person can change
+it: the per-variable constraints in \code{...} (for example, age cannot
+decrease). None is set by default.}
+\item{Feasibility}{Each feature stays within the range observed in the
+training data (\code{bl_result$train_ranges}). Switched by
+\code{train_ranges}; on by default.}
+\item{Plausibility}{The counterfactual comes from a local decision
+boundary within the convex hull of the training data (p.117), so it
+lies in a region the training data covers: on each rotated plane, the
+hull of the training data and the target. Switched by \code{hull}; on
+by default.}
+}
+Per-variable constraints and the training ranges are applied in X-space,
+after the boundary points are back-projected; the hull is applied on the
+rotated plane. \code{hull = FALSE} and \code{train_ranges = FALSE} with no
+per-variable constraint give the unconstrained counterfactual (thesis
+p.115): the nearest point on the model's local decision boundary, even
+outside the training data. Passing no filter object to
+\code{\link{bl_find_local_cf}} (\code{set_filters = NULL}) is the same as
+\code{set_filters(bl_target)}: no actionability constraint, with the
+feasibility and plausibility rules on.
+}
+

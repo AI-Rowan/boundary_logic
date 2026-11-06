@@ -69,8 +69,8 @@ Two features of that rule matter here.
 
 It also explains why two fresh R sessions running the same script agreed with each
 other. `bl_prepare_data()` calls `set.seed()`, so the same script makes the same draws.
-The `bl_wrap_data()` path seeds nothing, which is why the §5.9 sequence differed from
-run to run.
+The `bl_wrap_data()` path seeds nothing, which is why the call-order sequence the rotation
+note then recorded differed from run to run.
 
 The two tied vertices are almost equidistant from the observation **in the plane**,
 but they can be quite different counterfactuals. Each back-projects to a different
@@ -201,6 +201,9 @@ Rejected alternatives:
   nearest boundary point in the full feature space (rotation note §4.9).
 
 ## 8. Records corrected
+
+The rotation note's section numbers below are those of 2026-10-30. The note was renumbered on
+2026-10-31, and this material is now its Appendix A.2.
 
 - **Rotation note:**
   - §5.3 and §5.9: "Explained and fixed" paragraphs, with the before-and-after numbers

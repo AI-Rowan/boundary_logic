@@ -226,7 +226,7 @@ When `target` is a data frame instead of an integer, the fields are filled as fo
 **The target-range warning.** For a data-frame target, `bl_select_target()` warns when any feature lies outside `bl_result$train_ranges`. If a scaling is recorded and converting the target would bring more features into range, the warning adds that the target looks like raw units and suggests `bl_apply_scaling()`. Here the converted applicant still warns, without that hint, because a credit score of 420 is below the training range (489 to 754; −3.73 in z-scores):
 ```
 Warning message:
-The target lies outside the training range for: credit_score. The local search looks for counterfactuals within that range.
+The target lies outside the training range for: credit_score. By default the local search looks for counterfactuals within that range (set_filters(..., train_ranges = FALSE) drops this rule).
 ```
 In the harness log this warning appears at the end of the run, because R defers top-level warnings.
 
@@ -277,7 +277,9 @@ flt <- set_filters(
   tgt,
   loan_amnt     = "fixed",                 # make not actionable
   loan_int_rate = "increase",              # set by the lender, not the applicant
-  credit_score  = c("increase", "integer") # a whole-number score
+  credit_score  = c("increase", "integer"),# a whole-number score
+  hull          = TRUE,                    # plausibility (the default)
+  train_ranges  = TRUE                     # feasibility (the default)
 )
 ```
 
@@ -286,7 +288,9 @@ flt <- set_filters(
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
 | `bl_target` | required | `tgt` | The target; its observed values are what the directions compare against |
-| `...` | none | `loan_amnt = "fixed"`, `loan_int_rate = "increase"`, `credit_score = c("increase", "integer")` | One named constraint per feature. An unnamed feature (`loan_percent_income` here) is unconstrained and continuous |
+| `...` | none | `loan_amnt = "fixed"`, `loan_int_rate = "increase"`, `credit_score = c("increase", "integer")` | One named constraint per feature (actionability). An unnamed feature (`loan_percent_income` here) is unconstrained and continuous |
+| `hull` | `TRUE` | `TRUE` | The plausibility rule: keeps only boundary points inside the convex hull of the training data and the target on each rotated plane (thesis §4.3.1, p.117; Step 11, Stage E, filter 2). `FALSE` drops it |
+| `train_ranges` | `TRUE` | `TRUE` | The feasibility rule: keeps only boundary points whose features all lie within their training ranges (Stage E, filter 4), and checks the restored and rounded points against them too (Stage H). `FALSE` drops it |
 
 Full argument list: `?set_filters`.
 
@@ -294,10 +298,12 @@ The constraints name only the four retained features, because `set_filters()` st
 
 **What it does:**
 
-1. Validates `tgt` is a `"bl_target"` object.
-2. Validates all named arguments are feature names in `tgt$x_obs`.
+1. Validates `tgt` is a `"bl_target"` object, and `hull` and `train_ranges` are each a single `TRUE` or `FALSE` (private `.check_switch()`; a feature named `hull` or `train_ranges` cannot be constrained here, because the name is taken by the switch).
+2. Validates all other named arguments are feature names in `tgt$x_obs`.
 3. Validates each constraint value with the private `.parse_constraint()`. A value is a direction (`"decrease"`, `"increase"`, `"fixed"`), a `c(min, max)` numeric pair, or `"integer"`, alone or combined: `c("increase", "integer")` (either order) or `list(c(min, max), "integer")`. Anything else stops with the list of forms.
 4. Stores everything.
+
+**The three rules.** The thesis asks a counterfactual to be actionable, feasible and plausible (defined in §3.9.2, pp.88–90; applied in §4.3.1, p.116), and `set_filters()` holds all three: the per-feature constraints (actionability), `train_ranges` (feasibility) and `hull` (plausibility). Both switches are on by default, and `bl_find_local_cf()` keeps them on when it is given no filter object (`set_filters = NULL`, Step 15), so that call is the same as `set_filters(tgt)`. `set_filters(tgt, hull = FALSE, train_ranges = FALSE)` with no constraint gives the unconstrained counterfactual (p.115): the nearest point on the model's local boundary, even outside the training data. Why `NULL` keeps both rules: `documentation/local-convex-hull.md` §6.
 
 **Constraint semantics (applied in X-space after back-projecting contour points):**
 
@@ -317,8 +323,10 @@ The comparisons run on the stored values, which are in model units. For `bl_resu
 
 | Field | Type | Content |
 |---|---|---|
-| `constraints` | named list | Each element is a constraint value as given (`"decrease"`, `"increase"`, `"fixed"`, `c(min, max)`, or one of the `"integer"` forms) |
+| `constraints` | named list | Each element is a constraint value as given (`"decrease"`, `"increase"`, `"fixed"`, `c(min, max)`, or one of the `"integer"` forms); per feature only |
 | `bl_target` | `bl_target` object | The `tgt` passed in — carried through so `bl_find_sparse_cf()` can access it |
+| `hull` | logical | The plausibility switch (`TRUE` here) |
+| `train_ranges` | logical | The feasibility switch (`TRUE` here) |
 
 **`print(flt)` console output** (from the harness run):
 ```
@@ -326,6 +334,8 @@ The comparisons run on the stored values, which are in model units. For `bl_resu
   loan_amnt            : fixed
   loan_int_rate        : increase
   credit_score         : increase, integer
+  Plausibility (hull)        : on
+  Feasibility (train_ranges) : on
 ```
 
 ---
@@ -339,8 +349,7 @@ The comparisons run on the stored values, which are in model units. For `bl_resu
 bl_local <- bl_find_local_cf(
   bl_result   = bl_results_v2,
   set_filters = flt,
-  bl_target   = tgt,
-  hull        = TRUE
+  bl_target   = tgt
 )
 ```
 
@@ -349,8 +358,7 @@ bl_local <- bl_find_local_cf(
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
 | `bl_target` | required | `tgt` | The observation to explain (Step 10a) |
-| `set_filters` | `NULL` | `flt` | Actionability constraints (Step 10b); `NULL` searches without constraints (Step 15) |
-| `hull` | `TRUE` | `TRUE` | Keeps only boundary points inside the convex hull of the training data and the target on each rotated plane (the thesis's plausibility rule, §4.3.1; Stage E, filter 2); `FALSE` drops the rule |
+| `set_filters` | `NULL` | `flt` | The actionability constraints and the plausibility (`hull`) and feasibility (`train_ranges`) switches (Step 10b). `NULL` is the same as `set_filters(tgt)`: no actionability constraint, with the hull and the training ranges still applied (Step 15) |
 | `max_pairs` | `21L` | default | Component pairs to try, capped at p(p−1)/2: 6 for the 4-feature model |
 | `m` | `200L` | default | Grid resolution per pair |
 | `distance` | `"auto"` | default | Cross-pair selector, by the thesis rule: under CVA (as here) `"mahalanobis"`, the squared Mahalanobis distance in X-space; under PCA `"euclidean"`, the X-space Euclidean distance with each feature divided by its total SD |
@@ -423,7 +431,7 @@ xseq    = seq(z_range[1]-pad, z_range[2]+pad, length.out = m)
 Zgrid   = expand.grid(xseq, xseq)          # m² × 2
 ```
 
-With `hull = TRUE` the same projections also give the plane's convex hull, which filter 2 of Stage E uses:
+With the `hull` switch of `set_filters()` on (the default; read by the private `.filter_switches()`, which also gives `TRUE` for `set_filters = NULL`), the same projections also give the plane's convex hull, which filter 2 of Stage E uses:
 
 ```
 hull_poly = .build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val,
@@ -455,7 +463,7 @@ For each contour segment in `ct_local`:
 
 1. **Opposing-class filter:** Keep only segments where `seg_class != target_pred_class`. A class-0 target (predicted safe) needs class-1 contours, where it would flip to "default"; a class-1 target needs class-0 contours.
 
-2. **Hull (plausibility):** with `hull = TRUE`, `.poly_clip(Mi, hull_poly)` keeps the segment's vertices inside this plane's convex hull (Stage B), in 2D, before any back-projection; a segment with no vertex inside is skipped. This is the thesis's rule that the counterfactual comes from a local decision boundary within the convex hull of the training data (§4.3.1, p.117). In the harness the nearest boundary points already lie inside the hull, so `hull = FALSE` gives the same counterfactual.
+2. **Hull (plausibility):** with the `hull` switch on, `.poly_clip(Mi, hull_poly)` keeps the segment's vertices inside this plane's convex hull (Stage B), in 2D, before any back-projection; a segment with no vertex inside is skipped. This is the thesis's rule that the counterfactual comes from a local decision boundary within the convex hull of the training data (§4.3.1, p.117). In the harness the nearest boundary points already lie inside the hull, so `set_filters(..., hull = FALSE)` gives the same counterfactual.
 
 3. **Back-project + actionability:** Back-project the segment to X-space, then apply the `set_filters` constraints via `.apply_actionability()` (when supplied). These are usually the most selective filter, so they run before the feasibility check, and a segment with no surviving vertex is skipped at once:
    - `"decrease"`: `B_x[nm] <= x_obs[nm]`
@@ -463,7 +471,7 @@ For each contour segment in `ct_local`:
    - `"fixed"`: `abs(B_x[nm] - x_obs[nm]) <= 0.5`
    - `c(min, max)`: range check
 
-4. **Feasibility:** apply the `train_ranges` filter to the vertices that survived step 3.
+4. **Feasibility:** with the `train_ranges` switch on (the default), apply the `train_ranges` filter to the vertices that survived step 3. With the switch off, the search sets its local copy of the ranges to `NULL`, which skips this filter and the range checks of Stage H.
 
 5. **Model consistency:** Re-score the surviving back-projected points; keep only rows where prediction agrees with contour's probability level.
 
@@ -493,7 +501,7 @@ The pair selector then depends on the `distance` argument of `bl_find_local_cf()
 **Under CVA, as here, the Mahalanobis selector ranks the pairs as the plane distance does.**
 
 - **The identity:** biplotEZ's CVA loadings satisfy `V'WV = I/(n-g)`, and every rotated basis inherits it, so for the search's in-plane point `dist_mah = (n - g) * dist_z^2` for every pair.
-- **On `bl_results_v2`:** the ratio `all_distances_mahalanobis / all_distances^2` is 15992 (n = 15996, g = 4) for every pair. That holds in the Step 11 search, Step 15's unconstrained search and Step 16's external search. The Mahalanobis choice is the pair with the smallest `dist_z`.
+- **On `bl_results_v2`:** the ratio `all_distances_mahalanobis / all_distances^2` is 15992 (n = 15996, g = 4) for every pair. That holds in the Step 11 search, Step 15's search without actionability constraints and Step 16's external search. The Mahalanobis choice is the pair with the smallest `dist_z`.
 
 Under a standardised PCA the rotated loadings are orthonormal, so `dist_x` equals `dist_z` at the search point; `W` (the binary-class covariance) is used there only when `distance = "mahalanobis"` is passed. Under CVA `dist_x` is a different metric from `dist_z`, as the harness's per-pair table shows. The derivation is in `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §3.4.
 
@@ -505,7 +513,7 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 
 **The restore step.** Once the best pair is chosen, the private `.restore_fixed()` checks every `"fixed"` feature the search moved:
 1. It sets those features back to their observed values and re-scores the point.
-2. The restored point is used only if it still crosses the boundary (its predicted class differs from the target's) and lies within `train_ranges`. The other constraints still hold, because only the fixed features change.
+2. The restored point is used only if it still crosses the boundary (its predicted class differs from the target's) and lies within `train_ranges` (when that switch is on). The other constraints still hold, because only the fixed features change.
 3. If used, the restored point replaces `B_x` and `B_pred`. `B_z` becomes its projection, `x_st %*% Vr_rot`, the same projection `bl_select_target()` uses (private `.project_local()`). The point satisfies the fixed constraint exactly but lies off the 2D boundary, so it need not be the nearest valid point.
 4. If not, no counterfactual is reported: `solution_found` is `FALSE`, and `blocking_constraint` says where the search moved the fixed feature, why the restored point fails, and that changing the constraints on the actionable features may make a counterfactual possible (`documentation/fixed-constraint-restore.md` §4).
 5. `fixed_check` records the outcome either way, including the search's own point (`search_point`). `dist_z`, `dist_mahalanobis` and the per-pair tables stay the search's values, because they describe the pair choice.
@@ -514,7 +522,7 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
 
 **The rounding step.** The private `.round_integers()` then handles every `"integer"` feature that is not fixed:
 1. A feature whose value moved and is not a whole number in raw units gets two candidates, the whole numbers just below and above. Every combination over the rounded features is a candidate point.
-2. Each candidate is re-scored and checked: it must still cross the boundary, meet every `set_filters()` constraint and lie within `train_ranges`.
+2. Each candidate is re-scored and checked: it must still cross the boundary, meet every `set_filters()` constraint and lie within `train_ranges` (when that switch is on).
 3. The valid candidate nearest the target in X-space, by the same distance as the pair search (`.cf_sq_distance()`; here the squared Mahalanobis distance), replaces `B_x`, `B_z` and `B_pred`. On a tie, the first. If none is valid, no counterfactual is reported. The rule and why it tries both neighbours are in `documentation/fixed-constraint-restore.md` §5.
 4. `integer_check` records `vars`, `applied`, `n_candidates`, `n_valid`, `pred_rounded` and the point before rounding (`search_point`).
 
@@ -544,13 +552,14 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 | `ct_local` | list | Raw contour list from `contourLines()` |
 | `xseq`, `yseq` | numeric (m) | Grid axis sequences |
 | `min_val`, `max_val` | numeric | Grid axis limits |
-| `hull_polygon` | matrix (k × 2) or NULL | Vertices of the convex hull on the winning plane (19 in the harness run); `NULL` with `hull = FALSE` |
+| `hull_polygon` | matrix (k × 2) or NULL | Vertices of the convex hull on the winning plane (19 in the harness run); stored also when the `hull` switch is off (built after the search, for the plot); `NULL` with no solution |
 | `all_distances` | named numeric | Best Z-distance per pair tried (NA if no solution) |
 | `all_distances_x` | named numeric | X-space Euclidean distance per pair tried (NA if no solution) |
 | `all_distances_mahalanobis` | named numeric | Squared Mahalanobis distance per pair tried (NA if no solution) |
-| `hull` | logical | The `hull` argument (`TRUE` here) |
+| `hull` | logical | Whether the plausibility rule applied: `flt`'s `hull` switch (`TRUE` here) |
+| `train_ranges` | logical | Whether the feasibility rule applied: `flt`'s `train_ranges` switch (`TRUE` here). Not the ranges themselves, which are in `bl_results_v2$train_ranges` |
 | `solution_found` | logical | `TRUE` if at least one valid boundary was found |
-| `blocking_constraint` | character or NULL | Reason message if no solution found: no boundary point met the constraints (with `hull = TRUE` the message adds that the points must lie inside the hull), or the fixed restore or the integer rounding failed (Stage H) |
+| `blocking_constraint` | character or NULL | Reason message if no solution found: no boundary point met the constraints (for each rule that applied, the message adds that the points must lie inside the hull or within the training ranges, and which `set_filters()` switch drops it), or the fixed restore or the integer rounding failed (Stage H) |
 | `bl_target` | `bl_target` | The `tgt` object |
 | `bl_counterfactual` | `bl_counterfactual` or NULL | The boundary point, packaged like `bl_target` (see above) |
 | `bl_result` | `bl_result` | Reference to `bl_results_v2` |
@@ -661,6 +670,7 @@ plot(bl_local,
 | `ticks_var` | `0L` | the four feature names | Axes with their own tick count |
 | `ticks_n` | `5L` | `c(4, 5, 5, 5)` | Paired by position: `loan_amnt` gets 4 ticks, the others 5 |
 | `no_grid`, `no_contour` | `FALSE` | default | `TRUE` hides the prediction grid or the contour lines |
+| `trim_to_hull` | `NULL` | default | Colours the grid only inside the plane's hull when the search applied it (here it did), as the global biplot does; `TRUE` also for a search with the hull off; `FALSE` colours the whole grid |
 | `show_arrows` | `TRUE` | default | Draws the arrow from the target to its counterfactual |
 | `print_summary` | `TRUE` | default | Prints the console summary (layer 8) |
 
@@ -687,7 +697,7 @@ model units, while feature values (target, counterfactual, sparse CF) print in r
 | Layer | Content | Data source |
 |---|---|---|
 | 1 | Grey axes + variable labels | `biplot_obj` patched with `Vr_rot` and `Z_train_rot` |
-| 2 | Prediction grid (blue→red) | `bl_local$Zgrid` + `bl_local$col_value` |
+| 2 | Prediction grid (blue→red), only inside the plane's hull (white outside), as on the global biplot: the coloured area is where the search could choose boundary points | `bl_local$Zgrid` + `bl_local$col_value`, kept by `.grid_in_hull(Zgrid, bl_local$hull_polygon)` |
 | 3 | Training points (optional, hidden by default) | `Z_train_rot` + confusion colours |
 | 4 | Axes redrawn darker (via `par(new=TRUE)`) | Same biplotEZ object |
 | 5 | Decision boundary contour lines | `bl_local$ct_local` |
@@ -1009,7 +1019,7 @@ plot(bl_sparse,
 
 The arguments are passed through to `plot.bl_local_result()` (Step 12). Full argument list: `?plot.bl_sparse_result`.
 
-1. **Calls `plot.bl_local_result(x$bl_shapley$bl_local_result, print_summary = FALSE, ...)`** — renders the full local biplot (all 7 layers: grid, axes, target circle, full CF cross + arrow). The `print_summary = FALSE` suppresses the local CF console summary. Because every `plot.bl_local_result()` argument is forwarded through `...`, `new_title` passes straight through: `plot(bl_sparse, new_title = "...")` retitles the underlying local biplot (see Step 12 for the base-graphics title-error caveat).
+1. **Calls `plot.bl_local_result(x$bl_shapley$bl_local_result, print_summary = FALSE, ...)`** — renders the full local biplot (all 7 layers: grid, coloured only inside the plane's hull as in Step 12, axes, target circle, full CF cross + arrow). The `print_summary = FALSE` suppresses the local CF console summary. Because every `plot.bl_local_result()` argument is forwarded through `...`, `new_title` passes straight through: `plot(bl_sparse, new_title = "...")` retitles the underlying local biplot (see Step 12 for the base-graphics title-error caveat).
 
 2. **Projects `x_sparse` to rotated Z-space:**
    ```
@@ -1039,7 +1049,7 @@ The arguments are passed through to `plot.bl_local_result()` (Step 12). Full arg
 
 ---
 
-## Step 15 (optional) — Unconstrained local search
+## Step 15 (optional) — Local search without actionability constraints
 
 ```r
 bl_local_free  <- bl_find_local_cf(bl_results_v2, tgt)
@@ -1051,7 +1061,7 @@ print(bl_sparse_free)
 
 (The script also plots `bl_local_free`, `bl_shap_free` and `bl_sparse_free`.)
 
-Identical pipeline to Steps 11–14, with `set_filters = NULL`. The unconstrained search finds the geometrically nearest boundary point without any actionability restrictions. Comparing `bl_local` (constrained) vs `bl_local_free` (unconstrained) shows the cost of the constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the unconstrained search also picks pair (3, 4), at a slightly smaller distance (√d²_M = 0.5554, against 0.5838 for the constrained search's boundary point and 0.5914 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.2 and lowers the credit score to 633.43, two moves the constraints rule out.
+Identical pipeline to Steps 11–14, with `set_filters = NULL`, which is the same as `set_filters(tgt)`: no actionability constraint, but the plausibility (hull) and feasibility (training ranges) rules still apply. The search finds the nearest boundary point within the hull and the training ranges. The fully unconstrained counterfactual of the thesis (p.115) drops both rules as well: `bl_find_local_cf(bl_results_v2, tgt, set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE))` (the script's comment shows it; it is not run). Comparing `bl_local` (constrained) vs `bl_local_free` (no actionability constraint) shows the cost of the actionability constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the unconstrained search also picks pair (3, 4), at a slightly smaller distance (√d²_M = 0.5554, against 0.5838 for the constrained search's boundary point and 0.5914 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.2 and lowers the credit score to 633.43, two moves the constraints rule out.
 
 **`print(bl_sparse_free)` console output** (from the harness run):
 ```
@@ -1112,7 +1122,7 @@ flt  [bl_filters]
   ├── constraints = list(loan_amnt="fixed", loan_int_rate="increase", credit_score=c("increase", "integer"))
   └── bl_target = tgt
      │
-     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt, hull=TRUE)   # max_pairs = 21
+     │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 21; flt: hull, train_ranges on
      │
      │  [for each of the 6 component pairs (p = 4)]:
      │    .bl_rotate() → Vr_rot, tVr_rot (SVD-based local rotation)
@@ -1191,7 +1201,7 @@ bl_sparse  [bl_sparse_result]
 
 1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 11) rotates the projection specifically around the target observation and tries multiple component pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
 
-2. **Phase 3 rebuilds the convex hull on each rotated plane.** Each pair's rotation invalidates the global grid's polygon, whose coordinates belong to the unrotated plane, so `bl_find_local_cf()` never uses it. With `hull = TRUE` (the default) it builds a new hull from the training data and the target on each rotated plane and keeps only the boundary points inside it (the thesis's plausibility rule, §4.3.1), then applies the `set_filters` actionability constraints and `train_ranges` (per-feature min/max). In this harness run the hull changes nothing: the nearest valid boundary points already lie inside it. `hull = FALSE` drops the rule. See `documentation/local-convex-hull.md`.
+2. **Phase 3 rebuilds the convex hull on each rotated plane.** Each pair's rotation invalidates the global grid's polygon, whose coordinates belong to the unrotated plane, so `bl_find_local_cf()` never uses it. With `set_filters(hull = TRUE)` (the default) it builds a new hull from the training data and the target on each rotated plane and keeps only the boundary points inside it (the thesis's plausibility rule, §4.3.1), then applies the `set_filters` actionability constraints and `train_ranges` (per-feature min/max, the feasibility rule, switched by `set_filters(train_ranges = )`). In this harness run the hull changes nothing: the nearest valid boundary points already lie inside it. `hull = FALSE` drops the rule. See `documentation/local-convex-hull.md`.
 
 3. **Shapley values attribute the full CF movement.** The Shapley values sum to approximately `pred_boundary - pred_prob` — the total prediction change from observation to boundary. Each Shapley value is that feature's fair share of causing the model to change its mind.
 

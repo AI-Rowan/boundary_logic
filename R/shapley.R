@@ -547,7 +547,9 @@ bl_find_sparse_cf <- function(bl_shapley_result, round_to = NULL) {
 #' (\code{"yellow2"}) cross indicates it does not.
 #' All \code{\link{plot.bl_local_result}} parameters are forwarded through
 #' \code{...}; the local summary is suppressed and replaced by a combined
-#' sparse CF summary.
+#' sparse CF summary. As there, the prediction grid is coloured only inside
+#' the convex hull on the plane when the search applied it
+#' (\code{trim_to_hull}).
 #'
 #' @param x         A \code{"bl_sparse_result"} object from
 #'   \code{\link{bl_find_sparse_cf}}.

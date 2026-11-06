@@ -608,3 +608,165 @@ test_that("the local plots still draw, and the global biplot keeps rotate_deg", 
   expect_no_error(capture.output(plot(sp)))
   expect_no_error(plot_biplotEZ(lcf_bl_results, rotate_deg = 30))
 })
+
+
+# ---- The plausibility (hull) and feasibility (train_ranges) switches ---------
+# set_filters() holds both switches; NULL keeps both rules on.
+
+test_that("set_filters stores both switches, on by default, outside the constraints", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  flt <- set_filters(tgt, Sepal.Length = "increase")
+  expect_true(flt$hull)
+  expect_true(flt$train_ranges)
+  expect_identical(names(flt$constraints), "Sepal.Length")
+  off <- set_filters(tgt, hull = FALSE, train_ranges = FALSE)
+  expect_false(off$hull)
+  expect_false(off$train_ranges)
+  expect_length(off$constraints, 0L)
+})
+
+test_that("set_filters rejects a switch that is not TRUE or FALSE", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  for (bad in list("increase", NA, c(TRUE, FALSE), 1)) {
+    expect_error(set_filters(tgt, hull = bad),
+                 "'hull' must be TRUE or FALSE", fixed = TRUE)
+    expect_error(set_filters(tgt, train_ranges = bad),
+                 "'train_ranges' must be TRUE or FALSE", fixed = TRUE)
+  }
+})
+
+test_that(".filter_switches keeps both rules on for NULL and for old filter objects", {
+  fs   <- boundarylogic:::.filter_switches
+  both <- list(hull = TRUE, train_ranges = TRUE)
+  expect_identical(fs(NULL), both)
+  expect_identical(fs(structure(list(constraints = list()), class = "bl_filters")), both)
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  expect_identical(fs(set_filters(tgt, hull = FALSE)),
+                   list(hull = FALSE, train_ranges = TRUE))
+})
+
+test_that("print(bl_filters) shows both switches", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  expect_output(print(set_filters(tgt)),
+                "Plausibility (hull)        : on", fixed = TRUE)
+  expect_output(print(set_filters(tgt, train_ranges = FALSE)),
+                "Feasibility (train_ranges) : off", fixed = TRUE)
+})
+
+test_that("bl_find_local_cf takes the switches from set_filters", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  def <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(def$solution_found))
+  expect_true(def$hull)
+  expect_true(def$train_ranges)
+  expect_false(is.null(def$hull_polygon))
+  # An empty filter object is the default search.
+  emp <- bl_find_local_cf(lcf_bl_results, tgt, set_filters = set_filters(tgt),
+                          verbose = FALSE)
+  expect_identical(emp$B_x, def$B_x)
+  expect_identical(emp$all_distances_x, def$all_distances_x)
+  no_hull <- bl_find_local_cf(lcf_bl_results, tgt,
+                              set_filters = set_filters(tgt, hull = FALSE),
+                              verbose = FALSE)
+  expect_false(no_hull$hull)
+  expect_true(no_hull$train_ranges)
+  # The winning plane's hull is stored also with the rule off (for the plot),
+  # built as the search builds it: on the same pair it is the same hull.
+  expect_false(is.null(no_hull$hull_polygon))
+  if (identical(no_hull$best_pair, def$best_pair))
+    expect_identical(no_hull$hull_polygon, def$hull_polygon)
+  # The switch is no longer an argument of the search.
+  expect_error(bl_find_local_cf(lcf_bl_results, tgt, hull = FALSE),
+               "unused argument")
+})
+
+test_that("the unconstrained counterfactual is never further than the default", {
+  # Dropping rules only adds candidate vertices. Under a standardised PCA the
+  # selector (dist_x) equals the within-pair 2D distance, so it cannot grow.
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  def <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(def$solution_found))
+  unc <- bl_find_local_cf(lcf_bl_results, tgt,
+                          set_filters = set_filters(tgt, hull = FALSE,
+                                                    train_ranges = FALSE),
+                          verbose = FALSE)
+  expect_true(unc$solution_found)
+  expect_false(unc$train_ranges)
+  expect_lte(unc$dist_x, def$dist_x + 1e-10)
+  expect_output(print(unc),
+                "Not applied    : hull (plausibility), train_ranges (feasibility)",
+                fixed = TRUE)
+  expect_no_match(paste(capture.output(print(def)), collapse = "\n"),
+                  "Not applied", fixed = TRUE)
+})
+
+test_that("train_ranges = FALSE drops the training-range rule in the search", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  # Ranges that admit only the target's own values: no boundary point passes.
+  narrow <- lcf_bl_results
+  narrow$train_ranges <- lapply(setNames(nm = narrow$var_names),
+                                function(v) rep(tgt$x_obs[[v]], 2L))
+  on <- suppressMessages(bl_find_local_cf(narrow, tgt, verbose = FALSE))
+  expect_false(on$solution_found)
+  expect_match(on$blocking_constraint,
+               "(set_filters(..., train_ranges = FALSE) drops this rule)",
+               fixed = TRUE)
+  off_flt <- set_filters(tgt, train_ranges = FALSE)
+  off <- bl_find_local_cf(narrow, tgt, set_filters = off_flt, verbose = FALSE)
+  ref <- bl_find_local_cf(lcf_bl_results, tgt, set_filters = off_flt,
+                          verbose = FALSE)
+  expect_true(off$solution_found)
+  expect_identical(off$B_x, ref$B_x)    # the ranges no longer matter
+})
+
+test_that("with the feasibility rule off, the restore and the rounding skip the ranges", {
+  # The counterparts of "a restored point outside train_ranges is not used"
+  # and the last case of ".round_integers re-checks ... the training ranges".
+  f   <- rf_fixture("a", b_range = c(0, 3))
+  res <- boundarylogic:::.restore_fixed(f$best_result, f$x_obs, f$var_names,
+                                        f$filters, f$bl_result, f$bl_target,
+                                        sv = c(1, 1), train_ranges = NULL)
+  expect_true(res$fixed_check$applied)
+  expect_true(res$fixed_check$in_range)
+
+  g <- ri_fixture(pf_ab, c(-0.2, -0.3), data.frame(a = 0.4, b = 0.4),
+                  list(a = "integer", b = "integer"),
+                  ranges = list(a = c(-3, 0.5), b = c(-3, 0.5)))
+  r <- boundarylogic:::.round_integers(g$best_result, g$x_obs, g$var_names,
+                                       g$filters, g$bl_result, g$bl_target,
+                                       sv = c(1, 1), distance = "mahalanobis",
+                                       metric_inv = diag(2), X_sd = c(1, 1),
+                                       train_ranges = NULL)
+  expect_identical(r$integer_check$n_valid, 3L)
+  expect_equal(unlist(r$best_result$B_x), c(a = 1, b = 0))
+})
+
+
+# ---- The local plot colours the grid only inside the plane's hull -------------
+
+test_that("the local plot trims the grid to the hull, or not, and always draws", {
+  on.exit(grDevices::graphics.off(), add = TRUE)
+  grDevices::pdf(NULL)
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  def <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(def$solution_found))
+  off <- bl_find_local_cf(lcf_bl_results, tgt,
+                          set_filters = set_filters(tgt, hull = FALSE),
+                          verbose = FALSE)
+
+  # The hull keeps part of the grid: some points, not all.
+  inside <- boundarylogic:::.grid_in_hull(def$Zgrid, def$hull_polygon)
+  expect_gt(sum(inside), 0L)
+  expect_lt(sum(inside), nrow(def$Zgrid))
+
+  for (trim in list(NULL, TRUE, FALSE)) {
+    expect_no_error(plot(def, print_summary = FALSE, trim_to_hull = trim))
+    expect_no_error(plot(off, print_summary = FALSE, trim_to_hull = trim))
+  }
+  # An object from before hull_polygon existed draws the whole grid.
+  old <- def
+  old$hull_polygon <- NULL
+  expect_no_error(plot(old, print_summary = FALSE))
+  sp <- bl_find_sparse_cf(bl_shapley(def))
+  expect_no_error(capture.output(plot(sp, trim_to_hull = TRUE)))
+})

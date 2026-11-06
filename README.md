@@ -177,8 +177,10 @@ plot_biplotEZ(bl_results_pima)
 ## Actionability constraints
 
 `set_filters()` restricts the counterfactual search to clinically or practically
-plausible directions. Continuing the Pima example with a patient the model
-predicts as diabetic:
+plausible directions. It also holds the switches for the two other rules of the
+method, both on by default: `hull` (plausibility: inside the convex hull of the
+training data) and `train_ranges` (feasibility: within the training ranges).
+Continuing the Pima example with a patient the model predicts as diabetic:
 
 ```r
 pred_pima <- bl_predict(bl_results_pima)
@@ -303,7 +305,7 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 | Function | Purpose | Returns |
 |---|---|---|
 | `bl_select_target()` | Wrap one observation as a target | `bl_target` |
-| `set_filters()` | Encode actionability constraints | `bl_filters` |
+| `set_filters()` | Encode actionability constraints and the hull (plausibility) and training-range (feasibility) switches | `bl_filters` |
 | `bl_find_local_cf()` | Nearest boundary via biplot rotation | `bl_local_result` |
 | `bl_shapley()` | Shapley attribution of the CF path | `bl_shapley` |
 | `bl_find_sparse_cf()` | Parsimonious counterfactual (changes Supports features, largest Shapley first, until the boundary is crossed) | `bl_sparse_result` |
@@ -345,11 +347,15 @@ Installation), and on the package's pkgdown site.
   regardless of this setting.
 - **Local search rebuilds the convex hull on each rotated plane:**
   `bl_find_local_cf()` rotates the biplot plane, which invalidates the hull
-  polygon of the global biplot. With `hull = TRUE` (the default) it rebuilds
-  the convex hull of the training data and the target on each rotated plane,
-  and keeps only the boundary points inside it (the thesis's plausibility
-  rule); `hull = FALSE` drops the rule. The search is further constrained by
-  `set_filters` and `train_ranges`.
+  polygon of the global biplot. Instead it rebuilds the convex hull of the
+  training data and the target on each rotated plane, and keeps only the
+  boundary points inside it (the thesis's plausibility rule). It also keeps
+  every feature within its training range (the feasibility rule) and applies
+  the actionability constraints. All three are set in `set_filters()`: the
+  per-variable constraints, `hull = TRUE` and `train_ranges = TRUE` (both on
+  by default, also when no `set_filters()` object is passed).
+  `set_filters(tgt, hull = FALSE, train_ranges = FALSE)` gives the
+  unconstrained counterfactual.
 
 ---
 

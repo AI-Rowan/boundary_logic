@@ -521,8 +521,9 @@ third_axis <- function(Vr) {
 V_A <- V_full
 if (CHECK_PKG) {
   tgt    <- bl_select_target(bl_res, target = bl_res$train_data[i, ])
-  loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, distance = "mahalanobis", verbose = FALSE, hull = FALSE)  # pinned to (1,2)
-  loc_op <- bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE, hull = FALSE)                  # full search
+  no_hull <- set_filters(tgt, hull = FALSE)   # the search as measured, without the plane's hull
+  loc_12 <- bl_find_local_cf(bl_res, tgt, set_filters = no_hull, max_pairs = 1L, distance = "mahalanobis", verbose = FALSE)  # pinned to (1,2)
+  loc_op <- bl_find_local_cf(bl_res, tgt, set_filters = no_hull, distance = "mahalanobis", verbose = FALSE)                  # full search
   stopifnot(identical(as.integer(loc_12$best_pair), c(1L, 2L)),
             isTRUE(loc_12$solution_found), isTRUE(loc_op$solution_found))
   pkg_pair <- as.integer(loc_op$best_pair)

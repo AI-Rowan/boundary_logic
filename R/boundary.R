@@ -63,25 +63,7 @@
   best_idx
 }
 
-#' Filter polyline points to those inside a SpatialPolygons object
-#'
-#' @param Mxy n x 2 numeric matrix of (x, y) coordinates.
-#' @param poly A `SpatialPolygons` object, or any other object (returned as-is).
-#'
-#' @return n' x 2 matrix with only the rows inside `poly`.
-#' @keywords internal
-.poly_clip <- function(Mxy, poly) {
-  if (is.null(Mxy) || length(Mxy) == 0L)
-    return(matrix(numeric(0L), ncol = 2L))
-  if (!inherits(poly, "SpatialPolygons"))
-    return(as.matrix(Mxy))
-  inside <- sp::point.in.polygon(
-    Mxy[, 1L], Mxy[, 2L],
-    poly@polygons[[1L]]@Polygons[[1L]]@coords[, 1L],
-    poly@polygons[[1L]]@Polygons[[1L]]@coords[, 2L]
-  )
-  Mxy[inside > 0L, , drop = FALSE]
-}
+# .poly_clip() (used below) is defined in R/hull_utils.R.
 
 #' Detect whether a polyline is closed (first row equals last row)
 #'

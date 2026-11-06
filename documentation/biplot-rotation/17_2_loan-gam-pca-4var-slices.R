@@ -262,10 +262,12 @@ if (is.null(metric_inv))
 # colexicographically -- for j in 2..p, for i in 1..j-1, so (1,2) is always first.
 # It is the only supported way to force a plane, and it is what makes a
 # pinned-versus-selected comparison possible at all.
-tgt    <- bl_select_target(bl_res, target = bl_res$train_data[i, ])
-loc_12 <- bl_find_local_cf(bl_res, tgt, max_pairs = 1L, distance = "mahalanobis",
-                           verbose = FALSE, hull = FALSE)
-loc_op <- bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE, hull = FALSE)
+tgt     <- bl_select_target(bl_res, target = bl_res$train_data[i, ])
+no_hull <- set_filters(tgt, hull = FALSE)   # the search as measured, without the plane's hull
+loc_12  <- bl_find_local_cf(bl_res, tgt, set_filters = no_hull, max_pairs = 1L,
+                            distance = "mahalanobis", verbose = FALSE)
+loc_op  <- bl_find_local_cf(bl_res, tgt, set_filters = no_hull, distance = "mahalanobis",
+                            verbose = FALSE)
 
 if (!isTRUE(loc_12$solution_found) || !isTRUE(loc_op$solution_found))
   stop("bl_find_local_cf() found no counterfactual; every section from 12 on needs ",
@@ -301,7 +303,8 @@ if (ang_BC[2] < 5)
 # Reproducibility check (note Appendix A.2): the package's local search is
 # deterministic, so five repeat calls must agree. A disagreement is a regression.
 reps <- replicate(5L, paste(as.integer(
-  bl_find_local_cf(bl_res, tgt, distance = "mahalanobis", verbose = FALSE, hull = FALSE)$best_pair),
+  bl_find_local_cf(bl_res, tgt, set_filters = no_hull, distance = "mahalanobis",
+                   verbose = FALSE)$best_pair),
   collapse = ","))
 cat(sprintf("best_pair across 5 identical calls: %s\n",
             paste(unique(reps), collapse = " | ")))

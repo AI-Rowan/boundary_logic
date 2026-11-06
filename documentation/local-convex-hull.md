@@ -1,11 +1,13 @@
 # The convex hull on each rotated plane
 
 Date created: 2026-11-05
-Date last edited: 2026-11-05
+Date last edited: 2026-11-06
 
 This note explains why `bl_find_local_cf()` keeps only the boundary points inside the convex hull of
-the training data on each rotated plane (`hull = TRUE`, the default since 2026-11-05), how it does so,
-and what the rule changes on the Pima example of Paper 1 and on the loan harness. The decision is
+the training data on each rotated plane (`set_filters(hull = TRUE)`, the default since 2026-11-05),
+how it does so, and what the rule changes on the Pima example of Paper 1 and on the loan harness.
+Section 6 explains why the switch, and the one for the training ranges, sit in `set_filters()`
+(since 2026-11-06), and why a search without a filter object keeps both rules on. The decision is
 recorded in `documentation/methodology-changes/future-improvements-review.md` (item B10, round 4)
 and in the methodology note's section on the convex hull in the local search.
 
@@ -46,16 +48,26 @@ For each component pair, after the rotation:
 3. **The selection** is unchanged: the nearest valid vertex per pair, and the pair with the smallest
    distance by the thesis rule.
 
-The result stores `hull` (the argument) and `hull_polygon` (the winning plane's hull vertices). When no
-pair has a valid point, the message names the hull and says that `hull = FALSE` drops the rule.
+The result stores `hull` (whether the rule applied) and `hull_polygon` (the winning plane's hull
+vertices; since 2026-11-06 also when the rule is off, built after the search for the plot). When no
+pair has a valid point, the message names the hull and says that `set_filters(..., hull = FALSE)`
+drops the rule.
+
+**The plot.** `plot.bl_local_result()` colours the prediction grid only inside the winning plane's
+hull when the search applied it (`trim_to_hull`, 2026-11-06), as the global biplot colours only inside
+its hull (`bl_build_grid(calc_hull = TRUE)`): the coloured area is where the search could choose
+boundary points, and contour lines in the white area lie outside the hull. `trim_to_hull = TRUE`
+shows the hull of a search with the rule off; the Pima Figure 7(a) uses it to show the TP target's
+run 4, which has no counterfactual inside the hull, searched without it: its counterfactual is the
+point the hull removes.
 
 **Design choices** (Adriaan Rowan, 2026-11-05):
 
 | Choice | Decision | Reason |
 |---|---|---|
 | The points the hull is built from | The training data and the target | As Appendix A. The target always lies inside its own hull, so a target at the edge of the training cloud can still reach a counterfactual near it. |
-| A switch | `hull = TRUE` by default; `hull = FALSE` gives the earlier search exactly | The thesis rule by default, with the earlier results reproducible (the methodology note's measurement M6) |
-| The rotation scripts (`17_1` to `17_3`) | Pin `hull = FALSE` | Their measurements concern the rotation and the pair search, so the rotation note's numbers stay valid |
+| A switch | `hull = TRUE` by default; `hull = FALSE` gives the earlier search exactly. Since 2026-11-06 the switch is in `set_filters()` (§6) | The thesis rule by default, with the earlier results reproducible (the methodology note's measurement M6) |
+| The rotation scripts (`17_1` to `17_3`) | Pin `set_filters(tgt, hull = FALSE)` | Their measurements concern the rotation and the pair search, so the rotation note's numbers stay valid |
 | An enclosure rule for closed contours | None | The text requires only the hull for the local search (p.117) |
 
 **Off the plane.** The hull applies to the boundary points on the plane. The restored point of a
@@ -89,3 +101,64 @@ walkthrough quotes is reproduced with the hull on.
   every run of both targets).
 - The measurement M6 in `04_method-change-effects.R` records both settings for every run and target,
   and the sweep over the 79 test rows.
+
+## 6. The plausibility and feasibility switches in `set_filters()` (2026-11-06)
+
+**Where the rules run.** For each component pair, every opposing-class boundary segment on the
+rotated plane passes four filters in this order (`R/local_cf.R`, `bl_find_local_cf()`):
+
+| # | Filter | Thesis term | Switch |
+|---|---|---|---|
+| 1 | Inside the hull of the training data and the target on this plane (`.poly_clip()`, 2D) | plausibility (pp.116-117) | `set_filters(hull = TRUE)` |
+| 2 | The per-variable constraints (`.apply_actionability()`, X-space) | actionability (p.116) | the constraints in `set_filters()` |
+| 3 | Every feature within its training range (`get_filter_logical_vector()`, X-space) | feasibility (pp.116-117) | `set_filters(train_ranges = TRUE)` |
+| 4 | The model scores the point on the other side of the cutoff | not a constraint | always on |
+
+After the search, the restored `"fixed"` point and the rounded `"integer"` point lie off the plane, so
+they are checked against the training ranges (when that switch is on) but not the hull.
+
+**Why one place.** The thesis asks a counterfactual to be actionable, feasible and plausible (defined
+in §3.9.2, pp.88–90; applied on p.116), and drops the hull only when an unconstrained solution is
+acceptable (p.115). Holding all three in
+`set_filters()` follows that framing, gives the training ranges a switch they lacked (before, the only
+way off was to set `bl_result$train_ranges` to `NULL`), and makes the unconstrained counterfactual one
+call: `set_filters(tgt, hull = FALSE, train_ranges = FALSE)` with no per-variable constraint. The
+argument `bl_find_local_cf(hull = )` of 2026-11-05 was removed (version 0.2.0 was not yet tagged).
+
+**Why `set_filters = NULL` keeps both rules on.** The switches live in the `bl_filters` object, and a
+`NULL` has none, so the code must give `NULL` a meaning. The private `.filter_switches()` reads it as
+both on, for four reasons:
+
+1. **No result changes.** Before the move, a call without filters already applied both rules (the
+   hull by its own default, the ranges always). Reading `NULL` as both off would silently change every
+   such call wherever the nearest boundary point lies outside the plane's hull or outside a training
+   range: the loan harness's runs without filters (Steps 15 and 16, quoted in the walkthrough), the
+   vignette's and README's equivalents, the Pima runs without filters and the approximation-gap
+   experiment (`05_full-space-gap.R`, whose ratio is measured with the hull on and whose check that
+   every search point lies inside its plane's hull would fail).
+2. **The size of that change.** The hull alone moves 11 of the 79 Pima test targets (§4); the TP
+   target would go from pair (3,4) at 1.84 to pair (2,3) at 1.50, raising *Age* to 59.6, outside the
+   training data. Dropping the ranges as well can move more.
+3. **Consistency.** `set_filters(tgt)` with no constraint fills in both switches as `TRUE`. If `NULL`
+   meant both off, "no filter object" and "an empty filter object" would give different
+   counterfactuals for the same target.
+4. **The thesis.** Its counterfactual is the constrained one (p.117); the unconstrained one is the
+   stated exception (p.115), so it is the explicit opt-out.
+
+A `bl_filters` object built by hand or before the switches existed (no fields) is read the same way.
+
+**Checks (2026-11-06).** With the defaults, the loan harness, the rotation scripts `17_1` to `17_3`
+and the Pima pipeline give the same results as before the move.
+
+**What the switches change on the loan harness** (a driver run after the harness, 2026-11-06; the
+searches without actionability constraints):
+
+| Target | Default (both on) | `hull = FALSE` | `train_ranges = FALSE` | Both off |
+|---|---|---|---|---|
+| Step 10 test row | pair (3,4), √d²_M 0.5554 | the same | the same | the same |
+| Step 16 external applicant | pair (1,2), √d²_M 1.7026; credit score 489.44 | the same | pair (1,4), 0.8521; credit score 445.24 | pair (1,4), 0.4750; credit score 421.26 |
+
+The external applicant's credit score (420) lies below the training range (489 to 754). With the
+feasibility rule on, every counterfactual must raise it into range, and the nearest one sits at the
+range's lower end; without the rule the counterfactual leaves the credit score near 420, outside the
+training data, at under a third of the distance.

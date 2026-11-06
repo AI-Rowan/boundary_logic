@@ -30,5 +30,7 @@ indicates the sparse CF successfully flips the predicted class; a yellow
 (\code{"yellow2"}) cross indicates it does not.
 All \code{\link{plot.bl_local_result}} parameters are forwarded through
 \code{...}; the local summary is suppressed and replaced by a combined
-sparse CF summary.
+sparse CF summary. As there, the prediction grid is coloured only inside
+the convex hull on the plane when the search applied it
+(\code{trim_to_hull}).
 }

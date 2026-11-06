@@ -182,8 +182,8 @@ the distance depend on the plane chosen to display the move).
 - **Reading it:** the longer a variable's component, the more that variable contributes to the change needed to
   cross the boundary.
 
-**Standardisation.** To compare variables, each component is divided by "that variable's overall standard
-deviation". The thesis notes that outliers can distort that standard deviation.
+**Standardisation.** To compare variables, each component is divided by "the overall standard deviation of
+that variable" (p.103). The thesis notes that outliers can distort that standard deviation.
 
 **The per-variable total:**
 
@@ -372,8 +372,8 @@ All paths are relative to this file.
   - §4.6: robustness;
   - §4.6.1: Shapley versus the diagonal.
 - `../development/reference/review_section7_to_8.md`: the Phase 2 walkthrough on the loan harness.
-- **Thesis:** the final version of 27 February 2026 (`1 FINAL_ADRIAAN ROWAN_27022026.pdf`, outside the
-  repository; printed page = PDF page − 16). This note cited the 30 September 2025 draft until 2026-11-05.
+- **Thesis:** the final version of 27 February 2026 (`FINAL_ADRIAAN ROWAN_27022026.pdf`, in this folder;
+  printed page = PDF page − 16).
   - §3.2: Euclidean and Mahalanobis distance;
   - §4.2.2–4.2.3: variable importance and robustness;
   - §6.4: calibration from the distance.
