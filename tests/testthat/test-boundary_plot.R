@@ -42,3 +42,20 @@ test_that("with a diagonal W the plot leaves nothing out", {
 test_that("distance = 'euclidean' gives no Mahalanobis check", {
   expect_null(plot_quiet(bp_bnd, distance = "euclidean")$mahalanobis_check)
 })
+
+test_that("robustness is measured on the in-plane gap, as the plot's totals", {
+  # The per-variable distances use the in-plane gap (Z_obs - B_z) V_r^-1,
+  # not bl_find_boundary()'s B_x - x_obs, which also holds the observation's
+  # off-plane part (documentation/algorithms.md, finding F3).
+  mh  <- plot_quiet(bp_bnd)
+  tVr <- bp_res$tV[bp_res$proj_dims, , drop = FALSE]
+  gap <- (bp_bnd$Z_obs - bp_bnd$B_z) %*% tVr      # CVA: not standardised
+  expect_equal(unname(mh$vec_to_boundary_sd),
+               unname(sweep(gap, 2L, sqrt(diag(bp_res$metric)), "/")))
+  # bl_robustness() gives the same totals as the plot.
+  eu <- plot_quiet(bp_bnd, distance = "euclidean")
+  expect_equal(bl_robustness(bp_bnd)$sum_of_distance, mh$sum_of_distance)
+  expect_equal(bl_robustness(bp_bnd, distance = "euclidean")$sum_of_distance,
+               eu$sum_of_distance)
+  expect_equal(bl_robustness(bp_bnd)$robustness, mh$robustness)
+})

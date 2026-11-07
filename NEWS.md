@@ -2,6 +2,27 @@
 
 ## Breaking changes
 
+* The empty-region rule (thesis section 3.10, step 4: a boundary area that
+  contains no data is discarded) is judged on the training data, and applied
+  in both searches. In `bl_find_boundary()` a contour that is still closed
+  after the hull clip is kept only if it encloses training rows; before, the
+  rows being searched decided, so a row's counterfactual could depend on which
+  other rows were passed in `data` or `tdp`. `bl_find_local_cf()` now applies
+  the same rule on each rotated plane when the hull is on. On the loan harness
+  the global search keeps 18 contours instead of 12 on the reduced model (346
+  of 4,429 test counterfactuals move), and the constrained counterfactual of
+  test row 13 moves (an empty closed contour held its nearest boundary point);
+  on the Pima example of Paper 1 no global result and no run of either target
+  changes. The private helper `.encloses_data()` holds the rule. Decided by
+  Adriaan Rowan on 2026-11-06 (`documentation/algorithms.md`, finding F2).
+* `bl_find_local_cf()` builds each rotated plane's convex hull from the
+  training data alone; it included the target (as Appendix A of the thesis
+  does). A target outside the training data no longer enlarges the region its
+  counterfactual may come from: the loan harness's new applicant now gets a
+  counterfactual inside the training hull (credit score 534.92 instead of
+  489.44). `hull = FALSE` is unaffected. The stored `hull_polygon` follows.
+  Decided by Adriaan Rowan on 2026-11-06 (finding F4).
+
 * `bl_find_local_cf()` now applies the thesis's plausibility rule (section
   4.3.1): the counterfactual is selected from a local decision boundary within
   the convex hull of the training data. For each component pair, the convex
@@ -220,6 +241,33 @@
 
 ## Bug fixes and other improvements
 
+* `bl_find_local_cf()` clamps its grid scores to [0, 1], as `bl_build_grid()`
+  does, with one warning per call. A custom `predict_fn` returning values
+  outside [0, 1] gave missing colours, silently dropped cells, or stopped the
+  search with an error (finding F4).
+* `plot.bl_local_result()` (and so `plot.bl_sparse_result()`) widens its
+  window when the target or the counterfactual lies outside the training
+  points, so a new applicant beyond the training data is drawn; other plots
+  are unchanged.
+* `plot_biplotEZ(grid_col =)` splits the two-colour grid at the model's
+  cutoff, not at a fixed 0.5 (finding F6). `bl_build_grid()` no longer
+  computes the unused `inside_data`.
+* The documentation of `plot.bl_boundary()` and `bl_robustness()` says that
+  the variable importance and robustness measure the in-plane gap to the
+  boundary, as the thesis does, while `bl_find_boundary()`'s `dist_x` and
+  `dist_mahalanobis` also include the observation's part off the biplot plane
+  and are reported only (finding F3; no result changes).
+* The loan-default vignette is rewritten for package users. It follows the
+  development harness on the full data (it drew a 4,000-row subsample): the
+  same models, the five pruned variables, the refit on standardised features
+  with `bl_set_scaling()`, test row 13 with the harness's constraints, and the
+  new applicant converted with `bl_apply_scaling()`. Each step gives the code,
+  a table of the parameters that matter and how to read the output, and it
+  still ends with the SHAP comparison, now showing feature values in raw
+  units. It no longer calls `bl_robustness()`: the pruning reads the totals
+  `plot()` returns. The vignette is precomputed: `vignettes/precompile.R`
+  knits `Boundary_Logic_loan_default_workflow.Rmd.orig` into the shipped
+  `.Rmd` and its figures, so building the package runs no vignette code.
 * `.poly_clip()`, the internal hull filter, is defined once, in
   `R/hull_utils.R`. The copy in `R/boundary.R` was never used (the other
   replaced it at load time) and is removed. Results are unchanged.

@@ -1,0 +1,1297 @@
+---
+title: "Boundary Logic with Credit Data: Loan-Default Prediction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Boundary Logic with Credit Data: Loan-Default Prediction}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+<!-- This vignette is precomputed. The source is
+vignettes/Boundary_Logic_loan_default_workflow.Rmd.orig; vignettes/precompile.R
+knits it into Boundary_Logic_loan_default_workflow.Rmd and the figures in
+vignettes/figures/. Edit the .Rmd.orig and re-run precompile.R; never edit the
+knitted .Rmd by hand. -->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse   = TRUE,
+  comment    = "#>",
+  fig.width  = 7,
+  fig.height = 5,
+  fig.path   = "figures/loan-",
+  dpi        = 96
+)
+# Biplots are square: chunks with opts.label = "biplot" use a square figure,
+# and "biplot_wide" leaves room for the long horizontal labels of the
+# nine-feature biplots.
+knitr::opts_template$set(
+  biplot      = list(fig.width = 7,  fig.height = 7),
+  biplot_wide = list(fig.width = 10, fig.height = 7)
+)
+
+# The SHAP comparison needs two optional packages; every SHAP chunk is
+# guarded by this flag.
+has_shap <- requireNamespace("fastshap", quietly = TRUE) &&
+            requireNamespace("shapviz",  quietly = TRUE)
+
+# Number formats for the values quoted in the text.
+f2 <- function(x) formatC(x, format = "f", digits = 2)
+f3 <- function(x) formatC(x, format = "f", digits = 3)
+f4 <- function(x) formatC(x, format = "f", digits = 4)
+pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
+```
+
+## Overview
+
+**boundarylogic** explains a binary classifier with a biplot. It
+projects the training data onto a two-dimensional plane, scores a fine
+grid of points on that plane with the model, and draws the model's
+decision boundary there. Because every point on the plane maps back to
+the original features, the package can then answer two questions:
+
+-   **Globally:** how far is each observation from the decision
+    boundary, and along which variables? This ranks the variables.
+-   **Locally:** what is the smallest change to one observation that
+    would change the model's decision (a *counterfactual*), and which
+    of the changes matter?
+
+This vignette applies the whole workflow to a credit-risk model: an
+XGBoost classifier that predicts loan default. For each function it
+shows the call, the arguments that matter and how to read the output.
+It ends by comparing the explanations with SHAP for the same models.
+
+| Phase | Question | Main functions |
+|---|---|---|
+| 1. Global biplot | What does the model's decision boundary look like? | `bl_prepare_data()`, `bl_wrap_model()`, `bl_build_result()` |
+| 2. Global interpretation | How far is each applicant from the boundary, and which variables matter? | `bl_find_boundary()`, `plot()` of its result, `bl_surrogate()` |
+| 3. Local interpretation | What would have to change for one applicant? | `bl_select_target()`, `set_filters()`, `bl_find_local_cf()`, `bl_shapley()`, `bl_find_sparse_cf()` |
+
+**How to read the steps.** Each step gives the code, then a
+**Parameters** table with the arguments this vignette sets and the
+defaults that change the result (`?function` lists the rest), and then
+says how to read the output.
+
+> **About this vignette:** it is precomputed on the full data set. The
+> output shown was produced with boundarylogic
+> `r as.character(utils::packageVersion("boundarylogic"))` on
+> `r sub("^0", "", format(Sys.Date(), "%d %B %Y"))`.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{r load-pkg}
+library(boundarylogic)
+```
+
+The model is fitted with **xgboost**, which is installed with
+boundarylogic. The final section also uses **fastshap** and **shapviz**
+(optional; install them with
+`install.packages(c("fastshap", "shapviz"))`).
+
+------------------------------------------------------------------------
+
+## Phase 1: the global biplot
+
+### Step 1: load and encode the data
+
+The data set ships with the package (`?loan_data`): 45,000 personal
+loan applications with a binary outcome, `loan_status` (1 = default,
+0 = no default). A biplot draws every feature as a linear axis, so every
+feature must be numeric. The binary categories are coded 0/1. The three
+categories with more than two levels (`loan_intent`,
+`person_education` and `person_home_ownership`) are dropped in this
+example to keep the biplot readable.
+
+```{r step1-load}
+loan_raw <- read.csv(
+  system.file("extdata", "loan_data.csv", package = "boundarylogic")
+)
+
+loan_encoded <- loan_raw
+
+gender_map     <- c(female = 0, male = 1)
+education_map  <- c("High School" = 0, "Associate" = 1,
+                    "Bachelor" = 2, "Master" = 3, "Doctorate" = 4)
+ownership_map  <- c("MORTGAGE" = 0, "OTHER" = 1, "OWN" = 2, "RENT" = 3)
+intent_map     <- c("DEBTCONSOLIDATION" = 0, "EDUCATION" = 1,
+                    "HOMEIMPROVEMENT" = 2, "MEDICAL" = 3,
+                    "PERSONAL" = 4, "VENTURE" = 5)
+defaults_map   <- c("No" = 0, "Yes" = 1)
+
+loan_encoded$person_gender                  <- gender_map[loan_encoded$person_gender]
+loan_encoded$person_education               <- education_map[loan_encoded$person_education]
+loan_encoded$person_home_ownership          <- ownership_map[loan_encoded$person_home_ownership]
+loan_encoded$loan_intent                    <- intent_map[loan_encoded$loan_intent]
+loan_encoded$previous_loan_defaults_on_file <- defaults_map[loan_encoded$previous_loan_defaults_on_file]
+
+# Coerce all columns to double, so the training data and the prediction grid
+# share one type: read.csv() reads whole-number columns as integer, but the
+# grid is built as double.
+loan_encoded[] <- lapply(loan_encoded, as.numeric)
+
+str(loan_encoded)
+
+vars_to_remove <- c("loan_intent", "person_education", "person_home_ownership")
+loan_encoded <- loan_encoded[, setdiff(names(loan_encoded), vars_to_remove), drop = FALSE]
+```
+
+The columns kept:
+
+| Column | Meaning | Units or coding |
+|---|---|---|
+| `person_age` | Age of the applicant | years |
+| `person_gender` | Gender | 0 = female, 1 = male |
+| `person_income` | Annual income | USD |
+| `person_emp_exp` | Employment experience | years |
+| `loan_amnt` | Loan amount applied for | USD |
+| `loan_int_rate` | Interest rate of the loan | percent |
+| `loan_percent_income` | Loan amount as a fraction of annual income | fraction |
+| `cb_person_cred_hist_length` | Length of credit history | years |
+| `credit_score` | Credit score | points |
+| `previous_loan_defaults_on_file` | A prior default is on record | 0 = no, 1 = yes |
+| `loan_status` | Outcome | 1 = default, 0 = no default |
+
+------------------------------------------------------------------------
+
+### Step 2: an exploratory biplot, before any model
+
+A biplot of the data alone shows how the two outcomes separate and in
+which directions the variables point. `bl_prepare_data()` prepares the
+data; `bl_build_result()` without a model returns a model-free result
+that `plot()` draws coloured by the true class.
+
+```{r step2-explore, opts.label = "biplot_wide", fig.alt = "PCA biplot of all 45,000 applications coloured by loan status, with one calibrated axis per feature."}
+bl_dat_exp <- bl_prepare_data(
+  data           = loan_encoded,
+  class_col      = "loan_status",
+  train_fraction = 1,
+  seed           = 121L,
+  hull_fraction  = 1
+)
+
+bl_proj <- bl_build_result(
+  bl_data = bl_dat_exp,
+  method  = "PCA",
+  title   = "Loan default -- exploratory PCA biplot (all data)"
+)
+
+plot(
+  bl_proj,
+  label_dir         = "Paral",
+  label_offset_var  = c("person_age", "person_gender", "person_income",
+                        "person_emp_exp", "loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "cb_person_cred_hist_length",
+                        "credit_score", "previous_loan_defaults_on_file"),
+  label_offset_dist = c(0, 0, 0.5, 1, 0.5, 1, 0, 1.5, 0, 0)
+)
+```
+
+**Parameters: `bl_prepare_data()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `class_col` | (required) | `"loan_status"` | The outcome column; it is renamed `class` |
+| `target_class` | `NULL` | not set | The class value coded 1; `NULL` needs a 0/1 column, as here |
+| `feature_cols` | `NULL` | not set | The features; `NULL` uses every other column |
+| `train_fraction` | `0.8` | `1` | Share of rows in the training split; `1` uses every row (no test split) |
+| `seed` | `121L` | `121L` | Seed for the train/test split |
+| `hull_fraction` | `1` | `1` | Removes the training rows outside the convex hull holding this fraction of them; `1` removes none |
+
+**Parameters: `bl_build_result()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `bl_model` | `NULL` | not set | Without a model the result holds only the projection: no grid or boundary |
+| `method` | `"PCA"` | `"PCA"` | The biplot: `"PCA"` (principal components) or `"CVA"` (canonical variates) |
+| `standardise` | `TRUE` | default | Standardises the features before PCA (ignored for CVA) |
+
+**Parameters: `plot()` of a biplot** (`?plot_biplotEZ`)
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `label_dir` | `"Paral"` | `"Paral"` | Direction of the axis labels: `"Paral"`, `"Hor"` or `"Orthog"` |
+| `label_offset_var`, `label_offset_dist` | `0L`, `1.5` | all ten features | Moves the named axis labels outwards by the paired distance, to stop them overlapping |
+
+**Reading the biplot.** Each point is an application, red for default
+and blue for no default. Each straight line is the axis of one feature,
+calibrated in that feature's units: the value of a point on a feature
+is read by dropping a perpendicular from the point onto that axis.
+Axes that point the same way are positively correlated. A few extreme
+applications lie far from the others and squeeze the main cloud into a
+corner; Step 4 removes such extreme rows from the training data.
+
+------------------------------------------------------------------------
+
+### Step 3: domain filter
+
+The model is built for applicants with **no prior default on file**.
+After the filter, `previous_loan_defaults_on_file` is constant, so it is
+left out of the features.
+
+```{r step3-filter}
+loan_filtered <- loan_encoded[loan_encoded$previous_loan_defaults_on_file == 0, ]
+
+feature_cols <- setdiff(
+  names(loan_filtered),
+  c("loan_status", "previous_loan_defaults_on_file")
+)
+
+cat("Retained rows:", nrow(loan_filtered), "\n")
+cat("Features:", paste(feature_cols, collapse = ", "), "\n")
+```
+
+------------------------------------------------------------------------
+
+### Steps 4-6: split the data, fit the model, build the biplot
+
+**Step 4** splits the `r format(nrow(loan_filtered), big.mark = ",")`
+applications 80/20 into training and test rows and removes the
+outermost 10% of the training rows (`hull_fraction = 0.9`): the rows
+outside the convex hull that holds 90% of them, on a two-dimensional
+PCA view of the standardised features. Extreme rows would otherwise
+stretch the biplot and its prediction grid. The test rows are never
+filtered.
+
+```{r step4-prepare}
+bl_dat <- bl_prepare_data(
+  data           = loan_filtered,
+  class_col      = "loan_status",
+  feature_cols   = feature_cols,
+  train_fraction = 0.8,
+  seed           = 121L,
+  hull_fraction  = 0.9
+)
+print(bl_dat)
+```
+
+If your data is already split, for example by a cross-validation
+framework, pass the two splits to `bl_wrap_data()` instead. It does not
+filter; `bl_filter_outliers()` can be applied to its result.
+
+**Step 5** fits the model and wraps it. boundarylogic works with a model
+fitted anywhere: `bl_wrap_model()` records the model, its features and a
+way to score new data. Here the XGBoost model is wrapped as
+`model_type = "custom"` with a `predict_fn`, a function of the model and
+a data frame that returns one probability of class 1 per row. Any model
+can be wrapped this way.
+
+```{r step5-model}
+xgb_data <- xgboost::xgb.DMatrix(
+  data  = as.matrix(bl_dat$train_data[, bl_dat$var_names]),
+  label = bl_dat$train_data$class
+)
+xgb_fit <- xgboost::xgb.train(
+  params  = list(objective     = "binary:logistic",
+                 eval_metric   = "logloss",
+                 max_depth     = 3,
+                 learning_rate = 0.1),
+  data    = xgb_data,
+  nrounds = 200,
+  verbose = 0
+)
+
+bl_mod <- bl_wrap_model(
+  model      = xgb_fit,
+  model_type = "custom",
+  var_names  = bl_dat$var_names,
+  predict_fn = function(m, new_data) {
+    mat <- xgboost::xgb.DMatrix(as.matrix(new_data))
+    as.numeric(predict(m, newdata = mat))
+  },
+  train_data = bl_dat$train_data
+)
+print(bl_mod)
+```
+
+**Parameters: `bl_wrap_model()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `model_type` | (required) | `"custom"` | `"custom"` scores with `predict_fn`; the built-in types (`"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`, `"RForest"`, `"XGB"`) use their own prediction call (Step 5b shows `"XGB"`) |
+| `var_names` | (required) | the nine features | The features the model was trained on, in order |
+| `predict_fn` | `NULL` | the function above | `function(model, new_data)` returning probabilities of class 1; required for `"custom"` |
+| `train_data` | `NULL` | the training split | Used only to report the training accuracy and Gini |
+| `cutoff` | `0.5` | default | The decision threshold. Keep 0.5: the method assumes it |
+
+For a quick baseline, `bl_fit_model()` fits a GLM, SVM, neural network
+or random forest directly.
+
+**Step 6** builds the biplot of the model. `bl_build_result()` projects
+the training data, lays an `m` × `m` grid over the plane, maps every
+grid point back to the features, scores it with the model and draws the
+decision boundary where the predicted probability crosses the cutoff.
+
+```{r step6-build}
+bl_results <- bl_build_result(
+  bl_data  = bl_dat,
+  bl_model = bl_mod,
+  method   = "CVA",
+  # The trailing "\n" lifts the title clear of the stacked axis labels below.
+  title    = "Loan default (no prior default) -- XGB, CVA biplot\n",
+  b_margin = 0.001
+)
+print(bl_results)
+```
+
+**Parameters: `bl_build_result()`, with a model**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `method` | `"PCA"` | `"CVA"` | CVA separates the model's four outcome groups (true and false positives and negatives) as well as two dimensions allow, so the boundary shows clearly |
+| `b_margin` | `0.001` | `0.001` | The boundary is drawn from the contours at `cutoff` ± `b_margin` (0.499 and 0.501) |
+| `m` | `200L` | default | Grid resolution: 200 × 200 scored points |
+| `cva_classes` | `NULL` | default | With a model, CVA uses the four outcome groups (TP, TN, FP, FN) |
+
+```{r step6-biplot, opts.label = "biplot_wide", fig.alt = "CVA biplot of the training data coloured by outcome group, over the model's predicted probability, with the decision boundary."}
+plot(
+  bl_results,
+  label_dir         = "Hor",
+  label_offset_var  = c("loan_amnt", "credit_score"),  # lift two labels
+  label_offset_dist = c(1, 1)                          # off their neighbours
+)
+```
+
+**Reading the model biplot.** The background colour is the model's
+predicted probability over the plane, and the black line is the
+decision boundary. The colour is drawn only inside the convex hull of
+the training data, the region the data supports. The training points
+are coloured by outcome group: true positive red, true negative blue,
+false positive purple, false negative orange.
+
+New rows are drawn on the biplot with `bl_project_points()`, here the
+test split. `filter_to_polygon = TRUE` drops the rows that project
+outside the training hull.
+
+```{r step6-test, opts.label = "biplot_wide", fig.alt = "The CVA biplot with the test applications projected onto it."}
+test_pts <- bl_project_points(bl_results$test_data, bl_results,
+                              filter_to_polygon = TRUE)
+plot(bl_results, points = test_pts,
+     label_offset_var  = c("loan_amnt", "credit_score",
+                           "cb_person_cred_hist_length", "person_age"),
+     label_offset_dist = c(1, 1, 1, 2))
+```
+
+**Parameters: `bl_project_points()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `filter_to_polygon` | `FALSE` | `TRUE` | Drops rows that project outside the training hull |
+| `filter_to_train_ranges` | `FALSE` | default | Drops rows with a feature outside its training range |
+
+------------------------------------------------------------------------
+
+## Phase 2: global interpretation
+
+### Step 7: the nearest boundary point of every test applicant
+
+`bl_find_boundary()` finds, for each test applicant, the nearest point
+on the decision boundary in the biplot and maps it back to the
+features. This is the applicant's *global counterfactual*. The search
+uses only the boundary inside the training hull, and a closed boundary
+line only if it encloses training rows, so an applicant's result does
+not depend on which other applicants are searched with it. Boundary
+points with a feature outside its training range are kept and counted
+in a message. The distances it reports (`dist_x`, `dist_mahalanobis`)
+are for information: the variable importance below is measured along
+the biplot plane.
+
+```{r step7-boundary}
+bl_bnd <- bl_find_boundary(bl_results)
+print(bl_bnd)
+```
+
+**Parameters: `bl_find_boundary()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `data` | `bl_result$test_data` | default | The rows to search for; `bl_results$train_data` searches the training rows |
+| `tdp` | `NULL` | default | Row indices of `data` to process; `NULL` processes all |
+
+`plot()` of the result splits each applicant's distance to its boundary
+point into one signed distance per variable. It draws them, prints a
+summary and returns the per-variable totals invisibly.
+
+```{r step7-jitter, fig.alt = "Jitter plot of the standardised distance to the boundary per variable and test applicant, coloured by outcome group."}
+bnd_imp <- plot(bl_bnd)
+```
+
+```{r step7-boxplot, fig.alt = "Box plots of the standardised distance to the boundary per variable and outcome group."}
+plot(bl_bnd, type = "boxplot")
+```
+
+**Parameters: `plot()` of a boundary result** (`?plot.bl_boundary`)
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `type` | `"jitter"` | `"jitter"`, then `"boxplot"` | One point per applicant and variable, or box plots per outcome group |
+| `distance` | `"auto"` | default | How each variable's distance is standardised: under CVA by its within-class standard deviation (`"mahalanobis"`), under PCA by its total standard deviation (`"euclidean"`) |
+
+**Reading the plot.** Each row is a variable. The label gives its total
+absolute standardised distance over all test applicants, and the rows
+are sorted from the smallest total (bottom) to the largest (top). A
+large total means the variable carries much of the distance to the
+boundary: it matters more for the decision. The sign shows on which
+side of the boundary an applicant lies along that variable. The
+console summary repeats the totals and adds a *Mahalanobis check*: the
+per-variable distances ignore the correlations between the variables,
+so the check compares their summed squares with the full squared
+Mahalanobis distance. Here they fall short of it by
+`r pct(bnd_imp$mahalanobis_check$pct / 100)`.
+
+```{r step7-claims, include = FALSE}
+stopifnot(bnd_imp$mahalanobis_check$pct > 0)
+```
+
+To see one applicant's global counterfactual, click it on the biplot
+with `bl_pick_point()` in an interactive session (press Esc to stop).
+`bl_bnd` holds one row per test row, so pick from the test data:
+
+```{r step7-pick, eval = FALSE}
+bl_pick_point(bl_results, data = bl_results$test_data, bl_boundary = bl_bnd)
+```
+
+------------------------------------------------------------------------
+
+### Prune the least important variables
+
+The per-variable totals rank the variables. Sorted from the weakest:
+
+```{r prune}
+var_imp <- sort(bnd_imp$sum_of_distance)   # ascending: weakest first
+print(round(var_imp, 2))
+
+vars_to_drop <- c("person_gender", "person_emp_exp",
+                  "cb_person_cred_hist_length", "person_income", "person_age")
+
+feature_cols_v2 <- setdiff(bl_dat$var_names, vars_to_drop)
+cat("Retained features:", paste(feature_cols_v2, collapse = ", "), "\n")
+```
+
+```{r prune-claims, include = FALSE}
+# Statements in the text below; the knit stops if one no longer holds.
+weakest4 <- names(var_imp)[1:4]
+stopifnot(
+  setequal(weakest4, c("person_gender", "person_emp_exp",
+                       "cb_person_cred_hist_length", "person_age")),
+  var_imp[["person_income"]] > var_imp[["credit_score"]],
+  names(var_imp)[length(var_imp)] == "loan_int_rate"
+)
+```
+
+The ranking guides the choice: the four weakest variables are dropped.
+Two judgements override it:
+
+-   `person_income` is dropped although it outranks `credit_score`
+    (`r f2(var_imp[["person_income"]])` against
+    `r f2(var_imp[["credit_score"]])`). `loan_percent_income` is
+    `loan_amnt / person_income`, so income adds little once both loan
+    variables are kept.
+-   `credit_score` is kept because an applicant can act on it (Step 10).
+
+The full model's training accuracy is `r f4(bl_mod$accuracy)` (Gini
+`r f4(bl_mod$gini)`).
+
+------------------------------------------------------------------------
+
+## Refit on the reduced feature set (Steps 4b-6b)
+
+The pipeline is rebuilt on the four kept variables. This time the
+features are **standardised** before the model is fitted, as many
+models need (XGBoost does not, but the example shows the pattern):
+
+-   The split and the hull filter run on the raw data, with the same seed,
+    so the training and test rows are as before (the hull filter
+    standardises internally, so it gives the same result on raw or
+    standardised data). Only the rows the hull removes differ, because
+    the hull is now computed on four features.
+-   The means and standard deviations come from the **training rows
+    only** and are applied to both splits, so no information leaks from
+    the test rows.
+-   `bl_set_scaling()` records them, so every plot and print shows
+    values in the original units (USD, percent, points). It changes
+    only what is displayed: the model, the projection and the grid all
+    work in z-scores.
+
+```{r step4b-prepare}
+bl_dat_v2 <- bl_prepare_data(
+  data           = loan_filtered,
+  class_col      = "loan_status",
+  feature_cols   = feature_cols_v2,
+  train_fraction = 0.8,
+  seed           = 121L,
+  hull_fraction  = 0.9
+)
+
+# Standardisation fitted on the training rows only
+train_scl  <- scale(bl_dat_v2$train_data[, feature_cols_v2])
+scl_center <- attr(train_scl, "scaled:center")
+scl_scale  <- attr(train_scl, "scaled:scale")
+
+# Apply the training transform to both splits
+bl_dat_v2$train_data[, feature_cols_v2] <- train_scl
+bl_dat_v2$test_data[,  feature_cols_v2] <-
+  scale(bl_dat_v2$test_data[, feature_cols_v2],
+        center = scl_center, scale = scl_scale)
+
+# Record the transform, for raw-unit axes and printouts
+bl_dat_v2 <- bl_set_scaling(bl_dat_v2,
+                            center = scl_center,
+                            scale  = scl_scale,
+                            method = "z-score")
+```
+
+**Parameters: `bl_set_scaling()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `center`, `scale` | (required) | the training means and SDs | The transform `standardised = (raw - center) / scale`, one value per feature |
+| `method` | `"z-score"` | `"z-score"` | A label, for reference only |
+
+The reduced model uses the built-in `"XGB"` type: the model is passed as
+`list(model = <booster>, features = <feature names>)` and needs no
+`predict_fn`.
+
+```{r step5b-model}
+xgb_data_v2 <- xgboost::xgb.DMatrix(
+  data  = as.matrix(bl_dat_v2$train_data[, bl_dat_v2$var_names]),
+  label = bl_dat_v2$train_data$class
+)
+xgb_fit_v2 <- xgboost::xgb.train(
+  params  = list(objective     = "binary:logistic",
+                 eval_metric   = "logloss",
+                 max_depth     = 3,
+                 learning_rate = 0.1),
+  data    = xgb_data_v2,
+  nrounds = 200,
+  verbose = 0
+)
+bl_mod_v2 <- bl_wrap_model(
+  model      = list(model = xgb_fit_v2, features = bl_dat_v2$var_names),
+  model_type = "XGB",
+  var_names  = bl_dat_v2$var_names,
+  train_data = bl_dat_v2$train_data
+)
+print(bl_mod_v2)
+```
+
+The reduced model's training accuracy is `r f4(bl_mod_v2$accuracy)`
+(Gini `r f4(bl_mod_v2$gini)`), against `r f4(bl_mod$accuracy)` for the
+nine-feature model.
+
+```{r step6b-build, opts.label = "biplot", fig.alt = "CVA biplot of the reduced model, with axes in the original units."}
+bl_results_v2 <- bl_build_result(
+  bl_data  = bl_dat_v2,
+  bl_model = bl_mod_v2,
+  method   = "CVA",
+  title    = "Loan default -- XGB, reduced features, CVA biplot",
+  b_margin = 0.01
+)
+print(bl_results_v2)   # "Axis units : raw (z-score scaling stored)"
+
+plot(bl_results_v2)
+```
+
+This build sets `b_margin = 0.01`, so the boundary is drawn from the
+contours at 0.49 and 0.51. The axes read in the original units although
+the model works in z-scores.
+
+```{r step6b-test, opts.label = "biplot", fig.alt = "The reduced-model biplot with the test applications."}
+test_pts_v2 <- bl_project_points(bl_results_v2$test_data, bl_results_v2)
+plot(bl_results_v2, points = test_pts_v2)
+```
+
+------------------------------------------------------------------------
+
+## Phase 2 on the reduced model
+
+### Step 7b: distance to the boundary
+
+```{r step7b-boundary}
+bl_bnd_v2 <- bl_find_boundary(bl_results_v2)
+print(bl_bnd_v2)
+```
+
+```{r step7b-jitter, fig.alt = "Jitter plot of the distance to the boundary for the four kept variables."}
+plot(bl_bnd_v2)
+```
+
+```{r step7b-boxplot, fig.alt = "Box plots of the distance to the boundary for the four kept variables."}
+plot(bl_bnd_v2, type = "boxplot")
+```
+
+### Steps 8 and 8b: how faithful is the biplot? `bl_surrogate()`
+
+The biplot shows the model in two dimensions, so it can only
+approximate it. `bl_surrogate()` measures how well. It classifies each
+training row by its position in the biplot alone, by the side of the
+nearest boundary contour, without calling the model, and reports how
+often that agrees with the model's own class. A higher agreement means
+the biplot represents the model more faithfully.
+
+```{r step8-surrogate, opts.label = "biplot_wide", fig.alt = "Surrogate biplot of the nine-feature model: each region shows the class the biplot assigns."}
+bl_surr <- bl_surrogate(bl_results)
+print(bl_surr)
+plot(bl_surr,
+     label_offset_var  = c("loan_amnt", "credit_score",
+                           "cb_person_cred_hist_length", "person_age"),
+     label_offset_dist = c(1, 1, 1, 2))
+```
+
+```{r step8b-surrogate, opts.label = "biplot", fig.alt = "Surrogate biplot of the reduced model."}
+bl_surr_v2 <- bl_surrogate(bl_results_v2)
+print(bl_surr_v2)
+plot(bl_surr_v2,
+     label_dir         = "Paral",
+     label_offset_var  = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0.5, 0, 0),
+     ticks_v           = 5)
+```
+
+The biplot agrees with the model on
+`r pct(bl_surr$accuracy_vs_model)` of the training rows for the
+nine-feature model and on `r pct(bl_surr_v2$accuracy_vs_model)` for the
+reduced model: with fewer variables, two dimensions hold more of the
+model.
+
+**Parameters: `bl_surrogate()` and its plot**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `data` | `bl_result$train_data` | default | The rows to classify |
+| `ticks_v` | `1L` | `5L` (8b) | Number of tick marks on every axis; `ticks_var` and `ticks_n` set it per axis |
+
+------------------------------------------------------------------------
+
+## Phase 3: local interpretation of one applicant
+
+All of Phase 3 uses the reduced model, `bl_results_v2`.
+
+### Step 9: choose the applicant
+
+`bl_predict()` scores the test rows and labels each with its outcome
+group.
+
+```{r step9-predict}
+pred_summary <- bl_predict(bl_results_v2)
+head(pred_summary)
+
+tdp <- 13
+pred_summary[tdp, ]
+```
+
+```{r step9-claims, include = FALSE}
+stopifnot(pred_summary$confusion[tdp] == "TN")
+```
+
+Test row `r tdp` is a **true negative**: the applicant did not default,
+and the model predicts a probability of default of
+`r f3(pred_summary$pred_prob[tdp])`. The question is *what would have
+to change for the model to predict default?* It shows how far this
+applicant is from being declined. False negatives (defaulters the model
+clears) are another natural choice of target.
+
+```{r step9-plot, opts.label = "biplot", fig.alt = "The reduced-model biplot with test row 13 marked."}
+target_value <- bl_results_v2$test_data[tdp, ]
+
+plot(
+  bl_results_v2,
+  plot_points       = FALSE,          # hide the training points
+  target_point      = target_value,
+  target_label      = tdp,
+  label_dir         = "Paral",
+  label_offset_var  = c("loan_amnt", "loan_int_rate",
+                        "loan_percent_income", "credit_score"),
+  label_offset_dist = c(0, 0.5, 0, 0),
+  ticks_v           = 3
+)
+```
+
+**Parameters: `plot()` with a target**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `plot_points` | `TRUE` | `FALSE` | Hides the training (or `points`) rows |
+| `target_point`, `target_label` | `NULL` | row 13 | Marks one row and labels it |
+| `ticks_v` | `1L` | `3L` | Tick marks per axis |
+
+In an interactive session, clicking the target draws the arrow to its
+global counterfactual from Step 7b:
+
+```{r step9-pick, eval = FALSE}
+bl_pick_point(bl_results_v2, data = bl_results_v2$test_data,
+              bl_boundary = bl_bnd_v2)
+```
+
+------------------------------------------------------------------------
+
+### Step 10: the target and its constraints
+
+`bl_select_target()` takes the applicant: a row index into the test data
+(or into `data =`), or a one-row data frame (Step 16). It records the
+features, the prediction and the true class.
+
+```{r step10-target}
+tgt <- bl_select_target(bl_results_v2, target = tdp)
+print(tgt)
+```
+
+A counterfactual is useful only if the changes it asks for are possible.
+`set_filters()` holds the three rules a counterfactual must meet:
+
+-   **Actionability:** per-variable constraints, named after the
+    variables.
+-   **Plausibility** (`hull = TRUE`): the counterfactual lies inside the
+    convex hull of the training data on the plane the search uses, and a
+    closed boundary line counts only if it encloses training data.
+-   **Feasibility** (`train_ranges = TRUE`): every feature stays within
+    its training range.
+
+```{r step10-filters}
+flt <- set_filters(
+  tgt,
+  loan_amnt     = "fixed",                 # the amount applied for stays
+  loan_int_rate = "increase",              # may only rise
+  credit_score  = c("increase", "integer"), # may only rise, in whole points
+  hull          = TRUE,
+  train_ranges  = TRUE
+)
+print(flt)
+```
+
+**The constraints `set_filters()` accepts**
+
+| Constraint | Meaning |
+|---|---|
+| `"increase"` | The counterfactual value is at least the observed value |
+| `"decrease"` | The counterfactual value is at most the observed value |
+| `"fixed"` | The feature keeps its observed value. The search allows it to move by up to 0.5 model units (a point on the two-dimensional boundary rarely holds a feature exactly), then restores the observed value and re-checks the prediction. If the restored point no longer crosses the boundary, there is no counterfactual |
+| `c(min, max)` | The counterfactual value lies in this range, **in model units** (z-scores for `bl_results_v2`; convert with `bl_apply_scaling()`) |
+| `"integer"` | A whole number in the original units (a count or a score), alone or combined: `c("increase", "integer")`, `list(c(min, max), "integer")`. The counterfactual is rounded after the search and re-checked |
+| `hull = FALSE`, `train_ranges = FALSE` | Drop the plausibility or the feasibility rule |
+
+A variable that is not named can change freely. Only variables in the
+model can be named.
+
+------------------------------------------------------------------------
+
+### Step 11: the local counterfactual, `bl_find_local_cf()`
+
+`bl_find_local_cf()` searches for the nearest point across the decision
+boundary that meets the constraints:
+
+1.  For each pair of canonical components, it rotates the biplot so the
+    plane passes through the target.
+2.  It scores a grid on that plane and finds the boundary.
+3.  It keeps the boundary points inside the hull on that plane, then
+    those that meet the actionability constraints and the training
+    ranges, and that the model scores on the other side of the cutoff.
+4.  It takes the nearest of them, and over all the pairs the one
+    nearest to the target in the original features (under CVA, by the
+    Mahalanobis distance).
+5.  It restores the `"fixed"` features and rounds the `"integer"` ones,
+    and checks that the adjusted point still crosses the boundary.
+
+The progress messages list the distance found on each pair.
+
+```{r step11-local}
+bl_local <- bl_find_local_cf(
+  bl_result   = bl_results_v2,
+  set_filters = flt,
+  bl_target   = tgt
+)
+print(bl_local)
+```
+
+```{r step11-claims, include = FALSE}
+cf_raw <- function(x) {
+  sc <- bl_results_v2$scaling
+  v  <- if (is.matrix(x)) x[1, ] else unlist(x[1, ])
+  v[names(sc$center)] * sc$scale + sc$center
+}
+obs_raw <- cf_raw(tgt$x_obs)
+cf_v    <- cf_raw(bl_local$bl_counterfactual$x_cf)
+stopifnot(
+  bl_local$solution_found,
+  abs(cf_v[["loan_amnt"]] - obs_raw[["loan_amnt"]]) < 1e-6,
+  cf_v[["loan_int_rate"]] > obs_raw[["loan_int_rate"]],
+  abs(cf_v[["credit_score"]] - round(cf_v[["credit_score"]])) < 1e-6,
+  cf_v[["credit_score"]] > obs_raw[["credit_score"]]
+)
+```
+
+**Parameters: `bl_find_local_cf()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `set_filters` | `NULL` | `flt` | The constraints. `NULL` means no actionability constraint, with the hull and the training ranges still applied |
+| `max_pairs` | `21L` | default | Component pairs searched; 21 covers every pair for up to 7 features (6 here) |
+| `m` | `200L` | default | Grid resolution on each plane |
+| `distance` | `"auto"` | default | How the pairs are compared: Mahalanobis under CVA, Euclidean under PCA |
+| `verbose` | `TRUE` | default | Prints the progress messages |
+
+**Reading the result.** The counterfactual raises the interest rate
+from `r f2(obs_raw[["loan_int_rate"]])`% to
+`r f2(cf_v[["loan_int_rate"]])`% and the credit score from
+`r round(obs_raw[["credit_score"]])` to `r round(cf_v[["credit_score"]])`,
+keeps the loan amount, and the model then predicts
+`r f3(bl_local$B_pred)`: across the cutoff. The table shows each
+feature's observed and counterfactual value, the change and the
+constraint, in the original units. The notes explain what happened to
+the fixed and the integer features.
+
+------------------------------------------------------------------------
+
+### Step 12: the local biplot
+
+`plot()` of the result draws the rotated plane that gave the
+counterfactual: the target (filled circle), the counterfactual (cross)
+and an arrow between them. As on the global biplot, the prediction
+colour is drawn only inside the hull on this plane, the region the
+search could use.
+
+```{r step12-plot, opts.label = "biplot", fig.alt = "Local biplot on the rotated plane, with an arrow from test row 13 to its counterfactual across the decision boundary."}
+plot(bl_local,
+     label_dir         = "Paral",
+     label_offset_var  = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 1, 0),
+     ticks_var         = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     ticks_n           = c(4, 5, 5, 5))
+```
+
+**Parameters: `plot()` of a local result** (`?plot.bl_local_result`)
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `ticks_var`, `ticks_n` | `0L`, `5L` | all four, `c(4, 5, 5, 5)` | Tick marks per named axis, paired by position |
+| `trim_to_hull` | `NULL` | default | Colours the grid only inside the hull when the search used it |
+| `plot_points` | `FALSE` | default | `TRUE` adds the training points |
+
+------------------------------------------------------------------------
+
+### Step 13: which changes matter? `bl_shapley()`
+
+The move from the target to the counterfactual changes several features
+at once. `bl_shapley()` splits the change in the predicted probability
+among them, with Shapley values, and labels each feature:
+
+-   **Supports:** its change moves the prediction towards the boundary.
+-   **Contradicts:** its change moves the prediction away from it.
+-   **No effect:** its change does not move the prediction.
+
+```{r step13-shapley, fig.alt = "Bar chart of the Shapley value of each feature's change, labelled observed to counterfactual."}
+bl_shapley_values <- bl_shapley(bl_local)
+print(bl_shapley_values)
+plot(bl_shapley_values)
+```
+
+The labels read `variable: observed -> counterfactual`. The values sum
+to the change in the prediction, from
+`r f3(bl_shapley_values$pred_prob)` to
+`r f3(bl_shapley_values$pred_boundary)`. With up to 14 features the
+Shapley values are exact; above that, `bl_shapley()` estimates them from
+`approx_perm` random permutations (set `seed` to repeat them).
+
+------------------------------------------------------------------------
+
+### Step 14: the sparse counterfactual, `bl_find_sparse_cf()`
+
+A counterfactual that changes fewer features is easier to act on.
+`bl_find_sparse_cf()` keeps every Contradicts, No effect and `"fixed"`
+feature at its observed value. It changes the Supports features one at a
+time, largest Shapley value first, re-scores the model after each, and
+stops as soon as the prediction crosses the boundary.
+
+```{r step14-sparse, opts.label = "biplot", fig.alt = "Local biplot of the sparse counterfactual for test row 13."}
+bl_sparse <- bl_find_sparse_cf(bl_shapley_values)
+print(bl_sparse)
+plot(bl_sparse,
+     new_title         = "Sparse counterfactual, test row 13",
+     label_offset_var  = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 1, 0),
+     ticks_var         = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     ticks_n           = c(4, 5, 5, 5))
+```
+
+```{r step14-claims, include = FALSE}
+stopifnot(bl_sparse$solution_valid,
+          identical(bl_sparse$sparse_path$variable, "loan_int_rate"))
+```
+
+The path shows the steps: raising the interest rate alone gives
+`r f2(bl_sparse$sparse_path$pred[1])`, already across the cutoff, so the
+search stops there. The loan-to-income ratio stays at its observed value
+although it supports the move, and the credit score, which had no effect,
+does too. `solution_valid = TRUE` confirms that the sparse counterfactual
+changes the prediction.
+
+------------------------------------------------------------------------
+
+### Step 15: without actionability constraints
+
+Without a `set_filters()` object, the search applies no actionability
+constraint but keeps the hull and the training ranges. Comparing it
+with Step 11 shows what the constraints cost.
+`set_filters(tgt, hull = FALSE, train_ranges = FALSE)` drops those two
+rules as well and gives the unconstrained counterfactual.
+
+```{r step15-local, opts.label = "biplot", fig.alt = "Local biplot of the counterfactual without actionability constraints."}
+bl_local_free <- bl_find_local_cf(bl_results_v2, tgt)
+print(bl_local_free)
+plot(bl_local_free,
+     label_dir         = "Paral",
+     label_offset_var  = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 0, 1),
+     ticks_var         = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     ticks_n           = c(4, 10, 10, 10))
+```
+
+```{r step15-shapley, fig.alt = "Shapley values of the counterfactual without actionability constraints."}
+bl_shap_free   <- bl_shapley(bl_local_free)
+bl_sparse_free <- bl_find_sparse_cf(bl_shap_free)
+print(bl_sparse_free)
+plot(bl_shap_free)
+```
+
+```{r step15-sparse, opts.label = "biplot", fig.alt = "Local biplot of the sparse counterfactual without actionability constraints."}
+plot(bl_sparse_free,
+     label_dir         = "Paral",
+     label_offset_var  = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     label_offset_dist = c(0, 0, 0, 1),
+     ticks_var         = c("loan_amnt", "loan_int_rate",
+                           "loan_percent_income", "credit_score"),
+     ticks_n           = c(4, 10, 10, 10))
+```
+
+Without constraints the counterfactual also raises the loan amount and
+lowers the credit score, changes the constraints rule out, and it lies
+nearer the target (`r f2(sqrt(bl_local_free$dist_mahalanobis))` against
+`r f2(sqrt(bl_local$dist_mahalanobis))`). Its sparse counterfactual
+changes the interest rate and the loan-to-income ratio.
+
+```{r step15-claims, include = FALSE}
+free_v <- cf_raw(bl_local_free$bl_counterfactual$x_cf)
+stopifnot(free_v[["loan_amnt"]] > obs_raw[["loan_amnt"]],
+          free_v[["credit_score"]] < obs_raw[["credit_score"]],
+          bl_local_free$dist_mahalanobis < bl_local$dist_mahalanobis,
+          identical(bl_sparse_free$sparse_path$variable,
+                    c("loan_int_rate", "loan_percent_income")))
+```
+
+------------------------------------------------------------------------
+
+### Step 16: a new applicant
+
+Phase 3 also explains applicants outside the data. Pass a one-row data
+frame as the target, with the model's features (other columns are
+dropped here). The values are in the original units, and the model works
+in z-scores, so `bl_apply_scaling()` converts them first; every function
+that takes new data expects model units. No class column is needed.
+
+```{r step16-external}
+new_applicant <- data.frame(
+  person_age                 = 32,
+  person_gender              = 1,      # male
+  person_income              = 248000,
+  person_emp_exp             = 5,
+  person_home_ownership      = 3,      # RENT
+  loan_amnt                  = 12000,
+  loan_int_rate              = 13.5,
+  loan_percent_income        = 12000 / 248000,
+  cb_person_cred_hist_length = 4,
+  credit_score               = 420
+)
+# Keep only the reduced model's features
+new_applicant <- new_applicant[, intersect(names(new_applicant), feature_cols_v2),
+                               drop = FALSE]
+# Raw units to the model's z-scores
+new_applicant <- bl_apply_scaling(new_applicant, bl_results_v2)
+
+tgt_ext      <- bl_select_target(bl_results_v2, target = new_applicant)
+bl_local_ext <- bl_find_local_cf(bl_results_v2, tgt_ext)
+print(bl_local_ext)
+```
+
+```{r step16-claims, include = FALSE}
+ext_range <- bl_results_v2$train_ranges
+cs_min_raw <- ext_range[["credit_score"]][1] * scl_scale[["credit_score"]] +
+              scl_center[["credit_score"]]
+stopifnot(420 < cs_min_raw, bl_local_ext$solution_found)
+ext_cf <- cf_raw(bl_local_ext$bl_counterfactual$x_cf)
+stopifnot(ext_cf[["credit_score"]] >= cs_min_raw)
+```
+
+`bl_select_target()` warns that the applicant's credit score of 420 lies
+below the training range, which starts at `r round(cs_min_raw)`: the
+model has not seen such scores, so treat its explanation with care. The
+counterfactual lies inside the training data: inside its convex hull on
+the plane and within its ranges, so its credit score is
+`r f2(ext_cf[["credit_score"]])`.
+
+```{r step16-local, opts.label = "biplot", fig.alt = "Local biplot of the new applicant, who lies outside the training data, with an arrow to its counterfactual inside the coloured training region."}
+plot(bl_local_ext)
+```
+
+```{r step16-local-claims, include = FALSE}
+z_rng <- apply(bl_local_ext$Z_train_rot, 2, range)
+stopifnot(any(bl_local_ext$Z_target < z_rng[1, ] |
+              bl_local_ext$Z_target > z_rng[2, ]),
+          boundarylogic:::.grid_in_hull(bl_local_ext$B_z, bl_local_ext$hull_polygon),
+          !boundarylogic:::.grid_in_hull(bl_local_ext$Z_target, bl_local_ext$hull_polygon))
+```
+
+The applicant lies outside the training data on the chosen plane, so the
+plot widens its window to show it. The prediction colour covers only the
+training data's hull, and the arrow runs from the applicant into it.
+(Without a class column, the target is coloured by its predicted class
+only.)
+
+```{r step16-shapley, fig.alt = "Shapley values of the new applicant's counterfactual."}
+bl_shap_ext   <- bl_shapley(bl_local_ext)
+bl_sparse_ext <- bl_find_sparse_cf(bl_shap_ext)
+print(bl_sparse_ext)
+plot(bl_shap_ext)
+```
+
+```{r step16-sparse, opts.label = "biplot", fig.alt = "Local biplot of the new applicant's sparse counterfactual."}
+plot(bl_sparse_ext)
+```
+
+```{r step16-sparse-claims, include = FALSE}
+stopifnot(identical(bl_sparse_ext$sparse_path$variable, "loan_int_rate"),
+          bl_sparse_ext$solution_valid)
+```
+
+The sparse counterfactual changes only the interest rate. It keeps the
+other features at their observed values, so its credit score is the
+applicant's 420, outside the training range: `bl_find_sparse_cf()`
+checks only that the prediction crosses the boundary.
+
+**Parameters: `bl_apply_scaling()`**
+
+| Parameter | Default | This call | Effect |
+|---|---|---|---|
+| `data` | (required) | the new applicant | Raw-unit values; other columns are returned unchanged |
+| `bl_result` | (required) | `bl_results_v2` | Supplies the scaling recorded by `bl_set_scaling()` |
+
+------------------------------------------------------------------------
+
+## Comparison with SHAP
+
+SHAP (SHapley Additive exPlanations) is the most widely used post-hoc
+attribution method. Both SHAP and boundarylogic use Shapley values, but
+they answer **different questions**:
+
+-   **SHAP** splits the model's predicted probability for an
+    observation, relative to the average prediction over the training
+    data. It says *why the score is what it is*.
+-   **boundarylogic** measures the distance to the decision boundary
+    (globally) and the change that alters the decision (locally). It
+    says *what would have to change for the decision to change*.
+
+The chunks below compute SHAP for the **same XGBoost models** with
+`fastshap` and `shapviz`. They run only when both packages are
+installed.
+
+```{r shap-missing, echo = FALSE, results = "asis"}
+if (!has_shap) {
+  cat("> **SHAP packages not available.** Install `fastshap` and `shapviz`",
+      "to run this section:\n>\n>",
+      "`install.packages(c(\"fastshap\", \"shapviz\"))`\n")
+}
+```
+
+```{r shap-setup}
+if (has_shap) {
+  # fastshap needs a prediction wrapper f(object, newdata) -> numeric vector;
+  # XGBoost needs the new data as an xgb.DMatrix.
+  pred_fn <- function(object, newdata) {
+    as.numeric(predict(object, xgboost::xgb.DMatrix(as.matrix(newdata))))
+  }
+
+  # Background and explanation data for each model
+  X_train_full <- bl_dat$train_data[,    bl_dat$var_names,    drop = FALSE]
+  X_train_v2   <- bl_dat_v2$train_data[, bl_dat_v2$var_names, drop = FALSE]
+  X_test_v2    <- bl_dat_v2$test_data[,  bl_dat_v2$var_names, drop = FALSE]
+
+  # The reduced model works in z-scores. SHAP is computed on those, but the
+  # plots show the feature values in raw units, as boundarylogic does.
+  to_raw <- function(X, scaling) {
+    X[] <- Map(function(x, v) x * scaling$scale[[v]] + scaling$center[[v]],
+               X, names(X))
+    X
+  }
+  X_train_v2_raw <- to_raw(X_train_v2, bl_results_v2$scaling)
+  X_test_v2_raw  <- to_raw(X_test_v2,  bl_results_v2$scaling)
+
+  # SHAP baseline: the mean predicted probability over the reduced model's
+  # training rows (fastshap does not attach one; shapviz needs it).
+  shap_baseline <- mean(pred_fn(xgb_fit_v2, X_train_v2))
+}
+```
+
+### Global: SHAP against the distance to the boundary
+
+In Phase 2 the distance to the boundary chose the variables to keep.
+Here SHAP answers the same question on the **full nine-feature** model:
+the variables ranked by their mean absolute SHAP value, beside the
+distance ranking.
+
+```{r shap-global-select}
+if (has_shap) {
+  set.seed(42L)
+  shap_full <- fastshap::explain(
+    object       = xgb_fit,            # full nine-feature model
+    X            = X_train_full,
+    pred_wrapper = pred_fn,
+    nsim         = 50L
+  )
+
+  shap_imp <- names(sort(colMeans(abs(as.matrix(shap_full))), decreasing = TRUE))
+  dist_imp <- names(sort(bnd_imp$sum_of_distance, decreasing = TRUE))
+
+  print(data.frame(
+    rank          = seq_along(shap_imp),
+    SHAP          = shap_imp,
+    dist_to_bound = dist_imp
+  ))
+}
+```
+
+```{r shap-global-claims, include = FALSE}
+if (has_shap) {
+  stopifnot(identical(shap_imp[1:2], dist_imp[1:2]),
+            identical(shap_imp[8:9], dist_imp[8:9]))
+}
+```
+
+Both rankings put
+`r if (has_shap) paste(shap_imp[1:2], collapse = " and ") else "the same two variables"`
+first and the same two variables last, and they differ in the middle.
+SHAP ranks a variable by how far it moves the predicted probability
+away from the average; the distance ranks it by how much of the
+distance to the decision boundary it carries. A variable can move many
+scores a little (high SHAP) yet rarely be what carries an applicant
+across the boundary, and the reverse.
+
+### Global SHAP for the four kept variables
+
+SHAP on the reduced model, the four variables the workflow kept:
+
+```{r shap-global-bar, fig.alt = "Bar chart of the mean absolute SHAP value of the four kept variables."}
+if (has_shap) {
+  set.seed(42L)
+  shap_v2 <- fastshap::explain(
+    object       = xgb_fit_v2,         # reduced model
+    X            = X_train_v2,
+    pred_wrapper = pred_fn,
+    nsim         = 50L
+  )
+  sv_v2 <- shapviz::shapviz(as.matrix(shap_v2), X = X_train_v2_raw,
+                            baseline = shap_baseline)
+
+  print(shapviz::sv_importance(sv_v2, kind = "bar") +
+          ggplot2::labs(title = "Global SHAP importance - reduced XGB model"))
+}
+```
+
+```{r shap-global-beeswarm, fig.alt = "SHAP beeswarm plot of the four kept variables, coloured by feature value."}
+if (has_shap) {
+  print(shapviz::sv_importance(sv_v2, kind = "beeswarm") +
+          ggplot2::labs(title = "Global SHAP beeswarm - reduced XGB model"))
+}
+```
+
+Compare these with `plot(bl_bnd_v2)` in Step 7b. The bar chart and the
+distance totals are both global importance measures. The beeswarm adds
+the *direction* in which high and low values push the predicted
+probability; the distance plot shows the *signed distance* from each
+applicant to the boundary along each variable.
+
+### Local: SHAP against `bl_shapley()`
+
+Local SHAP for the applicant of Phase 3, test row `r tdp`:
+
+```{r shap-local, fig.alt = "SHAP waterfall plot for test row 13."}
+if (has_shap) {
+  set.seed(42L)
+  shap_local <- fastshap::explain(
+    object       = xgb_fit_v2,
+    X            = X_train_v2,
+    pred_wrapper = pred_fn,
+    nsim         = 200L,
+    newdata      = X_test_v2[tdp, , drop = FALSE],
+    adjust       = TRUE          # force additivity: sum(shap) = f(x) - baseline
+  )
+  sv_local <- shapviz::shapviz(as.matrix(shap_local),
+                               X = X_test_v2_raw[tdp, , drop = FALSE],
+                               baseline = shap_baseline)
+
+  print(shapviz::sv_waterfall(sv_local) +
+          ggplot2::labs(title = sprintf("Local SHAP waterfall - applicant %d", tdp)))
+}
+```
+
+```{r shap-local-force, fig.alt = "SHAP force plot for test row 13.", fig.height = 3}
+if (has_shap) {
+  print(shapviz::sv_force(sv_local) +
+          ggplot2::labs(title = sprintf("Local SHAP force plot - applicant %d", tdp)))
+}
+```
+
+Set beside `plot(bl_shapley_values)` (Step 13):
+
+| Aspect | Local SHAP (waterfall, force) | `bl_shapley()` |
+|---|---|---|
+| What it explains | The predicted probability for this applicant | The move from this applicant to its counterfactual |
+| Reference point | The mean training prediction | The applicant's observed values |
+| Reading | Each bar pushes the score up or down | Each bar **Supports** or **Contradicts** crossing the boundary, or has **No effect** |
+| Output | A decomposition of the score | A change to act on (`observed -> counterfactual`) |
+| Constraints | None | The `set_filters()` rules |
+
+SHAP explains **why the model scored this applicant as it did**;
+`bl_shapley()` and the sparse counterfactual say **which feasible change
+would alter the decision**. The two complement each other: SHAP to
+understand the score, boundarylogic to act on it.
+
+------------------------------------------------------------------------
+
+## Summary
+
+| Phase | Step | Function | Purpose |
+|---|---|---|---|
+| 1 | 1, 3 | (base R) | Load and encode; domain filter |
+| 1 | 2 | `bl_prepare_data()`, `bl_build_result(method = "PCA")` | Exploratory biplot without a model |
+| 1 | 4 | `bl_prepare_data()` | Train/test split and hull filter |
+| 1 | 5 | `bl_wrap_model()` | Wrap a fitted model (`"custom"` with `predict_fn`) |
+| 1 | 6 | `bl_build_result(method = "CVA")`, `bl_project_points()` | Model biplot, decision boundary, test rows |
+| 2 | 7 | `bl_find_boundary()`, `plot()` | Global counterfactuals, distance to the boundary per variable |
+| 2 | prune | `plot()`'s `sum_of_distance` | Rank the variables, drop the weakest |
+| 1 | 4b-6b | `bl_set_scaling()`, `bl_wrap_model(model_type = "XGB")` | Refit on standardised features with raw-unit display |
+| 2 | 7b | `bl_find_boundary()` | Distance to the boundary, reduced model |
+| 2 | 8, 8b | `bl_surrogate()` | How faithfully the biplot represents the model |
+| 3 | 9 | `bl_predict()` | Score the test rows, choose the applicant |
+| 3 | 10 | `bl_select_target()`, `set_filters()` | Target, actionability, plausibility and feasibility |
+| 3 | 11-12 | `bl_find_local_cf()`, `plot()` | Local counterfactual and its biplot |
+| 3 | 13 | `bl_shapley()` | Which changes matter |
+| 3 | 14 | `bl_find_sparse_cf()` | Change as few features as needed |
+| 3 | 15 | `bl_find_local_cf()` without `set_filters` | The counterfactual without actionability constraints |
+| 3 | 16 | `bl_apply_scaling()`, `bl_select_target()` | Explain a new applicant |
+| - | - | `fastshap`, `shapviz` | SHAP for the same models, global and local |
+
+boundarylogic and SHAP work best together. SHAP explains the model's
+score against an average applicant; boundarylogic places each applicant
+relative to the decision boundary and finds the smallest feasible change
+that would alter the decision.

@@ -203,7 +203,7 @@ Phase 3 ─ Local interpretation (single observation)
 <div class="section level2">
 <h2 id="actionability-constraints">Actionability constraints<a class="anchor" aria-label="anchor" href="#actionability-constraints"></a>
 </h2>
-<p><code><a href="reference/set_filters.html">set_filters()</a></code> restricts the counterfactual search to clinically or practically plausible directions. Continuing the Pima example with a patient the model predicts as diabetic:</p>
+<p><code><a href="reference/set_filters.html">set_filters()</a></code> restricts the counterfactual search to clinically or practically plausible directions. It also holds the switches for the two other rules of the method, both on by default: <code>hull</code> (plausibility: inside the convex hull of the training data) and <code>train_ranges</code> (feasibility: within the training ranges). Continuing the Pima example with a patient the model predicts as diabetic:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pred_pima</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/bl_predict.html">bl_predict</a></span><span class="op">(</span><span class="va">bl_results_pima</span><span class="op">)</span></span>
 <span><span class="co"># The second patient the model predicts as diabetic (see the note below</span></span>
@@ -390,7 +390,7 @@ Age            41.0000        41.0048 0.0048   increase</code></pre>
 <tbody>
 <tr>
 <td><code><a href="reference/bl_prepare_data.html">bl_prepare_data()</a></code></td>
-<td>Convert raw data to binary 0/1, train/test split, convex hull outlier filter</td>
+<td>Convert raw data to binary 0/1, train/test split, optional convex hull outlier filter (<code>hull_fraction</code>; default <code>1</code>, no removal)</td>
 <td><code>bl_filter_result</code></td>
 </tr>
 <tr>
@@ -516,7 +516,7 @@ Age            41.0000        41.0048 0.0048   increase</code></pre>
 </tr>
 <tr>
 <td><code><a href="reference/set_filters.html">set_filters()</a></code></td>
-<td>Encode actionability constraints</td>
+<td>Encode actionability constraints and the hull (plausibility) and training-range (feasibility) switches</td>
 <td><code>bl_filters</code></td>
 </tr>
 <tr>
@@ -545,7 +545,7 @@ Age            41.0000        41.0048 0.0048   increase</code></pre>
 <p>The package vignette covers the complete workflow:</p>
 <ul>
 <li>
-<strong>Loan-default dataset</strong> (<code>Boundary_Logic_loan_default_workflow.Rmd</code>) — credit-risk walkthrough with an XGBoost model and CVA biplot: Phase 2 feature pruning, actionability constraints, external-applicant analysis, and a side-by-side comparison of the global and local interpretation against SHAP (<code>fastshap</code> / <code>shapviz</code>) for the same model (Phases 1–3).</li>
+<strong>Loan-default dataset</strong> (<code>Boundary_Logic_loan_default_workflow.Rmd</code>) — a step-by-step guide to every function on the full loan data, with an XGBoost model and CVA biplot: what each step does, the parameters that matter and how to read the output. It covers Phase 2 feature pruning, a refit on standardised features with raw-unit axes (<code><a href="reference/bl_set_scaling.html">bl_set_scaling()</a></code>), actionability constraints, a new applicant (<code><a href="reference/bl_apply_scaling.html">bl_apply_scaling()</a></code>), and a side-by-side comparison of the global and local interpretation against SHAP (<code>fastshap</code> / <code>shapviz</code>) for the same models (Phases 1–3).</li>
 </ul>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/vignette.html" class="external-link">vignette</a></span><span class="op">(</span><span class="st">"Boundary_Logic_loan_default_workflow"</span>, package <span class="op">=</span> <span class="st">"boundarylogic"</span><span class="op">)</span></span></code></pre></div>
@@ -563,7 +563,7 @@ Age            41.0000        41.0048 0.0048   increase</code></pre>
 <li>
 <strong><code>b_margin</code> controls contour band width only:</strong> the <code>b_margin</code> parameter in <code><a href="reference/bl_build_result.html">bl_build_result()</a></code> / <code><a href="reference/bl_build_grid.html">bl_build_grid()</a></code> is the half-width of the band around the cutoff in which the boundary contour is extracted (<code>b_margin = 0.001</code>, the default → contours at 0.499 and 0.501; <code>b_margin = 0.01</code> → 0.49 and 0.51). All model predictions are always stored to 3 decimal places regardless of this setting.</li>
 <li>
-<strong>Local search rebuilds the convex hull on each rotated plane:</strong> <code><a href="reference/bl_find_local_cf.html">bl_find_local_cf()</a></code> rotates the biplot plane, which invalidates the hull polygon of the global biplot. With <code>hull = TRUE</code> (the default) it rebuilds the convex hull of the training data and the target on each rotated plane, and keeps only the boundary points inside it (the thesis’s plausibility rule); <code>hull = FALSE</code> drops the rule. The search is further constrained by <code>set_filters</code> and <code>train_ranges</code>.</li>
+<strong>Local search rebuilds the convex hull on each rotated plane:</strong> <code><a href="reference/bl_find_local_cf.html">bl_find_local_cf()</a></code> rotates the biplot plane, which invalidates the hull polygon of the global biplot. Instead it rebuilds the convex hull of the training data on each rotated plane, and keeps only the boundary points inside it, dropping closed boundary lines that enclose no training data (the thesis’s plausibility rule). It also keeps every feature within its training range (the feasibility rule) and applies the actionability constraints. All three are set in <code><a href="reference/set_filters.html">set_filters()</a></code>: the per-variable constraints, <code>hull = TRUE</code> and <code>train_ranges = TRUE</code> (both on by default, also when no <code><a href="reference/set_filters.html">set_filters()</a></code> object is passed). <code>set_filters(tgt, hull = FALSE, train_ranges = FALSE)</code> gives the unconstrained counterfactual.</li>
 </ul>
 <hr>
 </div>

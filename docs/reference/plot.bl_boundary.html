@@ -159,6 +159,15 @@ deviation, as the thesis standardises the variable importance
 </dl><p>If the projection was standardised (PCA with <code>standardise = TRUE</code>),
 the X-space vector is first unstandardised by multiplying by <code>X_sd</code>
 before the final division.</p>
+<p>This is the <em>in-plane</em> gap, the move along the biplot plane from each
+observation to its boundary point. It differs, by design, from the gap
+<code>B_x - x_obs</code> whose length <code><a href="bl_find_boundary.html">bl_find_boundary()</a></code> reports as <code>dist_x</code> and
+<code>dist_mahalanobis</code>: that gap also resets the part of the observation that
+lies off the plane (its other canonical coordinates) to the mean, which the
+biplot cannot show and which has nothing to do with the boundary. The
+variable importance and the robustness are measured on the in-plane gap;
+<code><a href="bl_find_boundary.html">bl_find_boundary()</a></code>'s distances are reported only. See
+<code>documentation/algorithms.md</code>, finding F3.</p>
 <p>The sign indicates which side of the boundary the observation lies on:
 positive values indicate the observation is above the boundary in that
 variable's direction. The vertical line at x = 0 marks the boundary.</p>

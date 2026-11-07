@@ -18,6 +18,13 @@
 > `4.3 Different Eigenvalues.R:62`); biplotEZ's `Wmat` is the within-groups SSP.
 > The division by (n - g) is the package's own. See
 > `documentation/methodology-changes/methodology-changes.qmd` §3.2.
+>
+> **Erratum (2026-11-06):** "biplotEZ does not expose `Wmat` on its return
+> object" (under "Where W was originally calculated") is also wrong: biplotEZ
+> 2.2 returns it as `bp$Wmat` for a CVA biplot; a PCA biplot has none. The
+> package computes `W` itself because PCA has no `Wmat` and because the divisor
+> makes it a covariance. See `documentation/boundary-distance-and-robustness.md`
+> §1.2.
 
 ---
 

@@ -149,7 +149,7 @@ Esc ends the loop; the picked rows are returned invisibly as a data frame (`row`
 | observed | 12,000 | 12.69 | 0.05 | 634 | 0.111 |
 | global counterfactual (`B_x`) | 10,610.95 | 14.86 | 0.0175 | 650.27 | 0.538 |
 
-Its distances are `dist_z` = 0.0056, `dist_x` = 0.9253 and √`dist_mahalanobis` = 0.9106. The local search of Step 11 finds a closer counterfactual (√d²_M = 0.5838 for its boundary point with the Step 10 constraints, and 0.5914 for the reported counterfactual after the restore and the rounding; 0.5554 without constraints, Step 15), because it rotates the plane around the target instead of using the global one. The global counterfactual also lowers the loan amount, which Step 10 fixes.
+Its distances are `dist_z` = 0.0056, `dist_x` = 0.9253 and √`dist_mahalanobis` = 0.9106. The local search of Step 11 finds a closer counterfactual (√d²_M = 0.6934 for its boundary point with the Step 10 constraints, and 0.6996 for the reported counterfactual after the restore and the rounding; 0.5554 without constraints, Step 15), because it rotates the plane around the target instead of using the global one. (The global distances include the part of the target off the biplot plane, which the global counterfactual resets to the mean, so they are reported only: `documentation/boundary-distance-and-robustness.md` §2.) The global counterfactual also lowers the loan amount, which Step 10 fixes.
 
 **Caveat.** The arrows are drawn in the unrotated biplot plane. With `rotate_deg != 0` the plot is turned but the boundary coordinates are not, so keep `rotate_deg = 0` when picking points.
 
@@ -232,13 +232,14 @@ In the harness log this warning appears at the end of the run, because R defers 
 
 **Step 16 result** (from the harness run):
 - **The applicant:** predicted 0.296, class 0.
-- **The search:** it selects pair (1, 2), with Distance (Z) 0.0135 and Mahalanobis distance 1.7026.
-- **The counterfactual (prediction 0.519):**
-  - raises the credit score from 420 to 489.44, the edge of the training range;
-  - raises the interest rate from 13.50 to 13.99;
-  - lowers the loan from 12,000 to 11,642.32;
-  - lowers the loan-to-income ratio from 0.0484 to 0.0437.
+- **The search:** it selects pair (1, 2), with Distance (Z) 0.0223 and Mahalanobis distance 2.8241. The applicant lies outside the training data on the chosen plane, and the counterfactual must lie inside the training data's convex hull on the plane, so it is further away than the nearest boundary point within the training ranges (1.7026 with `set_filters(tgt_ext, hull = FALSE)`; `documentation/local-convex-hull.md` §6).
+- **The counterfactual (prediction 0.541):**
+  - raises the credit score from 420 to 534.92;
+  - raises the interest rate from 13.50 to 14.06;
+  - lowers the loan from 12,000 to 11,331.04;
+  - raises the loan-to-income ratio from 0.0484 to 0.0496.
 - **The sparse counterfactual:** changing the interest rate alone crosses the boundary (0.52).
+- **The plot:** `plot(bl_local_ext)` widens its window to show the applicant, which lies outside the training data on the plane, and the arrow into the coloured hull.
 
 **Returned object — `tgt` (S3 class `"bl_target"`):**
 
@@ -289,7 +290,7 @@ flt <- set_filters(
 |---|---|---|---|
 | `bl_target` | required | `tgt` | The target; its observed values are what the directions compare against |
 | `...` | none | `loan_amnt = "fixed"`, `loan_int_rate = "increase"`, `credit_score = c("increase", "integer")` | One named constraint per feature (actionability). An unnamed feature (`loan_percent_income` here) is unconstrained and continuous |
-| `hull` | `TRUE` | `TRUE` | The plausibility rule: keeps only boundary points inside the convex hull of the training data and the target on each rotated plane (thesis §4.3.1, p.117; Step 11, Stage E, filter 2). `FALSE` drops it |
+| `hull` | `TRUE` | `TRUE` | The plausibility rule: keeps only boundary points inside the convex hull of the training data on each rotated plane, and drops closed boundary contours that enclose no training data there (thesis §4.3.1, p.117, and §3.10 step 4, p.93; Step 11, Stage E, filter 2). `FALSE` drops it |
 | `train_ranges` | `TRUE` | `TRUE` | The feasibility rule: keeps only boundary points whose features all lie within their training ranges (Stage E, filter 4), and checks the restored and rounded points against them too (Stage H). `FALSE` drops it |
 
 Full argument list: `?set_filters`.
@@ -434,19 +435,22 @@ Zgrid   = expand.grid(xseq, xseq)          # m² × 2
 With the `hull` switch of `set_filters()` on (the default; read by the private `.filter_switches()`, which also gives `TRUE` for `set_filters = NULL`), the same projections also give the plane's convex hull, which filter 2 of Stage E uses:
 
 ```
-hull_poly = .build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val,
+hull_poly = .build_hull_polygon(Z_train_rot, min_val, max_val,
                                 outlie = 1)       # the full hull, rebuilt per pair
 ```
 
-The global biplot's hull polygon (from `bl_build_grid()`) cannot be used here, because its coordinates belong to the unrotated plane; the hull is rebuilt on each rotated plane from the training data and the target, as Appendix A of the thesis does (`documentation/local-convex-hull.md`).
+The global biplot's hull polygon (from `bl_build_grid()`) cannot be used here, because its coordinates belong to the unrotated plane; the hull is rebuilt on each rotated plane from the training data (`documentation/local-convex-hull.md`). The target is not part of it: the region a counterfactual may come from is set by the training data alone, as in the global search. (Appendix A of the thesis builds the hull from the training data and the target; the package did so until 2026-11-06.)
 
 The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The global grid built in `bl_build_grid()` takes its range differently, from the biplot's own plotting window (`.bl_get_plot_bounds()`; see `review_section4_to_6.md` Section 6.2).
 
 #### Stage C — Back-project grid and score
 
 ```
-Xgrid = Zgrid %*% tVr_rot + X_center      # m² × p in original feature space
+Xgrid = Zgrid %*% tVr_rot                 # m² × p
+Xgrid = Xgrid * X_sd                      # only when standardise = TRUE (a standardised PCA); not under CVA
+Xgrid = Xgrid + X_center                  # original feature space
 grid_prob = .pred_function(model, model_type, Xgrid)   # "XGB" for bl_results_v2; chunked, 50 000 rows at a time
+grid_prob = pmin(pmax(grid_prob, 0), 1)   # clamped to [0, 1], as the global grid (one warning per call)
 ```
 
 #### Stage D — Extract contour lines
@@ -463,7 +467,7 @@ For each contour segment in `ct_local`:
 
 1. **Opposing-class filter:** Keep only segments where `seg_class != target_pred_class`. A class-0 target (predicted safe) needs class-1 contours, where it would flip to "default"; a class-1 target needs class-0 contours.
 
-2. **Hull (plausibility):** with the `hull` switch on, `.poly_clip(Mi, hull_poly)` keeps the segment's vertices inside this plane's convex hull (Stage B), in 2D, before any back-projection; a segment with no vertex inside is skipped. This is the thesis's rule that the counterfactual comes from a local decision boundary within the convex hull of the training data (§4.3.1, p.117). In the harness the nearest boundary points already lie inside the hull, so `set_filters(..., hull = FALSE)` gives the same counterfactual.
+2. **Hull (plausibility):** with the `hull` switch on, `.poly_clip(Mi, hull_poly)` keeps the segment's vertices inside this plane's convex hull (Stage B), in 2D, before any back-projection; a segment with no vertex inside is skipped. This is the thesis's rule that the counterfactual comes from a local decision boundary within the convex hull of the training data (§4.3.1, p.117). A segment still closed after the clip is then kept only if it encloses training data on the plane (`.encloses_data(Mi, Z_train_rot)`), the empty-region rule that `bl_find_boundary()` applies on the global plane (§3.10 step 4, p.93). In the harness this rule decides Step 11: on pair (3, 4) the nearest valid boundary point (√d²_M 0.5838) lies on a closed contour with no training data inside, so it is dropped and the search takes the next (0.6934). `set_filters(..., hull = FALSE)` drops both parts of the rule and returns the nearer point.
 
 3. **Back-project + actionability:** Back-project the segment to X-space, then apply the `set_filters` constraints via `.apply_actionability()` (when supplied). These are usually the most selective filter, so they run before the feasibility check, and a segment with no surviving vertex is skipped at once:
    - `"decrease"`: `B_x[nm] <= x_obs[nm]`
@@ -518,7 +522,7 @@ If the chosen selector for this pair beats the running `best_selector`, save eve
 4. If not, no counterfactual is reported: `solution_found` is `FALSE`, and `blocking_constraint` says where the search moved the fixed feature, why the restored point fails, and that changing the constraints on the actionable features may make a counterfactual possible (`documentation/fixed-constraint-restore.md` §4).
 5. `fixed_check` records the outcome either way, including the search's own point (`search_point`). `dist_z`, `dist_mahalanobis` and the per-pair tables stay the search's values, because they describe the pair choice.
 
-In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside its ±3,001 tolerance). Setting it back to 12,000 still gives 0.547, because the model is insensitive to that change here, so the restored point is used.
+In the harness run the search moves `loan_amnt` from 12,000 to 12,523.4 (inside its ±3,001 tolerance). Setting it back to 12,000 still gives 0.693, because the model is insensitive to that change here, so the restored point is used.
 
 **The rounding step.** The private `.round_integers()` then handles every `"integer"` feature that is not fixed:
 1. A feature whose value moved and is not a whole number in raw units gets two candidates, the whole numbers just below and above. Every combination over the rounded features is a candidate point.
@@ -526,7 +530,7 @@ In the harness run the search moves `loan_amnt` from 12,000 to 12,398.5 (inside 
 3. The valid candidate nearest the target in X-space, by the same distance as the pair search (`.cf_sq_distance()`; here the squared Mahalanobis distance), replaces `B_x`, `B_z` and `B_pred`. On a tie, the first. If none is valid, no counterfactual is reported. The rule and why it tries both neighbours are in `documentation/fixed-constraint-restore.md` §5.
 4. `integer_check` records `vars`, `applied`, `n_candidates`, `n_valid`, `pred_rounded` and the point before rounding (`search_point`).
 
-In the harness run the restored point has `credit_score` at 634.2206. Both 634 and 635 still cross the boundary at 0.547 (the credit score crosses no split of the model here) and meet `"increase"`. The Mahalanobis rule keeps 635: its distance from the target is 0.5914 against 0.5949 for 634, because `W` correlates the credit score with the features that move. So the selector can choose a whole value further from the observed one, when the correlations make that move shorter in the metric.
+In the harness run the restored point has `credit_score` at 634.0454. Both 634 and 635 still cross the boundary at 0.693 (the credit score crosses no split of the model here) and meet `"increase"`. The Mahalanobis rule keeps 635: its distance from the target is 0.6996 against 0.7031 for 634, because `W` correlates the credit score with the features that move. So the selector can choose a whole value further from the observed one, when the correlations make that move shorter in the metric.
 
 ---
 
@@ -573,10 +577,10 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
   Solution found : TRUE
   Best pair      : (3, 4)
   Selector       : mahalanobis
-  Distance (Z)   : 0.0046
-  Euclidean (X)  : 0.4862 (total-SD scale)
-  Mahalanobis    : 0.5838 (sqrt of squared d_M^2 = 0.3408)
-  Boundary pred  : 0.5470
+  Distance (Z)   : 0.0055
+  Euclidean (X)  : 0.5874 (total-SD scale)
+  Mahalanobis    : 0.6934 (sqrt of squared d_M^2 = 0.4808)
+  Boundary pred  : 0.6930
   Fixed restored : loan_amnt
   Integer rounded : credit_score
 
@@ -591,52 +595,52 @@ In the harness run the restored point has `credit_score` at 634.2206. Both 634 a
 
   Counterfactual:
 -- bl_counterfactual --
-  Boundary prob  : 0.5470
+  Boundary prob  : 0.6930
   Predicted class: 1
   Feature values (raw units) :
           loan_amnt       loan_int_rate loan_percent_income        credit_score 
-           12000.00               14.15              0.0484              635.00 
+           12000.00               14.44              0.0457              635.00 
 
   Per-pair distances:
-  pair      dist_z    dist_x dist_mahalanobis
- (1,2) 0.028309256 2.2489005       12.8162127
- (1,3) 0.027807716 2.1554967       12.3661193
- (2,3) 0.028326778 2.2510873       12.8320826
- (1,4) 0.015557768 1.2202560        3.8707700
- (2,4) 0.027625664 2.2367562       12.2047315
- (3,4) 0.004616263 0.4862133        0.3407877
+  pair     dist_z    dist_x dist_mahalanobis
+ (1,2) 0.02830926 2.2489005       12.8162127
+ (1,3) 0.02780772 2.1554967       12.3661193
+ (2,3) 0.02832678 2.2510873       12.8320826
+ (1,4) 0.01555777 1.2202560        3.8707700
+ (2,4) 0.02762566 2.2367562       12.2047315
+ (3,4) 0.00548295 0.5873798        0.4807633
 
   Observed vs counterfactual (raw units):
                     observed counterfactual  change        constraint
 loan_amnt           12000.00       12000.00    0.00             fixed
-loan_int_rate          12.69          14.15    1.46          increase
-loan_percent_income   0.0500         0.0484 -0.0016              none
+loan_int_rate          12.69          14.44    1.75          increase
+loan_percent_income   0.0500         0.0457 -0.0043              none
 credit_score          634.00         635.00    1.00 increase, integer
 
-  Note: loan_amnt is "fixed", but the boundary search moved it to 12398.5032
-        (+398.5032). The search lets a "fixed" feature move by up to 0.5
+  Note: loan_amnt is "fixed", but the boundary search moved it to 12523.4436
+        (+523.4436). The search lets a "fixed" feature move by up to 0.5
         model units (+/- 3001.1777 here), because a point on the 2D decision
         boundary rarely holds a feature at exactly its observed value.
         Restoring loan_amnt to its observed value still crosses the boundary
-        (prediction 0.5470), so the restored point is the selected
+        (prediction 0.6930), so the restored point is the selected
         counterfactual.
 
-  Note: credit_score is "integer", and the boundary point has 634.2206. Of
+  Note: credit_score is "integer", and the boundary point has 634.0454. Of
         the 2 combinations of the whole values just below and above, 2 still
         cross the boundary within the constraints; the nearest, 635
-        (prediction 0.5470), is the counterfactual.
+        (prediction 0.6930), is the counterfactual.
 ```
 
-Before printing, `bl_find_local_cf()` also reports both steps as messages: "Fixed feature(s) loan_amnt restored to observed value(s); the restored point still crosses the boundary (pred 0.547) and is used as the counterfactual." and "Integer feature(s) credit_score rounded to whole values; the rounded point still crosses the boundary (pred 0.547) and is used as the counterfactual."
+Before printing, `bl_find_local_cf()` also reports both steps as messages: "Fixed feature(s) loan_amnt restored to observed value(s); the restored point still crosses the boundary (pred 0.693) and is used as the counterfactual." and "Integer feature(s) credit_score rounded to whole values; the rounded point still crosses the boundary (pred 0.693) and is used as the counterfactual."
 
-Pair (3, 4) has the smallest squared Mahalanobis distance (0.3408), so it wins. Its boundary point moves the loan amount from 12,000 to 12,398.5, inside the ±3,001 `"fixed"` tolerance (Step 10b). Setting the loan amount back to 12,000 still gives 0.547, so that restored point is used, and its credit score of 634.22 is then rounded to 635 (Stage H). The counterfactual raises the interest rate from 12.69 to 14.15 and the credit score from 634 to 635, which satisfies both `"increase"` constraints, and keeps the loan amount at 12,000. The model's probability rises from 0.111 to 0.547. The distances and the per-pair table describe the search's boundary point, which decided the pair. The search is deterministic, so repeating the call gives the same values (`documentation/nearest-vertex-tie-break.md`).
+Pair (3, 4) has the smallest squared Mahalanobis distance (0.4808), so it wins. Its boundary point moves the loan amount from 12,000 to 12,523.4, inside the ±3,001 `"fixed"` tolerance (Step 10b). Setting the loan amount back to 12,000 still gives 0.693, so that restored point is used, and its credit score of 634.05 is then rounded to 635 (Stage H). The counterfactual raises the interest rate from 12.69 to 14.44 and the credit score from 634 to 635, which satisfies both `"increase"` constraints, and keeps the loan amount at 12,000. The model's probability rises from 0.111 to 0.693. On pair (3, 4) a nearer boundary point exists (√d²_M 0.5838, prediction 0.547), but it lies on a closed contour that encloses no training data on that plane, so the plausibility rule drops it (Stage E, filter 2); with `set_filters(..., hull = FALSE)` the search returns it. The distances and the per-pair table describe the search's boundary point, which decided the pair. The search is deterministic, so repeating the call gives the same values (`documentation/nearest-vertex-tie-break.md`).
 
 **The comparison table at the end of `print(bl_local)`.** One row per feature, with:
 - **Columns:** the observed value, the counterfactual, the change (counterfactual minus observed) and the Step 10 constraint (`"none"` when unconstrained; a range prints as `[lo, hi]`).
 - **Units:** raw, because `bl_results_v2` carries a scaling. Levels convert as `value * scale + center` and the change as `value * scale`, by `.scale_to_raw()`, so the counterfactual column matches the Counterfactual block above. Without a scaling the header reads "(model units)".
 - **Format:** fixed notation, never scientific, with 2 decimals. A row whose change would print as 0.00 gets more decimals, up to 4: here `loan_percent_income`, whose change is −0.0016. The Target and Counterfactual blocks above use the same decimals per feature. `print(bl_shapley_values)` and `print(bl_sparse)` use the same rule for their Shapley values. The sparse path's predictions keep 4 decimals only within 0.005 of the cutoff.
 - **Note:** printed only when the search moved a `"fixed"` feature and the restored point is the counterfactual. It explains the tolerance and the restore. When the restored point does not cross the boundary or leaves `train_ranges`, no counterfactual is reported: `solution_found` is `FALSE`, and the Reason line gives where the search moved the fixed feature, why the restored point fails, and that changing the constraints on the actionable features in `set_filters()` may make a counterfactual possible (`documentation/fixed-constraint-restore.md` §4).
-- **Integer line and note:** when an `"integer"` feature was rounded, the header gains `Integer rounded : credit_score`, and a second note gives the boundary value (634.2206), how many whole-number combinations were tried and how many still cross (2 of 2), and the value chosen (635), with its prediction. When no combination is valid, no counterfactual is reported and the Reason line says so.
+- **Integer line and note:** when an `"integer"` feature was rounded, the header gains `Integer rounded : credit_score`, and a second note gives the boundary value (634.0454), how many whole-number combinations were tried and how many still cross (2 of 2), and the value chosen (635), with its prediction. When no combination is valid, no counterfactual is reported and the Reason line says so.
 - **No table:** when no solution exists, `print()` shows the Reason line instead, and Steps 13 and 14 stop, because `bl_shapley()` needs a solution.
 
 The private helper `.cf_compare_table()` builds this table and the Step 14 sparse table, so the two share one layout. The counterfactual is stored in `bl_local$B_x` (z-scores) and `bl_local$bl_counterfactual` (prints in raw units).
@@ -739,10 +743,10 @@ This means the axes, variable label positions, and tick marks are all recalculat
   Pred prob      : 0.1110  (class 0)
   Best pair      : (3, 4)
   Selector       : mahalanobis
-  Distance (Z)   : 0.0046
-  Euclidean (X)  : 0.4862
-  Mahalanobis    : 0.5838 (sqrt)
-  Boundary pred  : 0.5470
+  Distance (Z)   : 0.0055
+  Euclidean (X)  : 0.5874
+  Mahalanobis    : 0.6934 (sqrt)
+  Boundary pred  : 0.6930
 ------------------------
 ```
 
@@ -848,7 +852,7 @@ A Shapley value of exactly 0 arises when a feature's change never moves the pred
 ```
 "feature: observed -> counterfactual"
 ```
-Both numbers are levels, built by the private `.shapley_labels()`. They print with the comparison tables' decimals: 2, or more (up to 4) where the change would print as 0.00. For `bl_results_v2` the stored labels are z-scores, for example `"loan_int_rate: 0.35 -> 0.83"`. When `bl_result$scaling` is set (as here), `plot.bl_shapley()` rebuilds them in raw units, for example `"loan_int_rate: 12.69 -> 14.15"` and `"loan_percent_income: 0.0500 -> 0.0484"`. The stored `varnames_p` is not changed.
+Both numbers are levels, built by the private `.shapley_labels()`. They print with the comparison tables' decimals: 2, or more (up to 4) where the change would print as 0.00. For `bl_results_v2` the stored labels are z-scores, for example `"loan_int_rate: 0.35 -> 0.93"`. When `bl_result$scaling` is set (as here), `plot.bl_shapley()` rebuilds them in raw units, for example `"loan_int_rate: 12.69 -> 14.44"` and `"loan_percent_income: 0.0500 -> 0.0457"`. The stored `varnames_p` is not changed.
 
 ---
 
@@ -870,14 +874,14 @@ Both numbers are levels, built by the private `.shapley_labels()`. They print wi
 -- bl_shapley --
   Row ID         : 13
   Observed pred  : 0.1110  (class 0)
-  Full CF pred   : 0.5470
-  Shapley sum    : 0.4360
+  Full CF pred   : 0.6930
+  Shapley sum    : 0.5820
 
   Observed vs counterfactual, with Shapley values (raw units):
                     observed counterfactual  change        constraint shapley
 loan_amnt           12000.00       12000.00    0.00             fixed    0.00
-loan_int_rate          12.69          14.15    1.46          increase    0.29
-loan_percent_income   0.0500         0.0484 -0.0016              none    0.14
+loan_int_rate          12.69          14.44    1.75          increase    0.44
+loan_percent_income   0.0500         0.0457 -0.0043              none    0.14
 credit_score          634.00         635.00    1.00 increase, integer    0.00
                     contribute
 loan_amnt            No effect
@@ -889,20 +893,20 @@ credit_score         No effect
 The layout matches the tables of `print(bl_local)` (Step 11) and `print(bl_sparse)` (Step 14), with two extra columns:
 - **Shared builder:** the private `.cf_compare_table()` builds all three tables. Its rows follow `var_names`; the plot keeps its Shapley order.
 - **Units:** feature values and the change print in raw units (`.scale_to_raw()`, levels and a delta). `shapley` is in probability units and is not converted.
-- **`Shapley sum`:** the four values add up to 0.436, the move from 0.111 to 0.547.
-- **This run:** at the 80-column width of the harness log, R prints `contribute` as a second block; a wider console shows it on one line. The loan amount does not change (restored in Step 11), and the credit score's one-point rise (rounded from 634.22 in Step 11) does not move the prediction. Both are therefore `"No effect"`; the interest rate and the loan-to-income ratio are `"Supports"`.
+- **`Shapley sum`:** the four values add up to 0.582, the move from 0.111 to 0.693.
+- **This run:** at the 80-column width of the harness log, R prints `contribute` as a second block; a wider console shows it on one line. The loan amount does not change (restored in Step 11), and the credit score's one-point rise (rounded from 634.05 in Step 11) does not move the prediction. Both are therefore `"No effect"`; the interest rate and the loan-to-income ratio are `"Supports"`.
 
 ---
 
 **`plot(bl_shapley_values)` — Shapley bar chart:**
 
 Horizontal bar chart (ggplot2):
-- **Y-axis:** one bar per feature, sorted by signed Shapley value. The labels read `"feature: observed -> counterfactual"`. With a scaling set (as here) they are in raw units and the axis title is `"Variable (observed -> counterfactual, raw units)"`; without one they are `varnames_p`, in model units, under `"Variable (observed -> counterfactual)"`. In the harness run, from the bottom: `loan_amnt: 12000.00 -> 12000.00`, `credit_score: 634.00 -> 635.00`, `loan_percent_income: 0.0500 -> 0.0484`, `loan_int_rate: 12.69 -> 14.15`
+- **Y-axis:** one bar per feature, sorted by signed Shapley value. The labels read `"feature: observed -> counterfactual"`. With a scaling set (as here) they are in raw units and the axis title is `"Variable (observed -> counterfactual, raw units)"`; without one they are `varnames_p`, in model units, under `"Variable (observed -> counterfactual)"`. In the harness run, from the bottom: `loan_amnt: 12000.00 -> 12000.00`, `credit_score: 634.00 -> 635.00`, `loan_percent_income: 0.0500 -> 0.0457`, `loan_int_rate: 12.69 -> 14.44`
 - **X-axis:** `shapley_cause` — the Shapley value (how much this feature contributed to the prediction move). The axis is widened so that the value labels fit
 - **Fill colour:** `"Supports"` = dark blue; `"Contradicts"` = light grey (`grey70`); `"No effect"` = mid grey (`grey45`)
-- **Value label:** the Shapley value, with the same decimal rule (`.fmt_fixed(s, .fmt_digits(s))`), in white on each bar: here `0.00`, `0.00`, `0.14`, `0.29`
+- **Value label:** the Shapley value, with the same decimal rule (`.fmt_fixed(s, .fmt_digits(s))`), in white on each bar: here `0.00`, `0.00`, `0.14`, `0.44`
 - **Title:** `"Shapley Contribution Plot"`
-- **Subtitle:** `"ID: 13 | Class: 0 | Pred: 0.111 | Boundary pred: 0.547"`
+- **Subtitle:** `"ID: 13 | Class: 0 | Pred: 0.111 | Boundary pred: 0.693"`
 - **X-axis label:** `"Impact on prediction (Shapley value)"`
 
 **Reading the chart:** Each bar shows how much that feature's change (from observed to counterfactual) accounts for the total probability shift from `pred_prob` to `pred_boundary`. The Shapley values sum to approximately `pred_boundary - pred_prob`.
@@ -964,26 +968,25 @@ The selection follows the Shapley order, so it is not guaranteed to be the small
 -- bl_sparse_result --
   Solution valid : TRUE
   Observed pred  : 0.1110  (class 0)
-  Full CF pred   : 0.5470
-  Sparse CF pred : 0.5470
+  Full CF pred   : 0.6930
+  Sparse CF pred : 0.5120
 
   Observed vs sparse counterfactual (raw units):
-                    observed counterfactual   sparse  change        constraint
-loan_amnt           12000.00       12000.00 12000.00    0.00             fixed
-loan_int_rate          12.69          14.15    14.15    1.46          increase
-loan_percent_income   0.0500         0.0484   0.0484 -0.0016              none
-credit_score          634.00         635.00   634.00    0.00 increase, integer
+                    observed counterfactual   sparse change        constraint
+loan_amnt           12000.00       12000.00 12000.00   0.00             fixed
+loan_int_rate          12.69          14.44    14.44   1.75          increase
+loan_percent_income   0.0500         0.0457   0.0500 0.0000              none
+credit_score          634.00         635.00   634.00   0.00 increase, integer
                      used
 loan_amnt           FALSE
 loan_int_rate        TRUE
-loan_percent_income  TRUE
+loan_percent_income FALSE
 credit_score        FALSE
   (change = sparse - observed)
 
   Path (Supports features, largest Shapley value first):
- step            variable shapley pred crosses
-    1       loan_int_rate    0.29 0.36   FALSE
-    2 loan_percent_income    0.14 0.55    TRUE
+ step      variable shapley pred crosses
+    1 loan_int_rate    0.44 0.51    TRUE
 ```
 
 The table has the same layout as the one at the end of `print(bl_local)` (Step 11):
@@ -992,7 +995,7 @@ The table has the same layout as the one at the end of `print(bl_local)` (Step 1
 - **Row order:** follows `var_names`, as in Step 11.
 - **The path:** printed below the table, from `bl_sparse$sparse_path`.
 
-Here the two `"Supports"` features are tried in Shapley order. Raising the interest rate alone moves the prediction from 0.111 to 0.360, which is not enough. Adding the lower loan-to-income ratio reaches 0.547 and crosses the boundary, so both are needed. The loan amount (fixed, restored in Step 11) and the credit score (`"No effect"`) stay at their observed values. The sparse CF flips the prediction with two changes instead of four.
+Here the two `"Supports"` features are tried in Shapley order. Raising the interest rate alone moves the prediction from 0.111 to 0.512, which already crosses the boundary, so the search stops after one step. The lower loan-to-income ratio (also `"Supports"`) is not needed, and stays at its observed value, as do the loan amount (fixed, restored in Step 11) and the credit score (`"No effect"`). The sparse CF flips the prediction with one change instead of four. Its `change` column prints `loan_percent_income` with 4 decimals (0.0000), the row rule of Step 11, because the full counterfactual's change in that row would print as 0.00 at 2 decimals.
 
 ---
 
@@ -1041,8 +1044,8 @@ The arguments are passed through to `plot.bl_local_result()` (Step 12). Full arg
    --- Sparse CF summary ---
      Target         : 13
      Observed pred  : 0.1110  (class 0)
-     Full CF pred   : 0.5470
-     Sparse CF pred : 0.5470
+     Full CF pred   : 0.6930
+     Sparse CF pred : 0.5120
      Solution valid : TRUE
    -------------------------
    ```
@@ -1061,7 +1064,7 @@ print(bl_sparse_free)
 
 (The script also plots `bl_local_free`, `bl_shap_free` and `bl_sparse_free`.)
 
-Identical pipeline to Steps 11–14, with `set_filters = NULL`, which is the same as `set_filters(tgt)`: no actionability constraint, but the plausibility (hull) and feasibility (training ranges) rules still apply. The search finds the nearest boundary point within the hull and the training ranges. The fully unconstrained counterfactual of the thesis (p.115) drops both rules as well: `bl_find_local_cf(bl_results_v2, tgt, set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE))` (the script's comment shows it; it is not run). Comparing `bl_local` (constrained) vs `bl_local_free` (no actionability constraint) shows the cost of the actionability constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the unconstrained search also picks pair (3, 4), at a slightly smaller distance (√d²_M = 0.5554, against 0.5838 for the constrained search's boundary point and 0.5914 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.2 and lowers the credit score to 633.43, two moves the constraints rule out.
+Identical pipeline to Steps 11–14, with `set_filters = NULL`, which is the same as `set_filters(tgt)`: no actionability constraint, but the plausibility (hull) and feasibility (training ranges) rules still apply. The search finds the nearest boundary point within the hull and the training ranges. The fully unconstrained counterfactual of the thesis (p.115) drops both rules as well: `bl_find_local_cf(bl_results_v2, tgt, set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE))` (the script's comment shows it; it is not run). Comparing `bl_local` (constrained) vs `bl_local_free` (no actionability constraint) shows the cost of the actionability constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the unconstrained search also picks pair (3, 4), at a smaller distance (√d²_M = 0.5554, against 0.6934 for the constrained search's boundary point and 0.6996 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.2 and lowers the credit score to 633.43, two moves the constraints rule out.
 
 **`print(bl_sparse_free)` console output** (from the harness run):
 ```
@@ -1133,13 +1136,13 @@ flt  [bl_filters]
      │    filter: opposing class, hull, set_filters, train_ranges, consistency
      │    .nearest_idx_block() → nearest boundary vertex
      │    update best if dist_mah improves (the default selector under CVA)
-     │  [after the loop]: .restore_fixed() → loan_amnt back to 12,000, still 0.547 → used
-     │                    .round_integers() → credit_score 634.22 → 635 (nearest valid), 0.547 → used
+     │  [after the loop]: .restore_fixed() → loan_amnt back to 12,000, still 0.693 → used
+     │                    .round_integers() → credit_score 634.05 → 635 (nearest valid), 0.693 → used
      ▼
 bl_local  [bl_local_result]
   ├── B_z       (1 × 2, counterfactual in rotated Z; the rounded point's projection)
   ├── B_x       (1 × p, counterfactual in X-space; loan_amnt restored, credit_score rounded)
-  ├── B_pred    (0.547)
+  ├── B_pred    (0.693)
   ├── fixed_check (vars = loan_amnt, applied = TRUE, search_point)
   ├── integer_check (vars = credit_score, applied = TRUE, 2 candidates, 2 valid, search_point)
   ├── dist_z, dist_x, dist_mahalanobis, distance
@@ -1179,7 +1182,7 @@ bl_shapley_values  [bl_shapley]
      │    → candidates: Supports, not fixed, largest |Shapley| first
      │      (loan_int_rate, loan_percent_income)
      │    → x_sparse = x_obs; change one candidate at a time and re-score
-     │    → loan_int_rate: 0.360 (no cross); + loan_percent_income: 0.547 (crosses) → stop
+     │    → loan_int_rate: 0.512 (crosses) → stop
      │    → solution_valid = (pred_class(x_sparse) != pred_class(x_obs))
      ▼
 bl_sparse  [bl_sparse_result]
@@ -1201,7 +1204,7 @@ bl_sparse  [bl_sparse_result]
 
 1. **Local rotation vs global boundary search.** `bl_find_boundary()` (Step 7) searches for the nearest boundary across the full test set using a fixed CVA projection. `bl_find_local_cf()` (Step 11) rotates the projection specifically around the target observation and tries multiple component pairs — this local alignment finds a closer, more actionable boundary than the global search typically can.
 
-2. **Phase 3 rebuilds the convex hull on each rotated plane.** Each pair's rotation invalidates the global grid's polygon, whose coordinates belong to the unrotated plane, so `bl_find_local_cf()` never uses it. With `set_filters(hull = TRUE)` (the default) it builds a new hull from the training data and the target on each rotated plane and keeps only the boundary points inside it (the thesis's plausibility rule, §4.3.1), then applies the `set_filters` actionability constraints and `train_ranges` (per-feature min/max, the feasibility rule, switched by `set_filters(train_ranges = )`). In this harness run the hull changes nothing: the nearest valid boundary points already lie inside it. `hull = FALSE` drops the rule. See `documentation/local-convex-hull.md`.
+2. **Phase 3 rebuilds the convex hull on each rotated plane.** Each pair's rotation invalidates the global grid's polygon, whose coordinates belong to the unrotated plane, so `bl_find_local_cf()` never uses it. With `set_filters(hull = TRUE)` (the default) it builds a new hull from the training data on each rotated plane, keeps only the boundary points inside it, and drops closed contours that enclose no training data (the thesis's plausibility rule, §4.3.1, and its empty-region rule, §3.10), then applies the `set_filters` actionability constraints and `train_ranges` (per-feature min/max, the feasibility rule, switched by `set_filters(train_ranges = )`). In this harness run the empty-region rule moves the Step 11 counterfactual (an empty closed contour held the nearest point), and the hull moves the Step 16 applicant's, who lies outside the training data. `hull = FALSE` drops the rule. See `documentation/local-convex-hull.md`.
 
 3. **Shapley values attribute the full CF movement.** The Shapley values sum to approximately `pred_boundary - pred_prob` — the total prediction change from observation to boundary. Each Shapley value is that feature's fair share of causing the model to change its mind.
 
@@ -1215,8 +1218,8 @@ bl_sparse  [bl_sparse_result]
    - **Restore (Stage H):** it then sets each fixed feature the search moved back to its observed value, and uses that point when it still crosses the boundary. When it does not, no counterfactual is reported, so a reported counterfactual always holds the fixed feature exactly.
    - **Sparse CF:** `bl_find_sparse_cf()` always reverts it to observed, regardless of Shapley classification.
 
-   The script's Step 10 fixes `loan_amnt`. The search moves it by 398.5, inside the ±3,001 tolerance, and the restore puts it back to 12,000 at the same prediction, 0.547.
+   The script's Step 10 fixes `loan_amnt`. The search moves it by 523.4, inside the ±3,001 tolerance, and the restore puts it back to 12,000 at the same prediction, 0.693.
 
-6. **`"integer"` is applied after the search, then re-checked.** A whole-number feature (here the credit score) is searched as a continuous value. Stage H tries the whole values just below and above, in raw units, keeps the combinations that still cross the boundary and meet every constraint and `train_ranges`, and takes the nearest by the search's selector; with none valid, no counterfactual is reported. The Shapley values and the sparse CF then use the rounded point. Here the credit score of 634.22 becomes 635: both 634 and 635 are valid, and 635 is the nearer in the Mahalanobis metric.
+6. **`"integer"` is applied after the search, then re-checked.** A whole-number feature (here the credit score) is searched as a continuous value. Stage H tries the whole values just below and above, in raw units, keeps the combinations that still cross the boundary and meet every constraint and `train_ranges`, and takes the nearest by the search's selector; with none valid, no counterfactual is reported. The Shapley values and the sparse CF then use the rounded point. Here the credit score of 634.05 becomes 635: both 634 and 635 are valid, and 635 is the nearer in the Mahalanobis metric.
 
 7. **The chain is fully self-contained.** Each object carries references to its parents: `bl_sparse$bl_shapley$bl_local_result$bl_result`. Every downstream method can re-extract whatever it needs (projection matrices, model, feature names) without requiring the user to pass additional arguments.

@@ -404,8 +404,8 @@ bl_select_target <- function(bl_result, target, data = NULL) {
 #'   \item{Plausibility}{The counterfactual comes from a local decision
 #'     boundary within the convex hull of the training data (p.117), so it
 #'     lies in a region the training data covers: on each rotated plane, the
-#'     hull of the training data and the target. Switched by \code{hull}; on
-#'     by default.}
+#'     hull of the training data, where a closed boundary contour must also
+#'     enclose training data. Switched by \code{hull}; on by default.}
 #' }
 #' Per-variable constraints and the training ranges are applied in X-space,
 #' after the boundary points are back-projected; the hull is applied on the
@@ -457,7 +457,8 @@ bl_select_target <- function(bl_result, target, data = NULL) {
 #'   }
 #' @param hull Logical; the plausibility rule. \code{TRUE} (the default)
 #'   keeps only the boundary points inside the convex hull of the training
-#'   data and the target on each rotated plane; \code{FALSE} drops the rule.
+#'   data on each rotated plane, and drops closed boundary contours that
+#'   enclose no training data there; \code{FALSE} drops the rule.
 #'   Must be named. A feature called \code{hull} cannot be constrained
 #'   through \code{set_filters()}.
 #' @param train_ranges Logical; the feasibility rule. \code{TRUE} (the
@@ -532,12 +533,15 @@ set_filters <- function(bl_target, ..., hull = TRUE, train_ranges = TRUE) {
 #' \describe{
 #'   \item{hull (plausibility)}{When the \code{hull} switch is on (the
 #'     default), a boundary vertex must lie inside the convex hull of the
-#'     training data and the target, projected onto the rotated plane of that
-#'     pair. The hull is rebuilt for every pair, as in Appendix A of the
-#'     thesis, and applies its plausibility rule (section 4.3.1): the
-#'     counterfactual is selected from a local decision boundary within the
-#'     convex hull of the training data. \code{set_filters(..., hull = FALSE)}
-#'     drops this rule.}
+#'     training data, projected onto the rotated plane of that pair (the
+#'     target is not part of the hull, so a target outside the training data
+#'     can have no counterfactual). A boundary contour still closed after
+#'     this clip is kept only if it encloses training data on the plane, the
+#'     empty-region rule of \code{\link{bl_find_boundary}}. The hull is
+#'     rebuilt for every pair, as in Appendix A of the thesis, and applies
+#'     its plausibility rule (section 4.3.1): the counterfactual is selected
+#'     from a local decision boundary within the convex hull of the training
+#'     data. \code{set_filters(..., hull = FALSE)} drops this rule.}
 #'   \item{actionability}{The per-variable constraints of
 #'     \code{\link{set_filters}}.}
 #'   \item{train_ranges (feasibility)}{When the \code{train_ranges} switch is
@@ -676,7 +680,7 @@ set_filters <- function(bl_target, ..., hull = TRUE, train_ranges = TRUE) {
 #'     \item{xseq, yseq}{Grid axis sequences.}
 #'     \item{min_val, max_val}{Grid axis limits.}
 #'     \item{hull_polygon}{Two-column matrix; the vertices of the convex hull
-#'       of the training data and the target on the plane of \code{best_pair}
+#'       of the training data on the plane of \code{best_pair}
 #'       (rotated Z-space), or \code{NULL} when no solution is found. It is
 #'       stored also when the \code{hull} switch is off (the search then did
 #'       not use it), so that \code{plot(..., trim_to_hull = TRUE)} can show
@@ -805,6 +809,7 @@ bl_find_local_cf <- function(bl_result, bl_target,
   all_distances_mahalanobis <- setNames(rep(NA_real_, nrow(pairs)), pair_names)
   best_selector             <- Inf
   best_result               <- NULL
+  n_clamped                 <- 0L    # local grid cells clamped to [0, 1]
 
   for (k in seq_len(nrow(pairs))) {
     pair <- pairs[k, ]
@@ -829,11 +834,12 @@ bl_find_local_cf <- function(bl_result, bl_target,
     max_val <- z_range[2L] + z_pad
 
     # Plausibility (thesis section 4.3.1): the convex hull of the training
-    # data and the target on this rotated plane, rebuilt for every pair (the
-    # global grid's polygon does not apply after the rotation).
+    # data on this rotated plane, rebuilt for every pair (the global grid's
+    # polygon does not apply after the rotation). The target is not part of
+    # it (since 2026-11-06), so the valid region is set by the training data
+    # alone, as it is for bl_find_boundary().
     hull_poly <- if (hull) {
-      .build_hull_polygon(rbind(Z_train_rot, Z_target), min_val, max_val,
-                          outlie = 1)
+      .build_hull_polygon(Z_train_rot, min_val, max_val, outlie = 1)
     } else {
       NULL
     }
@@ -862,6 +868,13 @@ bl_find_local_cf <- function(bl_result, bl_target,
       )
     }
 
+    # Clamp the scores to [0, 1], as bl_build_grid() does for the global
+    # grid: a custom predict_fn can return values outside it. Counted over
+    # all pairs and reported once, after the loop.
+    oob       <- grid_prob < 0 | grid_prob > 1
+    n_clamped <- n_clamped + sum(oob, na.rm = TRUE)
+    grid_prob <- pmin(pmax(grid_prob, 0), 1)
+
     # Extract contour lines
     grid_mat <- matrix(grid_prob, ncol = m, byrow = FALSE)
     ct_local <- grDevices::contourLines(
@@ -888,10 +901,14 @@ bl_find_local_cf <- function(bl_result, bl_target,
       Mi  <- cbind(ct_local[[i]]$x, ct_local[[i]]$y)
       colnames(Mi) <- c("x", "y")
 
-      # Hull filter first: only the vertices inside this plane's hull.
+      # Hull filter first: only the vertices inside this plane's hull. A
+      # contour still closed after clipping is kept only if it encloses
+      # training data on this plane (.encloses_data(), the rule
+      # bl_find_boundary() applies on the global plane).
       if (hull) {
         Mi <- .poly_clip(Mi, hull_poly)
         if (nrow(Mi) == 0L) next
+        if (!.encloses_data(Mi, Z_train_rot)) next
       }
 
       # Back-project segment to X-space
@@ -1025,13 +1042,19 @@ bl_find_local_cf <- function(bl_result, bl_target,
     }
   }
 
+  if (n_clamped > 0L)
+    warning(sprintf(
+      "%d local grid cell(s), over all component pairs, had predicted probabilities outside [0, 1] and were clamped. Check your model's predict_fn for calibration issues.",
+      n_clamped
+    ), call. = FALSE)
+
   solution_found <- !is.null(best_result)
 
   # The winning plane's hull is stored also when the hull rule is off, so the
   # local plot can show where it lies (plot.bl_local_result(trim_to_hull =
   # TRUE)). Built as in the loop above; the search did not use it.
   if (solution_found && !hull) {
-    hp <- .build_hull_polygon(rbind(best_result$Z_train_rot, best_result$Z_target),
+    hp <- .build_hull_polygon(best_result$Z_train_rot,
                               best_result$min_val, best_result$max_val,
                               outlie = 1)
     best_result$hull_polygon <- hp@polygons[[1L]]@Polygons[[1L]]@coords
@@ -1911,6 +1934,15 @@ plot.bl_local_result <- function(x,
   # NULL.
   biplot_plot <- .bl_rescale_biplot_axes(biplot_plot, bl_result$scaling, var_names)
 
+  # ---- Plot window -------------------------------------------------------
+  # biplotEZ sets the window from the training points. A target (or its
+  # counterfactual) outside it, such as a new applicant beyond the training
+  # data, widens it; otherwise the default window is kept (lims = NULL).
+  lims <- .local_plot_limits(biplot_plot$Z, rbind(Z_target, B_z))
+  plot_bp <- function(bp) {
+    if (is.null(lims)) plot(bp) else plot(bp, xlim = lims$xlim, ylim = lims$ylim)
+  }
+
   # ---- Step 1: biplotEZ base plot (axes canvas) ------------------------
   biplot_plot |>
     biplotEZ::samples(opacity = 0, which = NULL) |>
@@ -1922,7 +1954,7 @@ plot.bl_local_result <- function(x,
                    tick.label.cex = tick_label_cex,
                    ticks          = ticks_vec,
                    label.line     = label_line_vec) |>
-    plot()
+    plot_bp()
 
   # ---- Step 2: prediction grid -----------------------------------------
   # Coloured only inside the plane's hull when trimming, as the global
@@ -1953,7 +1985,7 @@ plot.bl_local_result <- function(x,
                    ticks          = ticks_vec,
                    label.line     = label_line_vec)
   graphics::par(new = TRUE)
-  plot(bp_overlay)
+  plot_bp(bp_overlay)
 
   # ---- Step 5: decision boundary contour lines -------------------------
   if (!isTRUE(no_contour)) {
@@ -2194,4 +2226,35 @@ print.bl_filters <- function(x, ...) {
   cat(sprintf("  Plausibility (hull)        : %s\n", on_off(sw$hull)))
   cat(sprintf("  Feasibility (train_ranges) : %s\n", on_off(sw$train_ranges)))
   invisible(x)
+}
+
+
+#' Plot window for the local biplot
+#'
+#' biplotEZ's `plot()` sets its window from the first two columns of the
+#' biplot's `Z` (the training points), times `exp_factor`, with an equal
+#' aspect. When any of `pts` (the target and the counterfactual) lies outside
+#' that window, the window is widened to cover them, with a 5% margin;
+#' otherwise `NULL` is returned and the default window is kept, so the plot is
+#' unchanged.
+#'
+#' @param Z          Matrix whose first two columns are the plotted points.
+#' @param pts        Two-column matrix of points that must be visible.
+#' @param exp_factor biplotEZ's expansion factor (default 1.2, as in
+#'   `biplotEZ:::plot.biplot()`).
+#' @return `NULL`, or a list with `xlim` and `ylim`.
+#' @noRd
+.local_plot_limits <- function(Z, pts, exp_factor = 1.2) {
+  xlim <- range(Z[, 1L] * exp_factor)
+  ylim <- range(Z[, 2L] * exp_factor)
+  pts  <- as.matrix(pts)
+  pts  <- pts[stats::complete.cases(pts), , drop = FALSE]
+  if (nrow(pts) == 0L) return(NULL)
+  inside <- pts[, 1L] >= xlim[1L] & pts[, 1L] <= xlim[2L] &
+            pts[, 2L] >= ylim[1L] & pts[, 2L] <= ylim[2L]
+  if (all(inside)) return(NULL)
+  xr <- range(c(xlim, pts[, 1L]))
+  yr <- range(c(ylim, pts[, 2L]))
+  list(xlim = xr + c(-1, 1) * 0.05 * diff(xr),
+       ylim = yr + c(-1, 1) * 0.05 * diff(yr))
 }

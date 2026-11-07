@@ -1,3 +1,17 @@
+test_that("plot_biplotEZ(grid_col =) draws for a model with another cutoff", {
+  # The two-colour grid splits at the model's cutoff, not at a fixed 0.5
+  # (documentation/algorithms.md, finding F6).
+  on.exit(grDevices::graphics.off(), add = TRUE)
+  grDevices::pdf(NULL)
+  d <- bl_prepare_data(iris, class_col = "Species", target_class = "versicolor",
+                       verbose = FALSE)
+  m <- bl_fit_model(d$train_data, d$var_names, model_type = "GLM", cutoff = 0.6)
+  r <- suppressWarnings(suppressMessages(
+    bl_build_result(d, m, method = "PCA", m = 40L, b_margin = 0.01)))
+  expect_equal(r$cutoff, 0.6)
+  expect_no_error(capture.output(plot_biplotEZ(r, grid_col = c("blue", "red"))))
+})
+
 # .make_label_line_vec() and .make_ticks_vec() pair each value with its own
 # variable, position by position. An unknown variable name is dropped together
 # with its value; a single value applies to every listed variable; any other

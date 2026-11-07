@@ -120,8 +120,9 @@ keeps the orientation set by the optimal rotation and has no \code{rotate_deg}.}
 \item{grid_col}{\code{NULL} (default) or a length-2 character vector
 \code{c(class0_col, class1_col)}. When supplied, the prediction grid is
 rendered as hard binary colours -- \code{grid_col[1]} for grid points with
-predicted probability < 0.5 (class 0) and \code{grid_col[2]} for >= 0.5
-(class 1) -- instead of the default blue-white-red gradient. Example:
+predicted probability below the model's cutoff (class 0) and
+\code{grid_col[2]} at or above it (class 1) -- instead of the default
+blue-white-red gradient. Example:
 \code{grid_col = c("blue", "red")}.}
 
 \item{contour_col}{Character; colour for decision boundary contour

@@ -78,7 +78,7 @@ or \code{"euclidean"}), after \code{"auto"} is resolved.}
 \item{xseq, yseq}{Grid axis sequences.}
 \item{min_val, max_val}{Grid axis limits.}
 \item{hull_polygon}{Two-column matrix; the vertices of the convex hull
-of the training data and the target on the plane of \code{best_pair}
+of the training data on the plane of \code{best_pair}
 (rotated Z-space), or \code{NULL} when no solution is found. It is
 stored also when the \code{hull} switch is off (the search then did
 not use it), so that \code{plot(..., trim_to_hull = TRUE)} can show
@@ -160,12 +160,15 @@ coordinates. Three constraint types, all set through
 \describe{
 \item{hull (plausibility)}{When the \code{hull} switch is on (the
 default), a boundary vertex must lie inside the convex hull of the
-training data and the target, projected onto the rotated plane of that
-pair. The hull is rebuilt for every pair, as in Appendix A of the
-thesis, and applies its plausibility rule (section 4.3.1): the
-counterfactual is selected from a local decision boundary within the
-convex hull of the training data. \code{set_filters(..., hull = FALSE)}
-drops this rule.}
+training data, projected onto the rotated plane of that pair (the
+target is not part of the hull, so a target outside the training data
+can have no counterfactual). A boundary contour still closed after
+this clip is kept only if it encloses training data on the plane, the
+empty-region rule of \code{\link{bl_find_boundary}}. The hull is
+rebuilt for every pair, as in Appendix A of the thesis, and applies
+its plausibility rule (section 4.3.1): the counterfactual is selected
+from a local decision boundary within the convex hull of the training
+data. \code{set_filters(..., hull = FALSE)} drops this rule.}
 \item{actionability}{The per-variable constraints of
 \code{\link{set_filters}}.}
 \item{train_ranges (feasibility)}{When the \code{train_ranges} switch is

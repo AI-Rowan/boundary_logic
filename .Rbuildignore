@@ -15,3 +15,5 @@
 ^scripts/pima\ diabetes\.csv$
 ^scripts$
 ^development$
+^vignettes/.*\.Rmd\.orig$
+^vignettes/precompile\.R$

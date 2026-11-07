@@ -49,7 +49,8 @@ rounded.}
 
 \item{hull}{Logical; the plausibility rule. \code{TRUE} (the default)
 keeps only the boundary points inside the convex hull of the training
-data and the target on each rotated plane; \code{FALSE} drops the rule.
+data on each rotated plane, and drops closed boundary contours that
+enclose no training data there; \code{FALSE} drops the rule.
 Must be named. A feature called \code{hull} cannot be constrained
 through \code{set_filters()}.}
 
@@ -89,8 +90,8 @@ training data (\code{bl_result$train_ranges}). Switched by
 \item{Plausibility}{The counterfactual comes from a local decision
 boundary within the convex hull of the training data (p.117), so it
 lies in a region the training data covers: on each rotated plane, the
-hull of the training data and the target. Switched by \code{hull}; on
-by default.}
+hull of the training data, where a closed boundary contour must also
+enclose training data. Switched by \code{hull}; on by default.}
 }
 Per-variable constraints and the training ranges are applied in X-space,
 after the boundary points are back-projected; the hull is applied on the

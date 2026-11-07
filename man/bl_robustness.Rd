@@ -26,5 +26,7 @@ Named list with:
 \description{
 Returns per-variable and overall total absolute standardised distances to
 the decision boundary across all observations. A larger value indicates
-the population is, on average, further from the boundary.
+the population is, on average, further from the boundary. The distances
+are the in-plane gaps of \code{\link[=plot.bl_boundary]{plot.bl_boundary()}} (the same totals it returns),
+not the \code{dist_x} / \code{dist_mahalanobis} that \code{bl_find_boundary()} reports.
 }

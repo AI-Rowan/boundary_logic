@@ -95,6 +95,16 @@ If the projection was standardised (PCA with \code{standardise = TRUE}),
 the X-space vector is first unstandardised by multiplying by \code{X_sd}
 before the final division.
 
+This is the \emph{in-plane} gap, the move along the biplot plane from each
+observation to its boundary point. It differs, by design, from the gap
+\code{B_x - x_obs} whose length \code{bl_find_boundary()} reports as \code{dist_x} and
+\code{dist_mahalanobis}: that gap also resets the part of the observation that
+lies off the plane (its other canonical coordinates) to the mean, which the
+biplot cannot show and which has nothing to do with the boundary. The
+variable importance and the robustness are measured on the in-plane gap;
+\code{bl_find_boundary()}'s distances are reported only. See
+\code{documentation/algorithms.md}, finding F3.
+
 The sign indicates which side of the boundary the observation lies on:
 positive values indicate the observation is above the boundary in that
 variable's direction. The vertical line at x = 0 marks the boundary.

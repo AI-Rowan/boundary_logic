@@ -56,6 +56,16 @@ utils::globalVariables(c("values", "Variable"))
 #' the X-space vector is first unstandardised by multiplying by `X_sd`
 #' before the final division.
 #'
+#' This is the *in-plane* gap, the move along the biplot plane from each
+#' observation to its boundary point. It differs, by design, from the gap
+#' `B_x - x_obs` whose length `bl_find_boundary()` reports as `dist_x` and
+#' `dist_mahalanobis`: that gap also resets the part of the observation that
+#' lies off the plane (its other canonical coordinates) to the mean, which the
+#' biplot cannot show and which has nothing to do with the boundary. The
+#' variable importance and the robustness are measured on the in-plane gap;
+#' `bl_find_boundary()`'s distances are reported only. See
+#' `documentation/algorithms.md`, finding F3.
+#'
 #' The sign indicates which side of the boundary the observation lies on:
 #' positive values indicate the observation is above the boundary in that
 #' variable's direction. The vertical line at x = 0 marks the boundary.
@@ -270,7 +280,9 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
 #'
 #' Returns per-variable and overall total absolute standardised distances to
 #' the decision boundary across all observations. A larger value indicates
-#' the population is, on average, further from the boundary.
+#' the population is, on average, further from the boundary. The distances
+#' are the in-plane gaps of [plot.bl_boundary()] (the same totals it returns),
+#' not the `dist_x` / `dist_mahalanobis` that `bl_find_boundary()` reports.
 #'
 #' @param bl_boundary A `"bl_boundary"` object from `bl_find_boundary()`.
 #' @param distance    Character; per-feature standardisation metric. One of

@@ -770,3 +770,71 @@ test_that("the local plot trims the grid to the hull, or not, and always draws",
   sp <- bl_find_sparse_cf(bl_shapley(def))
   expect_no_error(capture.output(plot(sp, trim_to_hull = TRUE)))
 })
+
+
+# ---- Findings F2, F4 (documentation/algorithms.md, decided 2026-11-06) ----------
+
+test_that("each plane's hull is the hull of the training data alone", {
+  tgt <- bl_select_target(lcf_bl_results, target = 1L)
+  def <- bl_find_local_cf(lcf_bl_results, tgt, verbose = FALSE)
+  skip_if_not(isTRUE(def$solution_found))
+  hp <- boundarylogic:::.build_hull_polygon(def$Z_train_rot, def$min_val,
+                                            def$max_val, outlie = 1)
+  expect_identical(def$hull_polygon, hp@polygons[[1L]]@Polygons[[1L]]@coords)
+
+  # A target far outside the training data does not enlarge the hull: its
+  # counterfactual lies inside the training hull, the target outside it.
+  far <- lcf_train[1L, lcf_bl_results$var_names]
+  far[1L, ] <- far[1L, ] + 4 * apply(lcf_train[, lcf_bl_results$var_names], 2L, sd)
+  tgt_far <- suppressWarnings(bl_select_target(lcf_bl_results, target = far))
+  res <- bl_find_local_cf(lcf_bl_results, tgt_far,
+                          set_filters = set_filters(tgt_far, train_ranges = FALSE),
+                          verbose = FALSE)
+  skip_if_not(isTRUE(res$solution_found))
+  expect_true(boundarylogic:::.grid_in_hull(res$B_z, res$hull_polygon))
+  expect_false(boundarylogic:::.grid_in_hull(res$Z_target, res$hull_polygon))
+})
+
+test_that("the local grid's scores are clamped to [0, 1], with one warning", {
+  # A custom predict_fn with values slightly outside [0, 1].
+  mod <- bl_wrap_model(lcf_bl_mod$model, model_type = "custom",
+                       var_names = lcf_bl_dat$var_names,
+                       predict_fn = function(m, new_data) {
+                         1.21 * boundarylogic:::.pred_function(m, "GLM", new_data) - 0.005
+                       })
+  res <- suppressWarnings(
+    bl_build_result(lcf_bl_dat, mod, method = "PCA", m = 60L, b_margin = 0.01))
+  tgt <- bl_select_target(res, target = 1L)
+  expect_warning(loc <- bl_find_local_cf(res, tgt, verbose = FALSE),
+                 "local grid cell\\(s\\), over all component pairs")
+  skip_if_not(isTRUE(loc$solution_found))
+  expect_length(loc$col_value, nrow(loc$Zgrid))
+  expect_false(anyNA(loc$col_value))
+  expect_true(all(loc$grid_prob >= 0 & loc$grid_prob <= 1))
+})
+
+test_that(".local_plot_limits widens the window only for a point outside it", {
+  lim <- boundarylogic:::.local_plot_limits
+  Z <- cbind(c(-1, 1), c(-1, 1))           # default window: [-1.2, 1.2]^2
+  expect_null(lim(Z, cbind(0.5, -0.5)))
+  expect_null(lim(Z, cbind(NA_real_, NA_real_)))
+  w <- lim(Z, rbind(c(0, 0), c(3, -4)))
+  expect_true(w$xlim[1L] < -1.2 && w$xlim[2L] > 3)
+  expect_true(w$ylim[1L] < -4 && w$ylim[2L] > 1.2)
+})
+
+test_that("the local plot draws a target outside the training data", {
+  on.exit(grDevices::graphics.off(), add = TRUE)
+  grDevices::pdf(NULL)
+  far <- lcf_train[1L, lcf_bl_results$var_names]
+  far[1L, ] <- far[1L, ] + 4 * apply(lcf_train[, lcf_bl_results$var_names], 2L, sd)
+  tgt_far <- suppressWarnings(bl_select_target(lcf_bl_results, target = far))
+  res <- bl_find_local_cf(lcf_bl_results, tgt_far,
+                          set_filters = set_filters(tgt_far, train_ranges = FALSE),
+                          verbose = FALSE)
+  skip_if_not(isTRUE(res$solution_found))
+  lims <- boundarylogic:::.local_plot_limits(
+    res$bl_result$biplot_obj$Z, rbind(res$Z_target, res$B_z))
+  expect_false(is.null(lims))
+  expect_no_error(plot(res, print_summary = FALSE))
+})

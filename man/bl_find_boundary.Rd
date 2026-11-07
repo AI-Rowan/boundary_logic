@@ -57,7 +57,10 @@ in Z-space, which gives the geometric orthogonal projection from each
 observation onto the boundary line.
 
 Boundary segments are first clipped to the training-data convex hull
-polygon (in Z-space) and then pruned to retain only points whose
+polygon (in Z-space). A contour that is still closed after clipping is kept
+only if it encloses training rows (the empty-region rule), so the contours
+searched, and each row's counterfactual, do not depend on \code{data} or \code{tdp}.
+The segments are then pruned to retain only points whose
 back-projected model prediction is consistent with the contour's
 probability level. The training variable ranges (\code{bl_result$train_ranges})
 are checked \strong{after} the nearest point is selected, not before. Applying

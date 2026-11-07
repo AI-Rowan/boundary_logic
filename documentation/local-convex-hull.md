@@ -7,7 +7,9 @@ This note explains why `bl_find_local_cf()` keeps only the boundary points insid
 the training data on each rotated plane (`set_filters(hull = TRUE)`, the default since 2026-11-05),
 how it does so, and what the rule changes on the Pima example of Paper 1 and on the loan harness.
 Section 6 explains why the switch, and the one for the training ranges, sit in `set_filters()`
-(since 2026-11-06), and why a search without a filter object keeps both rules on. The decision is
+(since 2026-11-06), and why a search without a filter object keeps both rules on. Section 7 records
+the two changes of 2026-11-06 (`documentation/algorithms.md`, findings F2 and F4): the hull is built
+from the training data alone, and a closed contour must enclose training data. The decision is
 recorded in `documentation/methodology-changes/future-improvements-review.md` (item B10, round 4)
 and in the methodology note's section on the convex hull in the local search.
 
@@ -37,14 +39,15 @@ from the thesis text (its section "No convex hull in the local search").
 
 For each component pair, after the rotation:
 
-1. **The hull.** The training data and the target are projected onto the rotated plane
-   (`Z_train_rot`, `Z_target`), and their convex hull is built with `.build_hull_polygon(...,
-   outlie = 1)` (`R/hull_utils.R`). The fraction 1 gives the full hull, as the global grid's default
-   (`bl_build_grid(outlie = 1)`).
+1. **The hull.** The training data are projected onto the rotated plane (`Z_train_rot`), and their
+   convex hull is built with `.build_hull_polygon(..., outlie = 1)` (`R/hull_utils.R`). The fraction 1
+   gives the full hull, as the global grid's default (`bl_build_grid(outlie = 1)`). The target is not
+   part of it (since 2026-11-06, §7).
 2. **The filter.** Each boundary contour on the plane keeps only its vertices inside the hull
-   (`.poly_clip()`, the vertex filter the global search uses). The actionability constraints
-   (`set_filters()`), the training ranges and the model's re-score then run on the remaining vertices,
-   as before.
+   (`.poly_clip()`, the vertex filter the global search uses). A contour still closed after this clip
+   is kept only if it encloses training data on the plane (`.encloses_data()`, the global search's
+   empty-region rule; since 2026-11-06, §7). The actionability constraints (`set_filters()`), the
+   training ranges and the model's re-score then run on the remaining vertices, as before.
 3. **The selection** is unchanged: the nearest valid vertex per pair, and the pair with the smallest
    distance by the thesis rule.
 
@@ -61,14 +64,14 @@ shows the hull of a search with the rule off; the Pima Figure 7(a) uses it to sh
 run 4, which has no counterfactual inside the hull, searched without it: its counterfactual is the
 point the hull removes.
 
-**Design choices** (Adriaan Rowan, 2026-11-05):
+**Design choices** (Adriaan Rowan, 2026-11-05; the first and last rows revised on 2026-11-06, §7):
 
 | Choice | Decision | Reason |
 |---|---|---|
-| The points the hull is built from | The training data and the target | As Appendix A. The target always lies inside its own hull, so a target at the edge of the training cloud can still reach a counterfactual near it. |
+| The points the hull is built from | The training data (since 2026-11-06; before, the training data and the target, as Appendix A) | The valid region is set by the training data alone, as the text says ("the convex hull of the training data", p.117) and as in the global search. A target outside the training data no longer enlarges the region its counterfactual may come from. |
 | A switch | `hull = TRUE` by default; `hull = FALSE` gives the earlier search exactly. Since 2026-11-06 the switch is in `set_filters()` (§6) | The thesis rule by default, with the earlier results reproducible (the methodology note's measurement M6) |
 | The rotation scripts (`17_1` to `17_3`) | Pin `set_filters(tgt, hull = FALSE)` | Their measurements concern the rotation and the pair search, so the rotation note's numbers stay valid |
-| An enclosure rule for closed contours | None | The text requires only the hull for the local search (p.117) |
+| An enclosure rule for closed contours | Since 2026-11-06, a closed contour is kept only if it encloses training data on the plane (with the hull on); before, none | The same empty-region rule as the global search ("any local decision boundary area that does not contain data points is discarded", §3.10 step 4, p.93), tested on the training data in both searches |
 
 **Off the plane.** The hull applies to the boundary points on the plane. The restored point of a
 `"fixed"` feature, the rounded point of an `"integer"` feature and the sparse counterfactual lie off
@@ -109,7 +112,7 @@ rotated plane passes four filters in this order (`R/local_cf.R`, `bl_find_local_
 
 | # | Filter | Thesis term | Switch |
 |---|---|---|---|
-| 1 | Inside the hull of the training data and the target on this plane (`.poly_clip()`, 2D) | plausibility (pp.116-117) | `set_filters(hull = TRUE)` |
+| 1 | Inside the hull of the training data on this plane (`.poly_clip()`, 2D), and a closed contour only if it encloses training data (`.encloses_data()`) | plausibility (pp.116-117); empty regions (p.93) | `set_filters(hull = TRUE)` |
 | 2 | The per-variable constraints (`.apply_actionability()`, X-space) | actionability (p.116) | the constraints in `set_filters()` |
 | 3 | Every feature within its training range (`get_filter_logical_vector()`, X-space) | feasibility (pp.116-117) | `set_filters(train_ranges = TRUE)` |
 | 4 | The model scores the point on the other side of the cutoff | not a constraint | always on |
@@ -150,15 +153,18 @@ A `bl_filters` object built by hand or before the switches existed (no fields) i
 **Checks (2026-11-06).** With the defaults, the loan harness, the rotation scripts `17_1` to `17_3`
 and the Pima pipeline give the same results as before the move.
 
-**What the switches change on the loan harness** (a driver run after the harness, 2026-11-06; the
-searches without actionability constraints):
+**What the switches change on the loan harness** (a driver run after the harness, re-run on
+2026-11-06 after the changes of §7; the searches without actionability constraints):
 
 | Target | Default (both on) | `hull = FALSE` | `train_ranges = FALSE` | Both off |
 |---|---|---|---|---|
 | Step 10 test row | pair (3,4), √d²_M 0.5554 | the same | the same | the same |
-| Step 16 external applicant | pair (1,2), √d²_M 1.7026; credit score 489.44 | the same | pair (1,4), 0.8521; credit score 445.24 | pair (1,4), 0.4750; credit score 421.26 |
+| Step 16 external applicant | pair (1,2), √d²_M 2.8241; credit score 534.92 | pair (1,2), 1.7026; credit score 489.44 | the same as the default | pair (1,4), 0.4750; credit score 421.26 |
 
-The external applicant's credit score (420) lies below the training range (489 to 754). With the
-feasibility rule on, every counterfactual must raise it into range, and the nearest one sits at the
-range's lower end; without the rule the counterfactual leaves the credit score near 420, outside the
-training data, at under a third of the distance.
+The external applicant's credit score (420) lies below the training range (489 to 754), and the
+applicant lies outside the training data on the chosen plane. With the hull on, the counterfactual must lie
+inside the training data's hull, which already keeps the credit score within its range, so dropping
+the ranges changes nothing. With the hull off and the ranges on, the nearest counterfactual sits at the
+range's lower end; with both off it leaves the credit score near 420, outside the training data, at a
+sixth of the default's distance. (Before §7 the hull included the applicant, and the default equalled
+the `hull = FALSE` column.)

@@ -108,6 +108,31 @@ test_that("bl_find_boundary returns the squared Mahalanobis distance v' W^-1 v",
                fixed = TRUE)
 })
 
+test_that(".encloses_data keeps open lines, and closed ones only with data inside", {
+  enc  <- boundarylogic:::.encloses_data
+  sq   <- cbind(x = c(0, 1, 1, 0, 0), y = c(0, 0, 1, 1, 0))   # closed square
+  line <- sq[1:4, ]                                          # open polyline
+  far  <- cbind(5, 5)
+  expect_true(enc(line, far))                  # open: always kept
+  expect_true(enc(sq, rbind(far, c(0.5, 0.5))))   # a point inside
+  expect_true(enc(sq, cbind(1, 0.5)))          # a point on the edge counts
+  expect_false(enc(sq, far))                   # empty: dropped
+})
+
+test_that("a row's global counterfactual does not depend on the rows searched with it", {
+  # The empty-region rule tests the training data, not the searched rows
+  # (documentation/algorithms.md, finding F2).
+  full <- quiet(bl_find_boundary(bnd_res))
+  rows <- c(1L, 2L, 51L, 75L, 120L)
+  for (i in rows) {
+    one <- quiet(bl_find_boundary(bnd_res, tdp = i))
+    expect_equal(one$B_z, full$B_z[i, , drop = FALSE])
+    expect_equal(one$dist_mahalanobis, full$dist_mahalanobis[i])
+  }
+  sub <- quiet(bl_find_boundary(bnd_res, tdp = rows))
+  expect_equal(sub$B_z, full$B_z[rows, , drop = FALSE])
+})
+
 test_that("bl_find_boundary gives NA dist_mahalanobis, with a warning, without metric_inv", {
   old <- bnd_res
   old$metric_inv <- NULL

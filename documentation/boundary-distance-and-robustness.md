@@ -43,7 +43,8 @@ $$
 
 That is, centre each class on its own mean, sum the cross-products, and divide by the degrees of freedom. The
 result is the unbiased within-class covariance under a common covariance across classes, the assumption behind LDA
-and CVA.
+and CVA. The code divides by `max(n - g, 1)`; the 1 only guards against a zero or negative divisor when there are
+no more rows than classes.
 
 **Which class factor**, in order of priority:
 
@@ -70,6 +71,16 @@ $$
 - **The consequence:** distances measured with $\mathbf{W}$ are consistent with the CVA biplot's axes.
 - **The PhD research code** used biplotEZ's `Wmat` directly. The package recomputes it with the divisor $n-g$.
   This scales every distance by the same constant and changes no comparison.
+- **Why the package computes $\mathbf{W}$ rather than reading `bp$Wmat`:**
+  - **PCA has no `Wmat`.** A biplotEZ PCA object has none, so `.compute_metric_inverse()` must compute the
+    `"W_binary"` and `"Sigma"` metrics itself. Computing `"W_cva"` there too gives all three on one scale, in one
+    code path.
+  - **The divisor makes $\mathbf{W}$ a covariance.** $\sqrt{d_M^2}$ then counts within-class standard deviations,
+    and $\sqrt{W_{jj}}$ is the within-class SD that §3 divides by. The methodology-changes note
+    ([`methodology-changes/methodology-changes.qmd`](methodology-changes/methodology-changes.qmd), "The metric W as
+    a covariance matrix") records this reason and its effect.
+  - **Under CVA the two agree:** `bp$Wmat / (n - g)` equals `metric` to rounding (checked on iris with four
+    groups, biplotEZ 2.2, 2026-11-06).
 
 The rotation note (§3.4) proves the consequence that matters for the local search. Under CVA, for any displacement
 lying in a biplot plane, rotated or not, the squared Mahalanobis distance is $(n-g)$ times the squared in-plane
@@ -118,6 +129,12 @@ For every observation, `bl_find_boundary()` finds the nearest point on the oppos
   result is deterministic (`nearest-vertex-tie-break.md`).
 - **`train_ranges`** are checked *after* selection and reported, not used to discard points. Discarding would pick
   a farther, geometrically wrong point (`2 implementation_summary.txt` §6.11).
+- **Closed contours.** A contour still closed after clipping to the training hull is kept only if it encloses
+  *training* rows (`.encloses_data()`; the thesis's empty-region rule, §3.10 step 4, p.93). Until 2026-11-06 the
+  rows being searched decided (as in the PhD code), so a row's counterfactual could depend on which other rows
+  were searched with it (`documentation/algorithms.md`, finding F2). On the loan harness's 4-feature model the
+  change keeps 18 contours instead of 12 and moves 346 of the 4,429 test rows' counterfactuals; on the Pima
+  example and the 9-feature loan model nothing changes.
 
 It returns three distances (`R/boundary.R`, the "Distances" block of `bl_find_boundary()`):
 
@@ -140,6 +157,29 @@ found and, with a warning, when `metric_inv` is missing (an older `bl_result`, �
 - **Under CVA, `dist_z` is a Mahalanobis distance:** $(n-g)\cdot\texttt{dist\_z}^2$ is the squared Mahalanobis
   distance of that in-plane displacement (§1.2). It equals `dist_mahalanobis` only when the observation lies in the
   plane, which in the global biplot it rarely does.
+
+**Why they differ, and how they are used** (`documentation/algorithms.md`, finding F3, decided 2026-11-06). Write
+the observation's full coordinates as $(\mathbf{x}_i-\bar{\mathbf{x}})\mathbf{S}^{-1}\mathbf{V} = [\mathbf{z}_i,
+\mathbf{w}_i]$: $\mathbf{z}_i$ holds the two plotted ones and $\mathbf{w}_i$ the other $p-2$. Then
+$\mathbf{x}_i = \bar{\mathbf{x}} + \mathbf{z}_i\mathbf{V}_r^{-}\mathbf{S} + \mathbf{w}_i\mathbf{V}_{-r}^{-}\mathbf{S}$,
+while the counterfactual is $\mathbf{x}^{cf}_i = \bar{\mathbf{x}} + \mathbf{b}_i\mathbf{V}_r^{-}\mathbf{S}$, a point of
+the plane with $\mathbf{w} = \mathbf{0}$. So
+
+$$
+\mathbf{x}^{cf}_i - \mathbf{x}_i = (\mathbf{b}_i - \mathbf{z}_i)\mathbf{V}_r^{-}\mathbf{S} \;-\; \mathbf{w}_i\mathbf{V}_{-r}^{-}\mathbf{S}:
+$$
+
+the move along the plane to the boundary, plus the reset of the observation's off-plane part to the mean, which has
+nothing to do with the boundary. The off-plane part is most of the global gap: 80% of its summed squared length on the
+loan harness's 9-feature model, 59% on its 4-feature model and 78% on Pima's 7-feature model (within-class SD units;
+the methodology note's F3 rows). Hence:
+
+- **The variable importance and the robustness (§3) use only the in-plane move**, as the thesis does. They are not
+  computed from `dist_x` or `dist_mahalanobis`, and their totals do not decompose them.
+- **`dist_x` and `dist_mahalanobis` are reported only.** No global or local interpretation in the package uses them
+  (the local search measures its own distances from the target, which lies on its rotated plane, §2.1). The Pima
+  example of Paper 1 uses the global $\sqrt{d^2_M}$ to choose its two Phase 3 targets (the TP and TN test rows
+  nearest their groups' median) and quotes its median.
 
 ### 2.1 Why the distance uses $\mathbf{W}$, not a rotated $\mathbf{W}$
 
@@ -204,7 +244,8 @@ $$
 
 ### 3.2 The current implementation
 
-`plot.bl_boundary()` (`R/boundary_plot.R:127-142`) builds the signed displacement per observation and feature:
+`plot.bl_boundary()` (`R/boundary_plot.R`, its "Compute signed standardised distance per variable" block; the same
+code in `bl_robustness()`) builds the signed in-plane displacement per observation and feature:
 
 ```r
 vec_to_boundary_Z  <- x$Z_obs - x$B_z
@@ -301,7 +342,9 @@ Phase 3's `bl_shapley()` does use exact Shapley, for one observation at a time: 
 ### 4.2 The Mahalanobis check
 
 To make that loss visible, `plot.bl_boundary()` prints a check when `distance = "mahalanobis"`
-(`R/boundary_plot.R:223-258`). It compares two squared distances, each summed across the observations:
+(`R/boundary_plot.R`, the "Mahalanobis check" block of `plot.bl_boundary()`). It compares two squared distances,
+each summed across the observations, both of the in-plane displacement (so its "full" value is not the sum of
+`bl_find_boundary()`'s `dist_mahalanobis`, §2):
 
 - **plotted**: $\sum_j v_j^2/\mathbf{W}_{jj}$, the squared length of the per-feature distances the plot shows
   ($v_j/\sqrt{\mathbf{W}_{jj}}$, the `vec_to_boundary_sd` matrix);

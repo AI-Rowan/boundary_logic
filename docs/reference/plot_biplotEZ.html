@@ -235,8 +235,9 @@ keeps the orientation set by the optimal rotation and has no <code>rotate_deg</c
 <dd><p><code>NULL</code> (default) or a length-2 character vector
 <code>c(class0_col, class1_col)</code>. When supplied, the prediction grid is
 rendered as hard binary colours – <code>grid_col[1]</code> for grid points with
-predicted probability &lt; 0.5 (class 0) and <code>grid_col[2]</code> for &gt;= 0.5
-(class 1) – instead of the default blue-white-red gradient. Example:
+predicted probability below the model's cutoff (class 0) and
+<code>grid_col[2]</code> at or above it (class 1) – instead of the default
+blue-white-red gradient. Example:
 <code>grid_col = c("blue", "red")</code>.</p></dd>
 
 

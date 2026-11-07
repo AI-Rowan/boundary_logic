@@ -214,8 +214,9 @@
 #' @param grid_col        `NULL` (default) or a length-2 character vector
 #'   `c(class0_col, class1_col)`. When supplied, the prediction grid is
 #'   rendered as hard binary colours -- `grid_col[1]` for grid points with
-#'   predicted probability < 0.5 (class 0) and `grid_col[2]` for >= 0.5
-#'   (class 1) -- instead of the default blue-white-red gradient. Example:
+#'   predicted probability below the model's cutoff (class 0) and
+#'   `grid_col[2]` at or above it (class 1) -- instead of the default
+#'   blue-white-red gradient. Example:
 #'   `grid_col = c("blue", "red")`.
 #' @param contour_col      Character; colour for decision boundary contour
 #'   lines. Default `"black"`.
@@ -340,7 +341,8 @@ plot_biplotEZ <- function(bl_result,
   # ---- Step 2: prediction grid (coloured squares) ----------------------
   if (!isTRUE(no_grid) && !is.null(gr)) {
     if (!is.null(grid_col) && length(grid_col) == 2L) {
-      grid_draw_col <- ifelse(gr$grid_prob >= 0.5, grid_col[2L], grid_col[1L])
+      grid_draw_col <- ifelse(gr$grid_prob >= bl_result$cutoff,
+                              grid_col[2L], grid_col[1L])
     } else {
       grid_draw_col <- gr$col_value
     }

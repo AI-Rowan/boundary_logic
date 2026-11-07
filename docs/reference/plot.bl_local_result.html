@@ -10,7 +10,11 @@ is shown as a filled circle coloured by the confusion scheme when its true
 class is known (bl_target$class_obs, resolved by
 bl_select_target from the target's own row), or red/blue by
 predicted class when it is not. The nearest boundary point is shown as a cross
-with an arrow."><meta property="og:description" content="Renders the rotated biplot for the best component pair found by
+with an arrow. When the search applied the convex hull (x$hull), the
+prediction grid is coloured only inside the hull of the training data and
+the target on this plane, as the global biplot colours only inside its hull:
+the coloured area is where the search could choose boundary points, and
+boundary lines in the white area lie outside it."><meta property="og:description" content="Renders the rotated biplot for the best component pair found by
 bl_find_local_cf using the same biplotEZ pipeline as
 plot_biplotEZ. The biplotEZ object is patched with the rotated
 loading matrix (Vr_rot) and rotated training coordinates
@@ -21,7 +25,11 @@ is shown as a filled circle coloured by the confusion scheme when its true
 class is known (bl_target$class_obs, resolved by
 bl_select_target from the target's own row), or red/blue by
 predicted class when it is not. The nearest boundary point is shown as a cross
-with an arrow."></head><body>
+with an arrow. When the search applied the convex hull (x$hull), the
+prediction grid is coloured only inside the hull of the training data and
+the target on this plane, as the global biplot colours only inside its hull:
+the coloured area is where the search could choose boundary points, and
+boundary lines in the white area lie outside it."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -70,7 +78,11 @@ is shown as a filled circle coloured by the confusion scheme when its true
 class is known (<code>bl_target$class_obs</code>, resolved by
 <code><a href="bl_select_target.html">bl_select_target</a></code> from the target's own row), or red/blue by
 predicted class when it is not. The nearest boundary point is shown as a cross
-with an arrow.</p>
+with an arrow. When the search applied the convex hull (<code>x$hull</code>), the
+prediction grid is coloured only inside the hull of the training data and
+the target on this plane, as the global biplot colours only inside its hull:
+the coloured area is where the search could choose boundary points, and
+boundary lines in the white area lie outside it.</p>
     </div>
 
     <div class="section level2">
@@ -79,6 +91,7 @@ with an arrow.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span></span>
 <span>  <span class="va">x</span>,</span>
 <span>  no_grid <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  trim_to_hull <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  plot_points <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  no_contour <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  cex_z <span class="op">=</span> <span class="fl">0.5</span>,</span>
@@ -114,6 +127,15 @@ with an arrow.</p>
 <dt id="arg-no-grid">no_grid<a class="anchor" aria-label="anchor" href="#arg-no-grid"></a></dt>
 <dd><p>Logical; if <code>TRUE</code> the prediction grid is hidden.
 Default <code>FALSE</code>.</p></dd>
+
+
+<dt id="arg-trim-to-hull">trim_to_hull<a class="anchor" aria-label="anchor" href="#arg-trim-to-hull"></a></dt>
+<dd><p>Logical or <code>NULL</code>; colour the prediction grid
+only inside the convex hull on this plane (<code>x$hull_polygon</code>).
+<code>NULL</code> (default) trims when the search applied the hull
+(<code>x$hull</code>); <code>TRUE</code> trims also for a search with the hull
+switched off, to show where the hull lies; <code>FALSE</code> colours the whole
+grid. An object without <code>hull_polygon</code> is never trimmed.</p></dd>
 
 
 <dt id="arg-plot-points">plot_points<a class="anchor" aria-label="anchor" href="#arg-plot-points"></a></dt>

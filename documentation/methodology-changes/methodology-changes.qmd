@@ -2,7 +2,7 @@
 title: "Methodology changes since the thesis"
 subtitle: "The boundarylogic package against the PhD method: the changes made and the future work"
 author: "Adriaan Rowan"
-date: "2026-11-05"
+date: "2026-11-06"
 format:
   docx:
     toc: true
@@ -30,6 +30,18 @@ v <- function(change, quantity, model = NULL, target = NULL, setting = NULL) {
   r$value
 }
 num <- function(...) as.numeric(v(...))
+# The findings fixes of 6 November 2026 (Sections 3.3 and 3.6), measured by
+# 06_findings-effects.R against the package before them.
+fe <- read.csv("findings-effects.csv", stringsAsFactors = FALSE)
+vf <- function(change, quantity, model = NULL, target = NULL, setting = NULL) {
+  r <- fe[fe$change == change & fe$quantity == quantity, , drop = FALSE]
+  if (!is.null(model))   r <- r[r$model %in% model, , drop = FALSE]
+  if (!is.null(target))  r <- r[r$target %in% target, , drop = FALSE]
+  if (!is.null(setting)) r <- r[r$setting %in% setting, , drop = FALSE]
+  if (nrow(r) != 1L)
+    stop(sprintf("vf(): %d rows for %s / %s", nrow(r), change, quantity))
+  r$value
+}
 f2  <- function(x, d = 2) formatC(as.numeric(x), format = "f", digits = d)
 f3  <- function(x) f2(x, 3)
 f1  <- function(x) f2(x, 1)
@@ -127,7 +139,13 @@ stopifnot(
   v("M6", "solution_found", "4f", "TP", "run2 / hull") == "FALSE",
   gap$n_ratio_below_1 == 0, gap$hull$q1 > 1,
   gap$hull$n_ratio == gap$hull$n_rows,
-  abs(gap$hull$median_plausible - gap$hull$median) < 0.05
+  abs(gap$hull$median_plausible - gap$hull$median) < 0.05,
+  # The findings fixes of 6 November 2026 (06_findings-effects.R).
+  all(fe$value[fe$change == "M12" & fe$quantity == "rows_changed"] == "0"),
+  all(fe$value[fe$change == "M13" & fe$quantity == "same_result"] == "TRUE"),
+  vf("M13", "sweep_found_after", "4f") == vf("M13", "sweep_test_rows", "4f"),
+  as.numeric(vf("M13", "sweep_changed", "4f")) > 0,
+  num("F3", "offplane_share", "7f") > 0.5, num("F3", "offplane_share", "4f") > 0.5
 )
 ```
 
@@ -153,6 +171,11 @@ Two other departures were removed on 5 November 2026:
 - **the local search without a convex hull**: the package again keeps only the boundary points inside
   the convex hull of the training data on each rotated plane, as the thesis requires (p.117; Section
   3.6). This changes the Phase 3 results of the true-positive target.
+
+On 6 November 2026 two rules were aligned with the text and between the two searches: the hull on each
+rotated plane is built from the training data alone, and a closed boundary contour is kept only if it
+encloses training data, in the global search (where the rows being searched decided before) and in the
+local search (which had no such rule). The Paper 1 results are unchanged (Sections 3.3 and 3.6).
 
 The remaining core changes extend the thesis method (the `"fixed"` and `"integer"` constraints, the
 greedy sparse counterfactual, the "No effect" class) or change the scale or reach of a measure (the
@@ -187,7 +210,8 @@ test row whose global counterfactual distance lies nearest its group's median.
 
 **Measurements.** Every measured number in this note is read from `method-change-effects.csv`, written by the
 script `04_method-change-effects.R` at package commit `r commit_txt`, except the approximation gap of
-Section 3.12, which `05_full-space-gap.R` measures. A *toggle* measurement switches one
+Section 3.12, which `05_full-space-gap.R` measures, and the effects of the changes of 6 November 2026,
+which `06_findings-effects.R` measures against the package before them (`findings-effects.csv`). A *toggle* measurement switches one
 change back through a package argument and reruns the search; a *stored* measurement reads a
 diagnostic the package keeps (for example the search point before a constraint is applied). Changes
 that cannot be switched back are described and marked "not measured". Distances are quoted as
@@ -223,7 +247,8 @@ column says whether a change belongs to the core methodology (Section 3), is a c
 | 4 Nov 2026 | `67a1424` | Strict `"fixed"`; the `"integer"` constraint; Mahalanobis distance returned by the global search | Core (3.7, 3.8); code |
 | 5 Nov 2026 | `12b38e4` | The thesis's distance rule by projection (`distance = "auto"`): Euclidean under PCA, Mahalanobis under CVA, in the pair comparison and the variable importance | Core (3.1, 3.5) |
 | 5 Nov 2026 | `c13fe44` | The convex hull of the training data and the target rebuilt on each rotated plane in the local search (`hull = TRUE`), as the thesis requires; outlier removal off by default (`hull_fraction = 1`); one colour scheme for every biplot; a warning for a target at the centre of the biplot | Core (3.6, 3.11); code |
-| 6 Nov 2026 | uncommitted | The hull and training-range switches held in `set_filters()` with the actionability constraints (`hull = TRUE`, `train_ranges = TRUE`, both on by default); the training ranges gain a switch; no result changes | Code |
+| 6 Nov 2026 | `9bc8e1c` | The hull and training-range switches held in `set_filters()` with the actionability constraints (`hull = TRUE`, `train_ranges = TRUE`, both on by default); the training ranges gain a switch; no result changes | Code |
+| 6 Nov 2026 | after `ef014ca` | The findings of the package's algorithms document: the empty-region rule tested on the training data in the global search and added to the local search; the hull on each rotated plane built from the training data alone; the local grid clamped to [0, 1]; the local plot widened to show a target outside the training data | Core (3.3, 3.6); code |
 
 : Table 1. Dated changes to the method since the thesis.
 
@@ -243,7 +268,7 @@ unchanged steps are listed in Section 4.
 | Plausibility on the plane | Grid within the convex hull of the training data (p.77) | Hull polygon of the training data | Unchanged |
 | **Phase 2** | | | |
 | Global counterfactual | Nearest boundary point on the plane, by Euclidean distance (p.75, p.101) | `bl_find_boundary()` | Unchanged |
-| Feasibility of the global counterfactual | Training bounds, convex hull, no empty regions (§3.10 step 4, p.93) | Hull and empty-region rules; training bounds reported, not applied | Changed (3.3) |
+| Feasibility of the global counterfactual | Training bounds, convex hull, no empty regions (§3.10 step 4, p.93) | Hull and empty-region rules (empty regions judged by the training data); training bounds reported, not applied | Changed (3.3) |
 | Re-scoring by the model | Appendix A (pp.183–184) | The same rule | Unchanged |
 | Variable importance $T_j$ | Standardised by the overall standard deviation (§4.2.2, p.103) | Within-class standard deviation under CVA; overall standard deviation under PCA | Changed under CVA (3.1) |
 | Robustness $R = \sum_j T_j$ | §4.2.3, p.105 | The same sum | Follows 3.1 |
@@ -252,7 +277,7 @@ unchanged steps are listed in Section 4.
 | Pairs of components | All $p(p-1)/2$ pairs (p.117) | At most `max_pairs = 21` | Changed (3.4) |
 | Nearest point on one plane | Euclidean distance on the plane (p.75) | The same | Unchanged |
 | Comparison across pairs | Mahalanobis (CVA) or Euclidean (PCA) in the full space (p.86, p.117) | The same, by `distance = "auto"` (since 5 Nov 2026) | Restored (3.5) |
-| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | The convex hull of the training data and the target, rebuilt on each rotated plane (`set_filters(hull = TRUE)`) | Restored (3.6) |
+| Plausibility of the local counterfactual | Within the convex hull of the training data (p.117) | The convex hull of the training data, rebuilt on each rotated plane, with the empty-region rule (`set_filters(hull = TRUE)`) | Restored (3.6) |
 | Actionability | Boundary points filtered by the constraints (p.88) | `set_filters()`, with a `"fixed"` restore | Changed (3.7) |
 | Whole-number variables | Treated as continuous (p.87, p.119) | `"integer"` constraint | Changed (3.8) |
 | Shapley values | All orderings of the change (§4.3.2, p.121) | Exact computation, the same values | Unchanged |
@@ -312,6 +337,18 @@ summed squared per-variable distances exceed the full squared Mahalanobis distan
 `r f1(abs(num("M1", "mahal_check_pct", "4f")))`% (four variables), so the importance ranks the variables
 but does not decompose the distance." A full decomposition is listed in Section 5.
 
+**The importance against the global distances.** The change vector of the thesis lies on the plane,
+$\boldsymbol{\delta}_i = (\mathbf{z}_{cf}-\mathbf{z}_i)\mathbf{M}_2^{-}$, and the package keeps it. The
+distances `bl_find_boundary()` reports (`dist_x`, `dist_mahalanobis`) measure instead from the observation
+itself to its global counterfactual. Since the counterfactual is a point of the plane (Section 3.3), that
+gap also resets the part of the observation that lies off the plane, its other $p-2$ canonical
+coordinates, to the mean. That part has nothing to do with the boundary and is most of the gap: on the
+training rows it is `r pct(100 * num("F3", "offplane_share", "7f"))` of the summed squared global gap on
+the seven-feature model and `r pct(100 * num("F3", "offplane_share", "4f"))` on the four-feature model
+(within-class standard deviations). The importance and the robustness therefore measure the in-plane
+change, as the thesis does, and the global distances are reported only; Paper 1 uses the global
+$\sqrt{d^2_M}$ only to choose its two targets.
+
 ## The metric W as a covariance matrix
 
 **Thesis.** CVA partitions the total sums of squares and products (SSP) into the between-groups and
@@ -346,7 +383,12 @@ search: the branch's driver scripts pass no training ranges to it, and instead r
 that lie outside the training ranges before the search.
 
 **Package.** `bl_find_boundary()` keeps the hull and the empty-region rules: contours are clipped to the
-training hull, and a closed contour is kept only if it encloses observations. The package first followed
+training hull, and a closed contour is kept only if it encloses training rows. Until 6 November 2026 the
+rows being searched decided, as in the branch, so one row's counterfactual could depend on which other
+rows were searched with it; the training data now decide, so it does not. On Pima no contour or
+counterfactual changes (`r vf("M12", "contours_used_after", "4f", setting = "test")` contours on the
+four-feature model before and after); on the package's loan example the rule keeps 18 contours
+instead of 12 on the four-feature model and moves 346 of its 4,429 global counterfactuals. The package first followed
 the thesis text and filtered the boundary points by the training ranges before choosing the nearest one
 (13 March 2026, `e42fa03`). Since 24 March 2026 (`ea6a12f`) the ranges are checked after the nearest
 point is chosen: points outside them are kept, and only their number is reported in a message, with no
@@ -482,18 +524,21 @@ and the test data, and keeps a closed contour only if it encloses the target.
 **Package.** From March to November 2026 `bl_find_local_cf()` applied no hull: the candidate boundary
 points were filtered by the actionability constraints and the training ranges only. The recorded reason,
 that the rotation invalidates the hull of the global biplot, is correct for that hull, but it does not
-cover a hull rebuilt on each rotated plane. Since 5 November 2026 the convex hull of the training data
-and the target is rebuilt on each rotated plane, as in Appendix A, and only the boundary points inside it
-are kept, before the other filters (`set_filters(hull = TRUE)`, the default; `hull = FALSE` gives the
-earlier search). Since 6 November 2026 `set_filters()` holds the switches for all three of the thesis's
+cover a hull rebuilt on each rotated plane. Since 5 November 2026 a convex hull is rebuilt on each
+rotated plane and only the boundary points inside it are kept, before the other filters
+(`set_filters(hull = TRUE)`, the default; `hull = FALSE` gives the earlier search). From 5 to 6 November
+the hull was built from the training data and the target, as in Appendix A; since 6 November 2026 it is
+built from the training data alone, as the text says, and a contour that is still closed after the clip
+is kept only if it encloses training data on the plane, the empty-region rule of the global search
+(Section 3.3; the thesis states it for the decision boundaries in general, §3.10 step 4, p.93). Since 6 November 2026 `set_filters()` holds the switches for all three of the thesis's
 rules (actionability, feasibility and plausibility, p.116): `train_ranges = FALSE` drops the training
 ranges, and both switches off give the unconstrained counterfactual (p.115). A search without a filter
 object keeps both rules.
-There is no enclosure rule, since the text does not require one for the local search.
 
 **Reason.** The text requires the hull for plausibility, and Appendix A builds it on each rotated
-plane; the earlier reason did not cover such a hull. The hull includes the target, as in Appendix A,
-so a target near the edge of the training data can still reach a counterfactual near it.
+plane; the earlier reason did not cover such a hull. The hull is the training data's alone, so the
+region a counterfactual may come from does not grow with a target that lies outside the training data,
+and the empty-region rule is the same in both searches, judged on the same data.
 
 **Effect on Pima.** The true negative is unchanged in every run. The true positive's search moves from
 pair `r v("M6", "best_pair", "4f", "TP", "run1 / no hull")` to
@@ -509,6 +554,15 @@ have no counterfactual; run 4 had one without the hull. Over the
 `r v("M6", "sweep_unchanged", "4f")` are unchanged and `r v("M6", "sweep_moved", "4f")` move, with
 a median search distance `r pct(100 * (num("M6", "sweep_moved_median_ratio", "4f") - 1))` longer
 among the moved rows. See the package's `documentation/local-convex-hull.md`.
+
+*The changes of 6 November* (measured by `06_findings-effects.R` against the package before them) leave
+every run of both targets unchanged. Over the `r vf("M13", "sweep_test_rows", "4f")` test rows (run 1),
+every row keeps a counterfactual and `r vf("M13", "sweep_changed", "4f")` move (test rows
+`r vf("M13", "sweep_moved_rows", "4f")`), with a median distance
+`r pct(100 * (as.numeric(vf("M13", "sweep_moved_median_ratio", "4f")) - 1))` longer. On the package's
+loan example the empty-region rule moves the harness target's constrained counterfactual (an empty
+closed contour held its nearest boundary point), and the training-only hull moves the counterfactual of
+an applicant who lies outside the training data.
 
 **A constraint that does not bind (Pima issue 5).** With *Pregnancies* and *Age* not allowed to
 decrease (run 2), the true negative's counterfactual equals the unconstrained one, because its
@@ -727,7 +781,9 @@ unconstrained run (*Pregnancies* `"integer"`).
 | Global grid hull fraction | 0.9 → 1 | Every training point inside the hull | Run 1 unchanged for both targets; the target rule picks test row `r v("K2", "rule_target_TN", "4f", setting = "outlie")` for the true negative (row `r row_TN` at 1) |
 | Order of the CVA groups | TN, FN, FP, TP (colour names) → FN, FP, TN, TP, fixed | Reproducibility | True positive: no counterfactual with the thesis order (no whole-number point), against pair `r run1("TP", "best_pair")` and distance `r f2(run1("TP", "sqrt_d2M"))`; true negative: `r f2(run1("TN", "sqrt_d2M", "thesis_order", "K3"))` against `r f2(run1("TN", "sqrt_d2M"))` (Section 3.12) |
 | Inverse of $\mathbf{W}$ | `solve()` → Cholesky, with a ridge fallback | Numerical stability; detects a singular $\mathbf{W}$ | The ridge fallback is not needed on either model |
-| Grid probabilities | No clamp → clamped to [0, 1], with a warning | Out-of-range model outputs gave missing colours | No warning raised |
+| Grid probabilities | No clamp → clamped to [0, 1], with a warning, on the global grid (June 2026) and on each local grid (6 Nov 2026) | Out-of-range model outputs gave missing colours, and on a local grid could stop the search | No warning raised |
+| The local plot's window | Set by the training data → widened to show a target or counterfactual outside it (6 Nov 2026) | A target outside the training data was not drawn | Display only |
+| The two-colour grid of the global plot | Split at 0.5 → at the model's cutoff (6 Nov 2026) | Consistency with the cutoff | Display only; the same at the cutoff of 0.5 |
 | Nearest boundary vertex | Appendix A `which.min`; branch random tie-break → the first nearest vertex | Determinism, as the text states (p.92) | Not measured; the scale on the loan data is in the package's tie-break note (§5) |
 | Data behind the local plane | Test data and plot bounds → training data, range plus 10% | The training data defines the projection | Not measured |
 | Confusion colours | The thesis scheme in every plot except `plot.bl_projection()` → one shared scheme (TP red, TN blue, FP purple, FN orange) | One colour means one outcome in every biplot | Display only |
@@ -849,4 +905,7 @@ of the Pima example are kept outside the package repository. From that folder:
    `method-change-effects.csv` to this folder; it stops if the baseline does not reproduce the Paper 1
    results;
 3. `Rscript 05_full-space-gap.R` measures the approximation gap of Section 3.12;
-4. `quarto render methodology-changes.qmd --to docx` renders this note.
+4. `Rscript 06_findings-effects.R` compares the package before the changes of 6 November 2026 (commit
+   `r vf("meta", "before_sha")`, exported from git) with the current one and writes
+   `findings-effects.csv` to this folder;
+5. `quarto render methodology-changes.qmd --to docx` renders this note.

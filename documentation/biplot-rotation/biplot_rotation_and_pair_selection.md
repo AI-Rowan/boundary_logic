@@ -359,7 +359,7 @@ method:
 
 ### 3.1 The rotation — `.bl_rotate()`
 
-`R/local_cf.R:45-66` is a line-for-line port of §2.1 (from the research code's `Biplot_rotation()`):
+`.bl_rotate()` (`R/local_cf.R`) is a line-for-line port of §2.1 (from the research code's `Biplot_rotation()`):
 
 ```r
 .bl_rotate <- function(x_target_st, V, proj_pair) {
@@ -416,7 +416,7 @@ Three implementation choices, all consistent with the thesis:
 
 ### 3.2 Pair enumeration
 
-`R/local_cf.R:18-32`:
+`.generate_pairs()` (`R/local_cf.R`):
 
 ```r
 .generate_pairs <- function(max_dim, max_pairs) {
@@ -449,7 +449,7 @@ $p=7$ ($\binom{7}{2}=21$), so the Pima example's search matches the thesis's. It
 
 ### 3.3 The per-pair pipeline
 
-Inside `bl_find_local_cf()` (`R/local_cf.R:590`; the pair loop is lines 650–840; line numbers as of 2026-11-04), each pair goes through five
+Inside `bl_find_local_cf()` (`R/local_cf.R`, its loop over the pairs), each pair goes through five
 stages:
 
 1. **Rotate.** `.bl_rotate(x_target_st, V, pair)` (§3.1) gives `Vr_rot` / `tVr_rot`.
@@ -459,7 +459,10 @@ stages:
    - An $m\times m$ grid ($m=200$ by default) spans the training data's rotated range, plus 10% padding.
    - It is back-projected to X-space and scored through the model in chunks of 50,000 rows.
 4. **Extract and filter the boundary contour.** `grDevices::contourLines()` at $cutoff \pm b_{margin}$, then four
-   filters on the vertices (`R/local_cf.R:708-759`):
+   filters on the vertices (the "Filter and validate contour segments" block). With `set_filters(hull = TRUE)`, the
+   default since 2026-11-05, the plane's training hull and the empty-contour rule run first, between (a) and (b)
+   (`documentation/local-convex-hull.md`); the rotation scripts set `hull = FALSE`, so the list below is what they
+   measure:
    - (a) **opposing class:** only contour segments on the class *opposite* the target's prediction;
    - (b) **actionability:** the `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`, `c(min,max)`;
      `"integer"` is not applied here, but to the counterfactual after the search, §3.5).

@@ -1,12 +1,12 @@
 "change","model","target","setting","quantity","value","source","note"
 "meta",NA,NA,NA,"package_version","0.2.0","meta",NA
 "meta",NA,NA,NA,"source","load_all","meta",NA
-"meta",NA,NA,NA,"git_sha","ee64c3a0468895a4d9ce926cf7369bc16c6e4d4e","meta",NA
+"meta",NA,NA,NA,"git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta",NA
 "meta",NA,NA,NA,"git_dirty","TRUE","meta",NA
 "meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
 "meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
-"meta",NA,NA,NA,"time","2026-11-06 06:24:10","meta",NA
-"meta",NA,NA,NA,"numbers_rds_git_sha","ee64c3a0468895a4d9ce926cf7369bc16c6e4d4e","meta","commit at which run_all.R wrote numbers.rds"
+"meta",NA,NA,NA,"time","2026-11-06 23:15:31","meta",NA
+"meta",NA,NA,NA,"numbers_rds_git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta","commit at which run_all.R wrote numbers.rds"
 "meta",NA,NA,NA,"target_row_TP","23","meta",NA
 "meta",NA,NA,NA,"target_row_TN","25","meta",NA
 "check",NA,NA,NA,"baseline_reproduces_numbers_rds","TRUE","check",NA
@@ -68,6 +68,10 @@
 "M1","7f",NA,NA,"mahal_check_plotted","365.871461835744","stored",NA
 "M1","7f",NA,NA,"mahal_check_full","287.29014428291","stored",NA
 "M1","7f",NA,NA,"mahal_check_pct","-27.3525977540846","stored","100 * (full - plotted) / full"
+"F3","7f",NA,NA,"sum_sq_offplane","1310.8835496432","computed","the observations' parts off the biplot plane"
+"F3","7f",NA,NA,"sum_sq_inplane","365.871461835744","computed","the in-plane gap the importance measures"
+"F3","7f",NA,NA,"sum_sq_global_gap","1678.07396798693","computed","the gap bl_find_boundary() measures (dist_x, dist_mahalanobis)"
+"F3","7f",NA,NA,"offplane_share","0.781183413038565","computed","sum_sq_offplane / sum_sq_global_gap"
 "M3","7f",NA,NA,"rows_train","313","stored",NA
 "M3","7f",NA,NA,"cf_found_train","313","stored",NA
 "M3","7f",NA,NA,"cf_outside_train_ranges_train","0","stored","kept by the package; T would discard them"
@@ -98,6 +102,10 @@
 "M1","4f",NA,NA,"mahal_check_plotted","335.278209227345","stored",NA
 "M1","4f",NA,NA,"mahal_check_full","247.913206054825","stored",NA
 "M1","4f",NA,NA,"mahal_check_pct","-35.2401570544813","stored","100 * (full - plotted) / full"
+"F3","4f",NA,NA,"sum_sq_offplane","552.518931565481","computed","the observations' parts off the biplot plane"
+"F3","4f",NA,NA,"sum_sq_inplane","335.278209227345","computed","the in-plane gap the importance measures"
+"F3","4f",NA,NA,"sum_sq_global_gap","882.093578700883","computed","the gap bl_find_boundary() measures (dist_x, dist_mahalanobis)"
+"F3","4f",NA,NA,"offplane_share","0.62637224088992","computed","sum_sq_offplane / sum_sq_global_gap"
 "M3","4f",NA,NA,"rows_train","313","stored",NA
 "M3","4f",NA,NA,"cf_found_train","313","stored",NA
 "M3","4f",NA,NA,"cf_outside_train_ranges_train","10","stored","kept by the package; T would discard them"

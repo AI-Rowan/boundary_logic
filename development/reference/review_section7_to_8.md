@@ -90,16 +90,16 @@ Result: `z_boundaries_list` — list of clipped contour matrices; `z_boundary_ty
 
 ---
 
-#### Stage 3 — Prune: keep only contours that enclose observations
+#### Stage 3 — Prune: keep only contours that enclose training data
 
-For each **closed** contour segment (where first row == last row, tested via `.is_closed()`):
-- Use `sp::point.in.polygon()` to check whether any observation falls inside the closed contour ring
-- Keep the contour only if at least one observation lies inside it
-- Open segments (arc-shaped, not closed) are always kept
+For each **closed** contour segment (where first row == last row after clipping, tested via `.is_closed()`), `.encloses_data()` (`R/hull_utils.R`):
+- projects `bl_result$train_data` onto the plane, as the search projects `data`;
+- uses `sp::point.in.polygon()` to check whether any **training** row falls inside or on the closed contour ring;
+- keeps the contour only if at least one training row lies inside it.
 
-If no contours survive pruning, all original contours are retained as a fallback.
+Open segments (arc-shaped, not closed) are always kept. If no contours survive pruning, all original contours are retained as a fallback, with a warning.
 
-**Why:** A closed contour that encloses no observations is irrelevant — no observation would ever project to it as its nearest boundary.
+**Why:** A closed contour that encloses no training data marks a region the data do not support: the thesis discards "any local decision boundary area that does not contain data points" (§3.10 step 4, p.93). The training data decide, not the rows being searched, so a row's counterfactual does not depend on which other rows are searched with it (`tdp`, `data`); `bl_find_local_cf()` applies the same rule on each rotated plane. In this harness the rule keeps 18 contours on the reduced model (Step 7b) and 2 on the full model (Step 7).
 
 ---
 
@@ -215,14 +215,16 @@ Prints to console. Step 7b's `print(bl_bnd_v2)` in the harness run:
 ```
 <bl_boundary>
   Observations   : 4429
-  Boundaries used: 12
+  Boundaries used: 18
   Dist Z (mean)  : 0.0095
-  Dist X (mean)  : 1.8130
-  Dist M (mean)  : 1.9561 (sqrt of dist_mahalanobis)
+  Dist X (mean)  : 1.8120
+  Dist M (mean)  : 1.9545 (sqrt of dist_mahalanobis)
   B_pred range   : [0.2570, 0.8490]
 ```
 
 The lines are the number of rows, the surviving contour segments, the means of `dist_z`, `dist_x` and `sqrt(dist_mahalanobis)`, and the range of `B_pred`, each to 4 d.p. The `Dist M` line is left out when `dist_mahalanobis` is all NA.
+
+`Dist X` and `Dist M` are reported only. They measure from the observation itself to its counterfactual, so they include the part of the observation off the biplot plane, which the counterfactual resets to the mean; the variable importance and robustness of `plot(bl_bnd)` use only the in-plane move (`documentation/boundary-distance-and-robustness.md` §2).
 
 `B_pred range` is the diagnostic check: values should be close to 0.5. Wide range or values far from 0.5 indicate consistency issues.
 
@@ -388,7 +390,7 @@ Mahalanobis check (squared distances, summed across obs):
   plotted (per feature) = 9675.25 | full d_M^2 = 11754.70 | difference = 2079.45 (+17.7% of full)
 ```
 
-The check appears only for `distance = "mahalanobis"`. A note is added only when the difference is at least 25% of the full distance in absolute value. Here it is +17.7% of the full distance: the correlations in W make the full squared distance 21.5% larger than the plotted per-feature one (11754.70 against 9675.25), so the per-feature importance is a fair summary. For the four-feature model of Step 7b the check gives `plotted (per feature) = 7993.67 | full d_M^2 = 9509.20 | difference = 1515.54 (+15.9% of full)`.
+The check appears only for `distance = "mahalanobis"`. A note is added only when the difference is at least 25% of the full distance in absolute value. Here it is +17.7% of the full distance: the correlations in W make the full squared distance 21.5% larger than the plotted per-feature one (11754.70 against 9675.25), so the per-feature importance is a fair summary. For the four-feature model of Step 7b the check gives `plotted (per feature) = 7968.57 | full d_M^2 = 9486.73 | difference = 1518.16 (+16.0% of full)`.
 
 ---
 
@@ -527,7 +529,7 @@ test_pts    [bl_points]           ← test data projected to Z-space
      │    project test_data → Z_obs (n × 2)
      │    score obs → pred_obs, pred_class_obs
      │    clip ct segments to polygon → z_boundaries_list
-     │    prune closed contours by obs membership
+     │    prune closed contours by training-row membership
      │    consistency pruning: back-project + re-score each segment
      │    .nearest_idx_block() → nearest vertex on each contour per obs
      │    select opposing-side contour per obs

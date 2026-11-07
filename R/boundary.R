@@ -95,7 +95,10 @@
 #' observation onto the boundary line.
 #'
 #' Boundary segments are first clipped to the training-data convex hull
-#' polygon (in Z-space) and then pruned to retain only points whose
+#' polygon (in Z-space). A contour that is still closed after clipping is kept
+#' only if it encloses training rows (the empty-region rule), so the contours
+#' searched, and each row's counterfactual, do not depend on `data` or `tdp`.
+#' The segments are then pruned to retain only points whose
 #' back-projected model prediction is consistent with the contour's
 #' probability level. The training variable ranges (`bl_result$train_ranges`)
 #' are checked **after** the nearest point is selected, not before. Applying
@@ -243,17 +246,20 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   }
 
   # ---- Retain boundaries that contain/enclose data -----------------
+  # A contour still closed after clipping is kept only if it encloses
+  # training rows (.encloses_data()). The training data, not the rows being
+  # searched, decides, so a row's counterfactual does not depend on which
+  # other rows are searched with it; bl_find_local_cf() applies the same rule
+  # on each rotated plane.
+  X_train_st <- scale(as.matrix(bl_result$train_data[, var_names, drop = FALSE]),
+                      center = X_center, scale = sv)
+  Z_train    <- X_train_st %*% Vr
   boundary_used <- integer(0L)
   for (i in seq_len(nr_raw)) {
     Mi <- z_boundaries_list[[i]]
     if (is.null(Mi) || nrow(Mi) == 0L) next
     keep <- TRUE
-    if (.is_closed(Mi) && inherits(polygon, "SpatialPolygons")) {
-      inside_ct <- sp::point.in.polygon(
-        Z_obs[, 1L], Z_obs[, 2L], Mi[, 1L], Mi[, 2L]
-      )
-      keep <- any(inside_ct > 0L)
-    }
+    if (inherits(polygon, "SpatialPolygons")) keep <- .encloses_data(Mi, Z_train)
     if (keep) boundary_used <- c(boundary_used, i)
   }
   if (length(boundary_used) == 0L) {
@@ -392,7 +398,12 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   B0_out[group1, ] <- 0
   B1_out[group0, ] <- 0
   B_z <- B0_out + B1_out
-  # Replace rows that are still exactly zero with NA (no boundary found)
+  # Replace rows that are still exactly zero with NA (no boundary found).
+  # Known and kept (documentation/algorithms.md, finding F1, decided
+  # 2026-11-06): a row with no opposite-side contour is already NA here
+  # (NA + 0), so this test only turns a boundary point exactly at the origin
+  # into NA. When every surviving contour lies on one side, those NA rows make
+  # any(zero_rows) NA and the if() below stops with an error.
   zero_rows <- rowSums(B_z^2) == 0
   if (any(zero_rows)) B_z[zero_rows, ] <- NA_real_
 

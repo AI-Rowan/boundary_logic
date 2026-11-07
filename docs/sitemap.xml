@@ -32,7 +32,9 @@
 <url><loc>/reference/calc_gini.html</loc></url>
 <url><loc>/reference/dot-bl_get_plot_bounds.html</loc></url>
 <url><loc>/reference/dot-build_hull_polygon.html</loc></url>
+<url><loc>/reference/dot-encloses_data.html</loc></url>
 <url><loc>/reference/dot-fit_model.html</loc></url>
+<url><loc>/reference/dot-grid_in_hull.html</loc></url>
 <url><loc>/reference/dot-is_closed.html</loc></url>
 <url><loc>/reference/dot-nearest_idx_block.html</loc></url>
 <url><loc>/reference/dot-points_in_polygon.html</loc></url>

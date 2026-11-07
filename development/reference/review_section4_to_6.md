@@ -439,8 +439,10 @@ This is the **Phase 1 anchor function**. It orchestrates three sub-steps and ret
 5. **Back-projects grid to X-space:**
    ```
    Xgrid = Zgrid %*% tVr              # 40 000 × p
+   Xgrid = Xgrid * X_sd               # only when standardise = TRUE (a standardised PCA)
    Xgrid = Xgrid + X_center           # add back training means
    ```
+   Under CVA `standardise` is always `FALSE`, so the `* X_sd` step does not run in this script's biplots.
    This is the key operation that lets us ask: "if a point is at Z-space coordinates (a, b), what feature values does it correspond to?"
 
 6. **Computes the convex hull** of `Z_train` with `.build_hull_polygon()`.

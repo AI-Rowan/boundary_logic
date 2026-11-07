@@ -317,10 +317,13 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 The package vignette covers the complete workflow:
 
 - **Loan-default dataset** (`Boundary_Logic_loan_default_workflow.Rmd`) —
-  credit-risk walkthrough with an XGBoost model and CVA biplot: Phase 2
-  feature pruning, actionability constraints, external-applicant analysis,
-  and a side-by-side comparison of the global and local interpretation
-  against SHAP (`fastshap` / `shapviz`) for the same model (Phases 1–3).
+  a step-by-step guide to every function on the full loan data, with an
+  XGBoost model and CVA biplot: what each step does, the parameters that
+  matter and how to read the output. It covers Phase 2 feature pruning, a
+  refit on standardised features with raw-unit axes (`bl_set_scaling()`),
+  actionability constraints, a new applicant (`bl_apply_scaling()`), and a
+  side-by-side comparison of the global and local interpretation against SHAP
+  (`fastshap` / `shapviz`) for the same models (Phases 1–3).
 
 ```r
 vignette("Boundary_Logic_loan_default_workflow", package = "boundarylogic")
@@ -348,8 +351,9 @@ Installation), and on the package's pkgdown site.
 - **Local search rebuilds the convex hull on each rotated plane:**
   `bl_find_local_cf()` rotates the biplot plane, which invalidates the hull
   polygon of the global biplot. Instead it rebuilds the convex hull of the
-  training data and the target on each rotated plane, and keeps only the
-  boundary points inside it (the thesis's plausibility rule). It also keeps
+  training data on each rotated plane, and keeps only the boundary points
+  inside it, dropping closed boundary lines that enclose no training data
+  (the thesis's plausibility rule). It also keeps
   every feature within its training range (the feasibility rule) and applies
   the actionability constraints. All three are set in `set_filters()`: the
   per-variable constraints, `hull = TRUE` and `train_ranges = TRUE` (both on

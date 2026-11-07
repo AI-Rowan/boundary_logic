@@ -1,0 +1,127 @@
+"change","model","target","setting","quantity","value","source","note"
+"meta",NA,NA,NA,"before_sha","ef014ca","meta",NA
+"meta",NA,NA,NA,"package_version","0.2.0","meta",NA
+"meta",NA,NA,NA,"source","load_all","meta",NA
+"meta",NA,NA,NA,"git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta",NA
+"meta",NA,NA,NA,"git_dirty","TRUE","meta",NA
+"meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
+"meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
+"meta",NA,NA,NA,"time","2026-11-06 23:15:32","meta",NA
+"M12","7f",NA,"train","contours_used_before","2","two versions",NA
+"M12","7f",NA,"train","contours_used_after","2","two versions",NA
+"M12","7f",NA,"train","rows","313","two versions",NA
+"M12","7f",NA,"train","rows_changed","0","two versions",NA
+"M12","7f",NA,"test","contours_used_before","2","two versions",NA
+"M12","7f",NA,"test","contours_used_after","2","two versions",NA
+"M12","7f",NA,"test","rows","79","two versions",NA
+"M12","7f",NA,"test","rows_changed","0","two versions",NA
+"M12","4f",NA,"test","contours_used_before","6","two versions",NA
+"M12","4f",NA,"test","contours_used_after","6","two versions",NA
+"M12","4f",NA,"test","rows","79","two versions",NA
+"M12","4f",NA,"test","rows_changed","0","two versions",NA
+"M13","4f","TP","run1","same_result","TRUE","two versions",NA
+"M13","4f","TP","run1","solution_found_before","TRUE","two versions",NA
+"M13","4f","TP","run1","solution_found_after","TRUE","two versions",NA
+"M13","4f","TP","run1","best_pair_before","(3,4)","two versions",NA
+"M13","4f","TP","run1","best_pair_after","(3,4)","two versions",NA
+"M13","4f","TP","run1","sqrt_d2M_before","1.84430065788971","two versions",NA
+"M13","4f","TP","run1","sqrt_d2M_after","1.84430065788971","two versions",NA
+"M13","4f","TP","run2","same_result","TRUE","two versions",NA
+"M13","4f","TP","run2","solution_found_before","FALSE","two versions",NA
+"M13","4f","TP","run2","solution_found_after","FALSE","two versions",NA
+"M13","4f","TP","run2","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run2","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run2","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run2","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run3","same_result","TRUE","two versions",NA
+"M13","4f","TP","run3","solution_found_before","FALSE","two versions",NA
+"M13","4f","TP","run3","solution_found_after","FALSE","two versions",NA
+"M13","4f","TP","run3","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run3","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run3","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run3","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run4","same_result","TRUE","two versions",NA
+"M13","4f","TP","run4","solution_found_before","FALSE","two versions",NA
+"M13","4f","TP","run4","solution_found_after","FALSE","two versions",NA
+"M13","4f","TP","run4","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run4","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run4","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run4","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run5","same_result","TRUE","two versions",NA
+"M13","4f","TP","run5","solution_found_before","FALSE","two versions",NA
+"M13","4f","TP","run5","solution_found_after","FALSE","two versions",NA
+"M13","4f","TP","run5","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run5","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run5","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run5","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run6","same_result","TRUE","two versions",NA
+"M13","4f","TP","run6","solution_found_before","TRUE","two versions",NA
+"M13","4f","TP","run6","solution_found_after","TRUE","two versions",NA
+"M13","4f","TP","run6","best_pair_before","(3,4)","two versions",NA
+"M13","4f","TP","run6","best_pair_after","(3,4)","two versions",NA
+"M13","4f","TP","run6","sqrt_d2M_before","1.84430065788971","two versions",NA
+"M13","4f","TP","run6","sqrt_d2M_after","1.84430065788971","two versions",NA
+"M13","4f","TP","run7","same_result","TRUE","two versions",NA
+"M13","4f","TP","run7","solution_found_before","FALSE","two versions",NA
+"M13","4f","TP","run7","solution_found_after","FALSE","two versions",NA
+"M13","4f","TP","run7","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run7","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TP","run7","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TP","run7","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TN","run1","same_result","TRUE","two versions",NA
+"M13","4f","TN","run1","solution_found_before","TRUE","two versions",NA
+"M13","4f","TN","run1","solution_found_after","TRUE","two versions",NA
+"M13","4f","TN","run1","best_pair_before","(2,4)","two versions",NA
+"M13","4f","TN","run1","best_pair_after","(2,4)","two versions",NA
+"M13","4f","TN","run1","sqrt_d2M_before","0.140475717454266","two versions",NA
+"M13","4f","TN","run1","sqrt_d2M_after","0.140475717454266","two versions",NA
+"M13","4f","TN","run2","same_result","TRUE","two versions",NA
+"M13","4f","TN","run2","solution_found_before","TRUE","two versions",NA
+"M13","4f","TN","run2","solution_found_after","TRUE","two versions",NA
+"M13","4f","TN","run2","best_pair_before","(2,4)","two versions",NA
+"M13","4f","TN","run2","best_pair_after","(2,4)","two versions",NA
+"M13","4f","TN","run2","sqrt_d2M_before","0.140475717454266","two versions",NA
+"M13","4f","TN","run2","sqrt_d2M_after","0.140475717454266","two versions",NA
+"M13","4f","TN","run3","same_result","TRUE","two versions",NA
+"M13","4f","TN","run3","solution_found_before","FALSE","two versions",NA
+"M13","4f","TN","run3","solution_found_after","FALSE","two versions",NA
+"M13","4f","TN","run3","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TN","run3","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TN","run3","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TN","run3","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TN","run4","same_result","TRUE","two versions",NA
+"M13","4f","TN","run4","solution_found_before","FALSE","two versions",NA
+"M13","4f","TN","run4","solution_found_after","FALSE","two versions",NA
+"M13","4f","TN","run4","best_pair_before",NA,"two versions","no counterfactual"
+"M13","4f","TN","run4","best_pair_after",NA,"two versions","no counterfactual"
+"M13","4f","TN","run4","sqrt_d2M_before",NA,"two versions","no counterfactual"
+"M13","4f","TN","run4","sqrt_d2M_after",NA,"two versions","no counterfactual"
+"M13","4f","TN","run5","same_result","TRUE","two versions",NA
+"M13","4f","TN","run5","solution_found_before","TRUE","two versions",NA
+"M13","4f","TN","run5","solution_found_after","TRUE","two versions",NA
+"M13","4f","TN","run5","best_pair_before","(1,2)","two versions",NA
+"M13","4f","TN","run5","best_pair_after","(1,2)","two versions",NA
+"M13","4f","TN","run5","sqrt_d2M_before","0.174513528495194","two versions",NA
+"M13","4f","TN","run5","sqrt_d2M_after","0.174513528495194","two versions",NA
+"M13","4f","TN","run6","same_result","TRUE","two versions",NA
+"M13","4f","TN","run6","solution_found_before","TRUE","two versions",NA
+"M13","4f","TN","run6","solution_found_after","TRUE","two versions",NA
+"M13","4f","TN","run6","best_pair_before","(3,4)","two versions",NA
+"M13","4f","TN","run6","best_pair_after","(3,4)","two versions",NA
+"M13","4f","TN","run6","sqrt_d2M_before","0.378413107565085","two versions",NA
+"M13","4f","TN","run6","sqrt_d2M_after","0.378413107565085","two versions",NA
+"M13","4f","TN","run7","same_result","TRUE","two versions",NA
+"M13","4f","TN","run7","solution_found_before","TRUE","two versions",NA
+"M13","4f","TN","run7","solution_found_after","TRUE","two versions",NA
+"M13","4f","TN","run7","best_pair_before","(2,3)","two versions",NA
+"M13","4f","TN","run7","best_pair_after","(2,3)","two versions",NA
+"M13","4f","TN","run7","sqrt_d2M_before","0.29628799676701","two versions",NA
+"M13","4f","TN","run7","sqrt_d2M_after","0.29628799676701","two versions",NA
+"M13","4f",NA,NA,"sweep_test_rows","79","two versions",NA
+"M13","4f",NA,NA,"sweep_found_before","79","two versions",NA
+"M13","4f",NA,NA,"sweep_found_after","79","two versions",NA
+"M13","4f",NA,NA,"sweep_changed","4","two versions",NA
+"M13","4f",NA,NA,"sweep_moved","4","two versions",NA
+"M13","4f",NA,NA,"sweep_moved_rows","16, 46, 57, 63","two versions",NA
+"M13","4f",NA,NA,"sweep_moved_median_ratio","1.04492508760279","two versions","distance after / before, over the moved rows"
+"M13","4f",NA,NA,"sweep_moved_max_ratio","1.24140068832179","two versions",NA

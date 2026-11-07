@@ -120,3 +120,25 @@
   )
   unname(.points_in_polygon(Z, poly))   # sp::over() names its result
 }
+
+
+#' Does a boundary contour enclose training data?
+#'
+#' The empty-region rule for decision boundaries (thesis section 3.10, step 4:
+#' a boundary area that contains no data is discarded). A contour that is
+#' still closed after clipping to the hull (first vertex equal to the last,
+#' `.is_closed()`) is kept only if at least one training point lies inside or
+#' on it; an open contour is always kept. Used by `bl_find_boundary()` (the
+#' training data on the global plane) and `bl_find_local_cf()` (the training
+#' data on each rotated plane), so both searches apply the same rule.
+#'
+#' @param Mi    Two-column matrix of contour vertices (x, y).
+#' @param Z_ref Two-column matrix of the training points on the same plane.
+#'
+#' @return Logical scalar: `TRUE` to keep the contour.
+#' @keywords internal
+.encloses_data <- function(Mi, Z_ref) {
+  if (!.is_closed(Mi)) return(TRUE)
+  inside <- sp::point.in.polygon(Z_ref[, 1L], Z_ref[, 2L], Mi[, 1L], Mi[, 2L])
+  any(inside > 0L)
+}

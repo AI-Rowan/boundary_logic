@@ -550,10 +550,11 @@ names(loan_encoded)
     loan_int_rate  = "increase",        # set by the lender, not the applicant
     credit_score = c("increase","integer"),   # a whole-number score
     # The thesis's other two rules (both on by default): plausibility keeps
-    # only boundary points inside the convex hull of the training data and
-    # the target on each rotated plane; feasibility keeps every feature
-    # within its training range. FALSE drops a rule; both FALSE with no
-    # constraint above gives the unconstrained counterfactual.
+    # only boundary points inside the convex hull of the training data on
+    # each rotated plane (a closed boundary line must also enclose training
+    # data); feasibility keeps every feature within its training range.
+    # FALSE drops a rule; both FALSE with no constraint above gives the
+    # unconstrained counterfactual.
     hull           = TRUE,
     train_ranges   = TRUE
   )
