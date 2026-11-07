@@ -1,12 +1,12 @@
 "change","model","target","setting","quantity","value","source","note"
 "meta",NA,NA,NA,"package_version","0.2.0","meta",NA
 "meta",NA,NA,NA,"source","load_all","meta",NA
-"meta",NA,NA,NA,"git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta",NA
-"meta",NA,NA,NA,"git_dirty","TRUE","meta",NA
+"meta",NA,NA,NA,"git_sha","17d3c18535e05fc9b66abb6ab8379d4d471fadf1","meta",NA
+"meta",NA,NA,NA,"git_dirty","FALSE","meta",NA
 "meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
 "meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
-"meta",NA,NA,NA,"time","2026-11-06 23:15:31","meta",NA
-"meta",NA,NA,NA,"numbers_rds_git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta","commit at which run_all.R wrote numbers.rds"
+"meta",NA,NA,NA,"time","2026-11-07 06:56:18","meta",NA
+"meta",NA,NA,NA,"numbers_rds_git_sha","17d3c18535e05fc9b66abb6ab8379d4d471fadf1","meta","commit at which run_all.R wrote numbers.rds"
 "meta",NA,NA,NA,"target_row_TP","23","meta",NA
 "meta",NA,NA,NA,"target_row_TN","25","meta",NA
 "check",NA,NA,NA,"baseline_reproduces_numbers_rds","TRUE","check",NA

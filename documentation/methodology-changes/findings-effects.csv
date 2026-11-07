@@ -2,11 +2,11 @@
 "meta",NA,NA,NA,"before_sha","ef014ca","meta",NA
 "meta",NA,NA,NA,"package_version","0.2.0","meta",NA
 "meta",NA,NA,NA,"source","load_all","meta",NA
-"meta",NA,NA,NA,"git_sha","ef014ca9444338464bbbc0842bafae27f6310d5f","meta",NA
-"meta",NA,NA,NA,"git_dirty","TRUE","meta",NA
+"meta",NA,NA,NA,"git_sha","17d3c18535e05fc9b66abb6ab8379d4d471fadf1","meta",NA
+"meta",NA,NA,NA,"git_dirty","FALSE","meta",NA
 "meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
 "meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
-"meta",NA,NA,NA,"time","2026-11-06 23:15:32","meta",NA
+"meta",NA,NA,NA,"time","2026-11-07 06:56:19","meta",NA
 "M12","7f",NA,"train","contours_used_before","2","two versions",NA
 "M12","7f",NA,"train","contours_used_after","2","two versions",NA
 "M12","7f",NA,"train","rows","313","two versions",NA
