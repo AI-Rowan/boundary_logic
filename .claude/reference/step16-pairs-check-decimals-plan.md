@@ -106,11 +106,11 @@ before the next starts (CLAUDE.md §2). Walkthrough numbers come only from real 
 - `progress.md`.
 
 **Local plan files** (gitignored):
-- `boundary-logic-fix-prompt.md`:
+- `paper1-task-spec.md`:
   - 235: "`max_pairs = 21L` (the default)";
   - 280: "each of the 21 pairs";
   - a one-line note at Task E item 3 that the default changed on 2026-10-31.
-- grep `commit-and-push-the-mutable-hearth.md` for "10 pairs" or "ten pairs".
+- grep `paper1-working-plan.md` for "10 pairs" or "ten pairs".
 
 **Effect:**
 - the loan harness (p = 4, 6 pairs), iris tests and `17_*` scripts are unchanged;
@@ -310,7 +310,7 @@ own data). It comes from a new private helper, `.warn_target_range(x_obs, bl_res
   - the Step 16 result.
 - One stale sentence in `review_section9_to_15.md` ("the reported distance can differ between
   repeated calls") was replaced: the search has been deterministic since 2026-10-30.
-- The local plan file `commit-and-push-the-mutable-hearth.md` also had two `max_pairs = 10L`
+- The local plan file `paper1-working-plan.md` also had two `max_pairs = 10L`
   mentions; both are updated.
 
 **Measured (harness):**

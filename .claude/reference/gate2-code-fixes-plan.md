@@ -29,7 +29,7 @@ Date last edited: 2026-10-30
 
 ## Context
 
-The Task C plan (`commit-and-push-the-mutable-hearth.md`, "Issues found while planning") lists four
+The Task C plan (`paper1-working-plan.md`, "Issues found while planning") lists four
 code issues for the Gate 2 issues table. You decide "fix now" or "defer" for each one. Deferred
 issues go into `documentation/known-issues.md` (Task D). This file gives each issue's background,
 where it is in the code, whether it affects the Pima paper, and a suggested fix. Each fix comes

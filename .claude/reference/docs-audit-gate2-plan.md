@@ -8,7 +8,7 @@ Date last edited: 2026-11-04
 
 
 Branch: `paper_nr1_changes`. Before any change, this plan is copied to
-`.claude/plans/docs-audit-gate2.md`. That copy is the authoritative plan; this file is the
+the plan-mode working copy (removed 2026-11-07). That copy is the authoritative plan; this file is the
 plan-mode working copy (it replaced the Gate 2 fixes plan, which is archived as
 `.claude/reference/paper1-gate2-fixes-plan.md`).
 

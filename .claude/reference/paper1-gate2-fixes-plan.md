@@ -8,7 +8,7 @@ Date last edited: 2026-11-04
 
 
 Branch: `paper_nr1_changes`. The authoritative plan, approved 2026-11-04. It is copied from the
-plan-mode working copy `.claude/plans/graceful-watching-shannon.md`.
+plan-mode working copy a plan-mode file (removed 2026-11-07).
 
 ## Context
 

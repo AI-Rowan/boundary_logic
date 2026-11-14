@@ -1,6 +1,6 @@
 # Plan: from open issues to future improvements, and one design-decisions document
 
-> **IMPLEMENTED (steps 0-5), 2026-11-05.** Archived from `.claude/plans/cryptic-snuggling-bee.md`.
+> **IMPLEMENTED (steps 0-5), 2026-11-05.** Archived from the plan-mode working copy (removed 2026-11-07).
 > The hull on each rotated plane (B10), A1, A3, A8, A9, B3, B9 and B24 are in the working tree, not
 > committed. Results: `devtools::test()` 465 PASS / 0 FAIL; Pima `tests.R` 13/13; `devtools::check()`
 > 0/0/0. Phases 4 and 5 (the design-decisions document, retiring `known-issues.md`) wait for the

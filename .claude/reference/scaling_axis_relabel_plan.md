@@ -1,5 +1,5 @@
 > **IMPLEMENTED 2026-06-16.** Archived copy of the approved plan from
-> `.claude/plans/biplot-raw-scale-axes.md`. Delivered: `bl_set_scaling()`,
+> the plan-mode working copy (removed 2026-11-07). Delivered: `bl_set_scaling()`,
 > `.bl_rescale_biplot_axes()`, the `scaling` field threaded through
 > `bl_filter_outliers()` / `bl_assemble()` / `bl_build_result()`, raw-unit axes
 > wired into all biplot plot methods, script 03 standardisation step, tests

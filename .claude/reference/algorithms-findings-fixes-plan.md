@@ -153,7 +153,7 @@ only with the hull on), so the rotation scripts `17_1`–`17_3`, which set `hull
 ## Steps
 
 0. **Housekeeping:** restore the algorithms plan to this file, word for word, and save this plan as
-   `.claude/plans/algorithms-findings-fixes.md`.
+   the plan-mode working copy (removed 2026-11-07).
 1. **Baseline:** export `HEAD` (`git archive HEAD DESCRIPTION NAMESPACE LICENSE R inst development .Rbuildignore`,
    per CLAUDE.md) into `tempdir()`; `R/` has not changed since `HEAD`. Run the harness against it and keep
    the log.

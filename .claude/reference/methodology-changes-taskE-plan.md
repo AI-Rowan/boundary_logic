@@ -47,8 +47,8 @@ method since the thesis (Stellenbosch, 27 Feb 2026), the supervisor must approve
 note the supervisor can comment on in Word. Tasks A–D are done and Gate 2 is closed. Gate 3 follows
 this task.
 
-Specification: `.claude/plans/boundary-logic-fix-prompt.md` (Task E, Parts 1–2) and the working plan
-`.claude/plans/commit-and-push-the-mutable-hearth.md` (Task E section). **No `R/` code changes.**
+Specification: `.claude/reference/paper1-task-spec.md` (Task E, Parts 1–2) and the working plan
+`.claude/reference/paper1-working-plan.md` (Task E section). **No `R/` code changes.**
 
 **Decisions taken in planning (2026-11-04):**
 - **Structure (user, at plan review):**
@@ -102,7 +102,7 @@ Specification: `.claude/plans/boundary-logic-fix-prompt.md` (Task E, Parts 1–2
 
 ## Files to read first
 
-- **Spec:** `.claude/plans/boundary-logic-fix-prompt.md` §Task E; the working plan's Task E section.
+- **Spec:** `.claude/reference/paper1-task-spec.md` §Task E; the working plan's Task E section.
 - **Thesis:** the final PDF (T and A), and `thesis-md` 07–11 for searching.
 - **Branch code:** read only with `git show origin/original_PhD_code:"scripts/<file>"`. The scripts are
   `1 Functions for biplot.R`, `1.1`, `1.2`, `1.3`, `1.4`, `3.1`, `3.2`, `4.1`, `4.3` and `4.4`.

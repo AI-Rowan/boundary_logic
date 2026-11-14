@@ -1,4 +1,4 @@
-> **IMPLEMENTED 2026-11-04.** Archived from `.claude/plans/i-have-reviewed-the-robust-rossum.md`
+> **IMPLEMENTED 2026-11-04.** Archived from the plan-mode working copy (removed 2026-11-07)
 > (the approved plan, with its implementation log). Part A (the Pima scripts) is local only;
 > Part B is `documentation/known-issues.md` and one CLAUDE.md §9 bullet.
 
@@ -40,7 +40,7 @@ is not re-run (434 PASS stands).
 
 - `scripts/paper1-pima/`: `fig-07.R`, `03_local.R`, `02b_prune-refit.R`, `review.qmd` and
   `issues.csv` (all read in this session).
-- `.claude/plans/boundary-logic-fix-prompt.md`, Task D (the format of the note and its list).
+- `.claude/reference/paper1-task-spec.md`, Task D (the format of the note and its list).
 - `documentation/fixed-constraint-restore.md` §8, for the wording of options (c) and (d).
 - A recent note's header style, e.g. the top of `documentation/fixed-constraint-restore.md`.
 - `progress.md`, for the parked items: the README's Pima example and the harness title.
@@ -134,8 +134,8 @@ defects and limitations (Task D, 2026-11-04); read it before starting future wor
 
 ## After implementation
 
-- Append a dated entry to `.claude/plans/paper1-pima-example.md` (issue decisions 4, 5 and 9) and
-  a Task D line to the implementation log of `.claude/plans/commit-and-push-the-mutable-hearth.md`.
+- Append a dated entry to `.claude/reference/paper1-pima-example-plan.md` (issue decisions 4, 5 and 9) and
+  a Task D line to the implementation log of `.claude/reference/paper1-working-plan.md`.
 - Archive this plan as `.claude/reference/known-issues-taskD-plan.md` with an IMPLEMENTED banner
   (CLAUDE.md §2: a documentation change in the package).
 - At session close, update `progress.md`: Tasks C and D done, Task E next. Your filled-in form is

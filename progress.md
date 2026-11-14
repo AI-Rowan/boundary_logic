@@ -6,233 +6,189 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ---
 
+## Next session: start here
+
+**Update the Paper 1 plan**, then write its algorithm boxes. Start on branch `paper_nr1_changes`
+(CLAUDE.md §10). The plan to update is
+`../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/.claude/plans/paper-1-plan.md`
+(last edited 2026-10-29). Plan the update first; what it must take in is under "Outstanding items",
+Paper 1, below. The algorithm boxes have their own plan, `.claude/plans/before-updating-the-paper-wiggly-wave.md`
+(stage 2 of `documentation/algorithms.md`).
+
+---
+
+## Outstanding items (consolidated 2026-11-07)
+
+Every plan in `.claude/plans/` was audited against the code and git on 2026-11-07; 33 were finished
+and deleted (the ones without an archive copy were archived to `.claude/reference/` first). These are
+the items still open. Nothing here is a blocker.
+
+### Paper 1 (next session; mostly in the paper repo)
+
+1. **Update `paper-1-plan.md`.** It must take in:
+   - **parameters and wording:** `max_pairs` is 21, not 10 (paper plan lines 11, 38, 76, 242);
+     remove "no hull after rotation" and "call-history dependence" (both resolved);
+   - **the method:** the convex hull of the training data on each rotated plane, with the empty-region
+     rule (B10; `documentation/local-convex-hull.md`); the switches in `set_filters()` (the
+     unconstrained counterfactual is one call); the variable importance measures the in-plane gap,
+     while the global distances are reported only (`algorithms.md` F3);
+   - **figures and Table 1:** figure 6 is the dot chart only (no 6(b)); figure 7(a) is the TP target's
+     run 4 searched without the hull; figures 5(b), 7(a), 7(b), 7(c), 9(a), 9(b) changed; Table 1 has
+     runs 1, 3, 4, 5, 6 and 7;
+   - **the TP narrative:** plausibility against actionability (the issue 11 sentence chosen in
+     `future-improvements-review.md`), replacing the "older patient" story;
+   - **§5 (local interpretation):** the hull as part of the method, and the A2, B3 and B7 sentences;
+   - **§8 (properties and limitations):** the A1 result (upper-bound sentence, `05_full-space-gap.R`)
+     and the B2 platform sentence;
+   - **§9 (further work):** the four themed paragraphs built from the agreed sentences (G1 in the form);
+   - **the Pima paper sentences** for issues 5 (why run 2 is not in Table 1), 9 (the Mahalanobis
+     check), 11, 12 (fixed runs often have no counterfactual) and 13 (the integer rounding cost):
+     decided in `scripts/paper1-pima/issues.csv` and the form, G1;
+   - **the final thesis's page numbers** (CLAUDE.md §5 anchors);
+   - **tasks T3** (paper repo infrastructure, TinyTeX) **and T4** (port `scripts/paper1-pima/` to the
+     paper repo, switch `00_setup.R`'s `devtools::load_all("../..")` to `library(boundarylogic)`, check
+     `numbers.rds` matches); figures 1–2 (schematics, made in the paper repo).
+   Source: the archived Pima and task plans (`.claude/reference/paper1-pima-example-plan.md`,
+   `paper1-task-spec.md`), `future-improvements-review.md`.
+2. **The paper's algorithm boxes** (stage 2 of `documentation/algorithms.md`): four LaTeX boxes for
+   CVA in the paper's notation, with a traceability table. Plan:
+   `.claude/plans/before-updating-the-paper-wiggly-wave.md`.
+3. **Hand-over to the paper writer:** the test counts (561 PASS; `R CMD check` 0/0/0), the commit
+   (`0689341` on `main`), `scripts/paper1-pima/review.html`,
+   `documentation/methodology-changes/methodology-changes.docx`, the Pima issues and decisions
+   (`issues.csv`), and the install command. Source: `.claude/reference/paper1-task-spec.md`, "Report back".
+4. **Gate 3: the supervisor reviews the methodology note.** Afterwards decide whether the note lists the
+   design-document-only items B5 (a test of the CVA identity) and B8 (a `pairs =` argument); B21–B23
+   are in CLAUDE.md §9. Source: `.claude/reference/future-improvements-hull-plan.md` (Phase 4).
+
+### Release and branches: done 2026-11-14 (session 13)
+
+5. ~~Tag `v0.2.0`~~ **Done:** annotated tag `v0.2.0` on `0689341`, pushed to origin. The paper
+   installs it with `devtools::install_github("AI-Rowan/boundary_logic@v0.2.0")`.
+6. ~~`method_developments`~~ **Fast-forwarded** to `main` and pushed (kept as the development branch;
+   CLAUDE.md §10).
+7. ~~Check the public install~~ **Done:** `remotes::install_github("AI-Rowan/boundary_logic@v0.2.0",
+   build_vignettes = TRUE)` without a GitHub token, into an empty library placed first on
+   `.libPaths()` (dependencies from the user library), installs 0.2.0 (`RemoteSha` `0689341`), 23
+   exports, and the loan-default vignette's HTML (1.1 MB) opens with `vignette()`.
+8. ~~The old Pima review Claude Doc~~ **Deleted** ("Task C plan: the Paper 1 Pima example",
+   `A3XvG3gydFu8DUm2umqaLc`); `scripts/paper1-pima/review.html` replaces it.
+
+### Housekeeping in this repo
+
+9. ~~Commit the rotation-script loading fix~~ **Committed and pushed** (2026-11-14) with the plan
+   archives and this file; `main` fast-forwarded to it.
+10. **Re-render the Pima review page** (`scripts/paper1-pima/review.qmd`): it still names `ef014ca`,
+    but the outputs are from `17d3c18` (CLAUDE.md §5).
+11. **Refresh the root documents' trees and counts** (they drifted after the 2026-11-04 audit):
+    - `2 implementation_summary.txt`: "Last updated" date; the test tree (15 files: add
+      `test-distance_by_method.R`, `test-hull_utils.R`); the documentation tree (add
+      `local-convex-hull.md`, `algorithms.md`, `methodology-changes/`; drop the deleted presentation
+      PDF); the expectation count (561 PASS, from a real `devtools::test()` run);
+    - `1 Foundation intro documents.txt`: the "last revised" date; §8's file tree (it still lists the
+      deleted `scripts/00_pima_*.R`, `docs/` files that do not exist, 13 test files; it omits
+      `pick_point.R`, `datasets.R`, `loan_data.csv`, `development/`, `documentation/`,
+      `vignettes/*.Rmd.orig` and `precompile.R`); §9's branch list (add `paper_nr1_changes`).
+12. **A test gap:** `tests/testthat/test-set_scaling.R` has no raw-unit relabel round-trip case for a
+    PCA with `standardise = FALSE`, and checks only that the label midpoint lies near the centre;
+    assert exact labels (`std * scale + center`) at matching ticks (source: the 2026-06-16 raw-scale
+    axes plan, `.claude/reference/scaling_axis_relabel_plan.md`).
+
+---
+
 ## Standing items / carry-overs
 
 - **Paper 1 work is on branch `paper_nr1_changes`** (branched from `method_developments` at
   `b7aee65` on 2026-10-29, pushed with upstream). Start Paper 1 sessions on that branch
   (CLAUDE.md §10).
-- **`paper_nr1_changes` is pushed up to `9bc8e1c`**, the sessions 10–11 commit (2026-11-06: `.poly_clip()` once,
-  the `set_filters()` switches, the local plot's hull trim, the final thesis in `documentation/`),
-  after `c13fe44` (2026-11-05: the hull on each rotated plane, version 0.2.0) and its clean-up commit
-  `ee64c3a`. Commit and push only when the user says so.
-- **`main` was last merged and pushed on 2026-08-03; `method_developments` is at `b7aee65`.** Merging
-  `paper_nr1_changes` back, the `v0.2.0` tag the paper will pin, and reinstalling the package
-  locally wait for the user's instruction.
+- **`paper_nr1_changes`, `main` and `method_developments` (local and origin) are all at the
+  2026-11-14 housekeeping commit** (rotation-script loading fix, plan archives), one documentation-only
+  commit after `0689341`. **Tag `v0.2.0` = `0689341`** (the package code is the same at both). Commit
+  and push only when the user says so.
+- **The installed `boundarylogic` is 0.2.0** (reinstalled 2026-11-07 from the working tree, equal to
+  `main`). Reinstall after each merge to `main` (CLAUDE.md §5).
 - **`scripts/` is gitignored** (the user's playground). The Paper 1 Pima example lives in
   `scripts/paper1-pima/` (local only): review page `review.html`, issues `issues.csv`, the
-  approximation gap `05_full-space-gap.R`. How to run it: CLAUDE.md §5. Phases 1–2 use the 7-feature
-  GAM; Phase 3 the GAM refitted on Pregnancies, Glucose, Insulin and Age. Table 1 has runs 1, 3, 4, 5,
-  6 and 7.
+  approximation gap `05_full-space-gap.R`, the findings effects `06_findings-effects.R`. How to run it:
+  CLAUDE.md §5. Phases 1–2 use the 7-feature GAM; Phase 3 the GAM refitted on Pregnancies, Glucose,
+  Insulin and Age. Table 1 has runs 1, 3, 4, 5, 6 and 7.
 - **Every open item is decided** (2026-11-05): `documentation/methodology-changes/future-improvements-review.md`
   records each decision (fix now, future improvement in the paper or the design document only, no
-  action) and the agreed paper sentences. `known-issues.md` is removed (in git at `c13fe44`).
-- **The methodology note** (`documentation/methodology-changes/methodology-changes.qmd` / `.docx`) is
-  organised as "Changes made" (history, core methodology §3.1–3.12, code improvements) and "Future
-  work", with no approval boxes. The supervisor has not seen it yet.
-- **The local search applies the convex hull on each rotated plane** (since 2026-11-05;
-  `documentation/local-convex-hull.md`). Since 2026-11-06 its switch, and a new one for the training
-  ranges, are in `set_filters()` (`hull = TRUE`, `train_ranges = TRUE`); `set_filters = NULL` keeps
-  both on. The plane under-determination (rotation note §4.1) stays documented and deliberately not
-  actioned (CLAUDE.md §9).
-- **Test status: 527 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are biplotEZ 2-class CVA notices).
-  **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-11-06, session 11).
+  action) and the agreed paper sentences.
+- **The methodology note** (`documentation/methodology-changes/methodology-changes.qmd` / `.docx`)
+  names commit `17d3c18`. It is organised as "Changes made" and "Future work", with no approval
+  boxes. The supervisor has not seen it yet (item 4).
+- **The local search's plausibility rule** (`set_filters(hull = TRUE)`): the convex hull of the
+  training data on each rotated plane (the target is not part of it since 2026-11-06), and closed
+  contours only if they enclose training data, the same empty-region rule as `bl_find_boundary()`.
+  The plane under-determination (rotation note §4.1) stays documented and deliberately not actioned
+  (CLAUDE.md §9).
+- **Test status: 561 PASS / 0 FAIL / 4 WARN / 0 SKIP** (the 4 WARN are biplotEZ 2-class CVA notices).
+  **`R CMD check`: 0 errors / 0 warnings / 0 notes** (2026-11-06, session 12).
 - **Verification:** run R as `.R` files (`Rscript.exe <driver>.R`), with drivers that
-  `devtools::load_all()` the repo. **The installed `boundarylogic` is stale** (2026-09-10).
-- **`.claude/plans/` is gitignored** (local only); `.claude/reference/` is tracked.
+  `devtools::load_all()` the repo. The rotation scripts load the working tree themselves.
+- **`.claude/plans/` is gitignored** (local only); `.claude/reference/` is tracked. Since the
+  2026-11-07 consolidation it holds only the algorithm-boxes plan.
 
 ---
 
-## Session summary (2026-11-06, session 11, latest): the switches in `set_filters()`, the hull on the local plot, the final thesis
+## Session summary (2026-11-14, session 13, latest)
 
-**Plan:** `.claude/plans/poly-clip-is-defined-twice-dynamic-garden.md` (the plan-mode file name),
-archived as `.claude/reference/filter-switches-in-set-filters-plan.md` (IMPLEMENTED banner).
-
-- **Done:** `set_filters(bl_target, ..., hull = TRUE, train_ranges = TRUE)` holds all three of the
-  thesis's rules: actionability, plausibility and feasibility (p.116). `bl_find_local_cf(hull = )`
-  is removed. The training ranges gain a switch (before, the only way off was
-  `bl_result$train_ranges <- NULL`). `train_ranges = FALSE` also skips the range checks of
-  `.restore_fixed()` and `.round_integers()` (new `train_ranges` argument). Both off with no
-  constraint gives the unconstrained counterfactual (p.115).
-- **Key decisions (user):**
-  - the switches are named `hull` and `train_ranges`, documented as plausibility and feasibility;
-  - the old `hull` argument is removed (0.2.0 untagged);
-  - `set_filters = NULL` keeps both rules on, so no existing result changes
-    (`local-convex-hull.md` §6 gives the reasons).
-- **New:** private `.filter_switches()`, `.check_switch()`; result field `train_ranges`; `Not applied`
-  print line when a rule is off; `print(<bl_filters>)` shows both switches; reworded no-solution message
-  and target-range warning.
-- **Callers updated:** harness (Step 10 sets both switches; the Step 15 title fixed), vignette,
-  README, rotation scripts `17_1`-`17_3`, Pima `04` and `05`.
-- **Verified unchanged against `HEAD`:**
-  - the loan harness;
-  - the rotation scripts;
-  - the Pima outputs (`table1.csv`, `numbers.rds` apart from the message wording, `full_space_gap`,
-    `method-change-effects.csv` apart from the meta rows).
-- **Verification runs:** Pima `tests.R` 13/13, `04` 6/6, `05` both checks. `review.html` and the
-  methodology note `.docx` were re-rendered.
-- **New behaviour (harness):** for the external applicant (credit score below the training range),
-  √d²_M is 1.7026 by default, 0.8521 with `train_ranges = FALSE` and 0.4750 with both off.
-- **Docs updated:** NEWS, the implementation summary, the Foundation document, CLAUDE.md (§2, §4 new
-  rule, §6), `local-convex-hull.md` (§6 new), `fixed-constraint-restore.md`, the rotation note, the
-  methodology note, the walkthrough `review_section9_to_15.md`, `review.qmd`.
-- **Then, the local plot shows the hull** (plan archived as
-  `.claude/reference/local-plot-hull-trim-plan.md`):
-  - `plot.bl_local_result(trim_to_hull = NULL)` colours the grid only inside the plane's hull when the
-    search applied it, as Figure 5(a) does globally (`.grid_in_hull()`, `R/hull_utils.R`);
-    `bl_find_local_cf()` stores `hull_polygon` also with the hull off;
-  - Pima Figure 7(a) is now a plot: the TP target's run 4 searched without the hull (pair (1,2), Age
-    51 → 59.5), its cross in the white area; the caption says why there is no counterfactual
-    (`03_local.R` `run4_no_hull`, `numbers.rds` `run4_no_hull`);
-  - the user chose: look like Figure 5(a), no legend, captions only;
-  - figures 5(b), 7(a), 7(b), 7(c), 9(a), 9(b) changed: the Paper 1 plan must take them in.
-- **Last, the final thesis in the repository** (plan archived as
-  `.claude/reference/final-thesis-citations-plan.md`):
-  - **The user's change:** `documentation/FINAL_ADRIAAN ROWAN_27022026.pdf` added (untracked;
-    byte-identical to `../Explain XAI code/reference-materials/1 FINAL_ADRIAAN ROWAN_27022026.pdf`, which
-    the notes already cited, so no page moved); the 30 September 2025 draft and
-    `XAI PhD presentation - March 2026.pdf` deleted (both tracked; nothing cites the presentation).
-  - **Audit:** two read-only passes checked every thesis citation against the final PDF. All 27 in
-    `R/`, NEWS, README, the vignette and tests matched, and about 60 in the documents did. Fixed:
-    - draft and old-location mentions (CLAUDE.md §6, the rotation note, the boundary-distance note);
-    - the draft's §3.9.3 for text now in §3.10 (rotation note, 5 places; CLAUDE.md §2's section list);
-    - exact quotes (rotation note pp.86, 92, 118; boundary-distance p.103; local-convex-hull p.115,
-      now a paraphrase since the thesis writes "unconstraint");
-    - `17_3`'s printed label "thesis (§2.3)" → "thesis (§3.5, p.55)";
-    - stale links to the rotation note's old §5.3/§5.9, now Appendix A.2 (CLAUDE.md §6,
-      `nearest-vertex-tie-break.md`).
-  - **Added:** §3.9.2 (pp.88–90), where the thesis defines the three rules, next to p.116 in
-    `set_filters()`'s roxygen, `local-convex-hull.md` §6 and the walkthrough.
-  - **Kept, by the user's decision:** draft mentions in the archived plans and in
-    `future-improvements-review.md` (history records). The documents name the thesis "the final
-    version of 27 February 2026".
-- **CLAUDE.md** (`/revise-claude-md`): the thesis PDF path and page anchors; `Rscript -e` with `|`
-  fails from Git Bash; Figure 7(a)'s source; the local plot's hull trim.
-- **Status:** 527 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0. Harness, rotation scripts and
-  Pima numbers unchanged.
-- **Committed and pushed** (2026-11-06, on the user's instruction): sessions 10 and 11 as `9bc8e1c`
-  on `paper_nr1_changes`, with the new thesis PDF, the two PDF deletions, `man/dot-grid_in_hull.Rd`,
-  `tests/testthat/test-hull_utils.R` and the four new `.claude/reference/` plans. The pkgdown site
-  (`docs/`) is stale until the next `build_site()`.
-- **Next step:**
-  1. The methodology note prints the commit it was measured at (`ee64c3a` "with uncommitted
-     changes"): re-run `run_all.R` and `04_method-change-effects.R`, then re-render the note, so it
-     names the new commit (CLAUDE.md §5).
-  2. Then session 9's "Next session" below (update the Paper 1 plan). The paper plan should also take
-     in the switches (the unconstrained counterfactual is now one call), the changed local figures
-     (5(b), 7(a), 7(b), 7(c), 9(a), 9(b)) and the final thesis's page numbers.
+- Release and branch housekeeping (items 5–9): the session-12 changes committed and pushed; tag
+  `v0.2.0` on `0689341` pushed; `main` and `method_developments` fast-forwarded and pushed; the
+  public `install_github(...@v0.2.0, build_vignettes = TRUE)` checked; the old Pima Claude Doc
+  deleted. No package code changed: 561 PASS stands.
+- **Next:** the Paper 1 plan update (start here, above).
 
 ---
 
-## Session summary (2026-11-05, session 10): `.poly_clip()` defined once
+## Session summary (2026-11-06 to 2026-11-07, session 12)
 
-**Plan:** `.claude/plans/poly-clip-is-defined-twice-dynamic-garden.md`, archived as
-`.claude/reference/poly-clip-single-definition-plan.md` (IMPLEMENTED banner).
-
-- **Done:** removed the copy of `.poly_clip()` in `R/boundary.R`. It was dead code: R loads
-  `boundary.R` before `hull_utils.R`, so the `hull_utils.R` copy always replaced it. The live function
-  is identical before and after (checked with `deparse()`).
-- **New test:** `tests/testthat/test-hull_utils.R` (5 blocks, 8 expectations).
-- **Docs updated:** `man/dot-poly_clip.Rd` (regenerated), the implementation summary, CLAUDE.md
-  (§2 archive list, §6), `review_section7_to_8.md` and NEWS.
-- **Left stale by choice:** the pkgdown page `docs/reference/dot-poly_clip.html` and
-  `docs/search.json`, until the next full `build_site()`.
-- **Status:** 473 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0. Committed with session 11.
-
----
-
-## Session summary (2026-11-05, session 9): every open item decided; the hull restored
-
-**Plan:** `.claude/plans/cryptic-snuggling-bee.md`, archived as
-`.claude/reference/future-improvements-hull-plan.md` (IMPLEMENTED banner).
-
-### What was done
-
-1. **The reply form** `documentation/methodology-changes/future-improvements-review.md`: the 9 known
-   issues (A1–A9) in full and 24 other items (B1–B24) in a table, decided over five rounds with the
-   user. Outcome:
-   - **fix now:** A1, A3, A8, A9, B3, B9, B10, B24;
-   - **future, in the paper:** A2, A4–A7, B1, B2, B6, B7, B12–B18 (four themed paragraphs in §9: the
-     local plane, constraints, attribution, scope);
-   - **future, design document only:** B5, B8, B11, B21–B23 (B21 and B5: no tests, the package need
-     only work on the user's computer);
-   - **no action:** B19, B20 (removed from CLAUDE.md §9).
-2. **B10, the convex hull on each rotated plane** (the user's decision): `bl_find_local_cf(hull = TRUE)`
-   builds the hull of the training data and the target per pair (`.build_hull_polygon(..., outlie =
-   1)`) and filters contour vertices with `.poly_clip()` before the other filters; new fields `hull`,
-   `hull_polygon`. `hull = FALSE` reproduces the earlier search exactly; the rotation scripts pin it.
-   Design choices: training data + target (Appendix A), switchable, no enclosure rule.
-3. **A1, the approximation gap:** `scripts/paper1-pima/05_full-space-gap.R` (nloptr SLSQP from the
-   package's points and 50 random directions; geometry for the 4D hull check).
-4. **Small fixes:** one colour map (`.confusion_cols`, A3); README constraint example with output
-   (A8); harness title (A9); "component pair" wording (B3); centroid warning (B9).
-5. **Outlier removal:** `bl_prepare_data()`'s `hull_fraction` default is now 1 (no removal); the loan
-   harness and vignette keep 0.9, Pima 1 (the user's instruction).
-6. **B24:** version 0.2.0; thesis citations in the rotation and boundary-distance notes moved to the
-   final thesis pages and section numbers (each quote located with `pdftotext`); pkgdown rebuilt.
-7. **The methodology note:** rewritten for the hull and run 7, the A1 result, the chosen paper
-   sentences, the future-work decisions; then reorganised as "Changes made" and "Future work" without
-   approval boxes (the user's instruction). Corrected the earlier false statement that the
-   supervisor had seen a version.
-8. **Documents:** `documentation/local-convex-hull.md` (new); the implementation summary; the
-   Foundation document (its "no hull, intentionally" rule); CLAUDE.md; NEWS; both walkthroughs; the
-   rotation note §4.8 and its hull notes; the Pima `issues.csv` (issues 5, 11, 12) and `review.qmd`.
-9. **Clean-up:** `known-issues.md` removed and every reference repointed.
-
-**Key results (Pima, Paper 1):**
-- **TN target:** unchanged in every run.
-- **TP target, run 1:** pair (2,3) -> (3,4); search distance 1.50 -> 1.84; counterfactual 1.42 -> 1.82.
-  It now lowers every variable (Age 51 -> 41.2; without the hull it raised Age to 59.6, outside the
-  training data). Runs 2, 3, 4, 5 and 7 have no counterfactual; figure 7(a) shows a "no
-  counterfactual" panel.
-- **Run 7 (new):** Pregnancies fixed, Glucose "decrease": the TN target has a counterfactual (0.29).
-- **Over the 79 test rows:** the hull moves 11, none loses its counterfactual.
-- **A1:** the package's distance is a median 1.19 times the full-space distance (quartiles 1.09 and
-  1.31; range 1.00 to 2.75; 15% within 5%); TP 1.52, TN 1.05.
-- **K3 (thesis group order):** the TP target now loses its counterfactual (was (2,3) -> (1,3)).
-- **The loan harness:** unchanged (the hull on and off give identical results).
-
-### Test status
-
-- **Tests:** 465 PASS / 0 FAIL / 4 WARN / 0 SKIP (no new tests, by the user's decision).
-- **`R CMD check`:** 0 / 0 / 0.
-- **Pima:** `tests.R` 13/13; `04_method-change-effects.R` 6/6 self-checks (new M6 = the hull; M7
-  includes run 7); `05_full-space-gap.R` both checks pass.
-- **Rotation script `17_3`:** output identical to `HEAD` (timings only).
-
-### Open points / blockers
-
-- **No blockers.**
-- **On the user's instruction:** merge into `method_developments` / `main`, tag `v0.2.0`, reinstall.
-- **The Pima scripts are not under version control:** they move to the paper repo with the
-  supplement (task T4); `00_setup.R` has the one `library(boundarylogic)` line to switch.
-- **A fragility, not a defect:** the TP target's winning pair is narrow ((3,4) 1.8443 against (2,4)
-  1.8449); another platform may pick another plane (B2's paper sentence covers it).
-
-### Next session (exact next step)
-
-1. **Update the paper plan**: `../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/.claude/plans/paper-1-plan.md`.
-   Plan it first. It must take in:
-   - **figures:** figure 6 is the dot chart only (no 6(b)); figure 7(a) is now a "no counterfactual"
-     panel for the TP target's run 4; Table 1 gains run 7;
-   - **the TP narrative:** plausibility against actionability (the issue 11 sentence chosen in the
-     form), replacing the "older patient" story;
-   - **§5 (local interpretation):** the hull as part of the method (B10), and the A2, B3 and B7
-     sentences;
-   - **§8 (properties and limitations):** remove "no hull after rotation" and "call-history
-     dependence" (both resolved); add the A1 result (upper-bound sentence) and the B2 platform
-     sentence;
-   - **§9 (further work):** the four themed paragraphs built from the agreed sentences (G1 in the
-     form);
-   - **the outline's tasks T3 (paper repo infrastructure) and T4 (port the Pima scripts).**
-2. **Then the hand-over to the paper writer:** the test counts, the files changed, the Pima issues
-   with the user's decision on each, the review page and the methodology note, the commit SHA, the
-   reinstall command, and how the Pima scripts move to the paper repo.
+- **The vignette** (archived plan `.claude/reference/vignette-loan-workflow-plan.md`): rewritten for
+  package users, following the harness on the full data; precomputed
+  (`vignettes/Boundary_Logic_loan_default_workflow.Rmd.orig`, `vignettes/precompile.R`, hidden
+  `*-claims` chunks); SHAP plots in raw units; no `bl_robustness()` step.
+- **`documentation/algorithms.md`**: every stepwise algorithm (A1–A4, B1–B3, C1–C8, supporting S1–S9),
+  their order and interaction, and findings F1–F8 with the user's decisions (§7).
+- **The findings fixes** (archived plan `.claude/reference/algorithms-findings-fixes-plan.md`):
+  - the empty-region rule judged on the training data in `bl_find_boundary()` (before: the searched
+    rows) and added to the local search with the hull on (`.encloses_data()`);
+  - each rotated plane's hull from the training data alone;
+  - the local grid clamped to [0, 1]; the local plot widened to show a target outside the training
+    data; `grid_col` split at the cutoff; `inside_data` removed; F1 noted in the code;
+  - F3 (B1's gap against B2's) measured: the off-plane part is 59–80% of B1's gap, so switching B2 to
+    it was tried and reverted at the gate; B1's distances are reported only;
+  - Paper 1 unchanged (Table 1, every run); on the loan harness test row 13's constrained
+    counterfactual (an empty closed contour held its nearest point) and the new applicant's move.
+  - New `scripts/paper1-pima/06_findings-effects.R` (`findings-effects.csv`, read by the note).
+- **The W note:** `boundary-distance-and-robustness.md` §1.2 says why the package computes W itself.
+- **Committed and pushed** (on the user's instruction): `17d3c18`, `0689341`; `main` fast-forwarded.
+- **The rotation scripts** (archived plan `.claude/reference/rotation-scripts-package-loading-plan.md`):
+  they failed because `library(boundarylogic)` loaded the stale installed 0.1.0 (no
+  `set_filters(hull =)`). They now load the working tree inside the repo and check the version
+  elsewhere; the package was reinstalled (0.2.0). Output identical to before. Uncommitted (item 9).
+- **The plans consolidated** (`/summarise-plans`, 2026-11-07): 34 plans audited; 33 deleted. Five had
+  no archive copy and were archived first: `paper1-task-spec.md` and `paper1-working-plan.md` (the
+  Paper 1 task specification and working plan), `paper1-pima-example-plan.md`,
+  `vignette-loan-workflow-plan.md`, `rotation-scripts-package-loading-plan.md`. Every reference to a
+  deleted plan (CLAUDE.md §2 and §10, `future-improvements-review.md`, this file, the archive banners)
+  now points to its archive. Merged into the items above: session 9's "Next session" list (item 1) and
+  the stale standing items (main, the tag, the reinstall, the test count). The algorithm-boxes plan is
+  kept, trimmed to stage 2. Unsure, left open: Phase 4's B5/B8 (item 4), the public install check
+  (item 7), the old Claude Doc (item 8).
+- **Status:** 561 PASS / 0 FAIL / 4 WARN; `R CMD check` 0 / 0 / 0.
 
 ---
 
 ## History (one line per session, newest first)
 
 Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
+
+- **2026-11-06 (session 11)** -- the plausibility (`hull`) and feasibility (`train_ranges`) switches in `set_filters()`; the local plot colours its grid only inside the plane's hull; Pima figure 7(a) from run 4 without the hull; the final thesis PDF in `documentation/` and every citation checked. Committed and pushed as `9bc8e1c`. 527 PASS.
+
+- **2026-11-05 (session 10)** -- `.poly_clip()` defined once (`R/hull_utils.R`), new `test-hull_utils.R`. Committed with session 11. 473 PASS.
+
+- **2026-11-05 (session 9)** -- every open item decided (`future-improvements-review.md`, A1-A9, B1-B24); the convex hull on each rotated plane (B10); the approximation gap (`05_full-space-gap.R`, median 1.19); run 7; version 0.2.0; `hull_fraction` default 1; the methodology note reorganised; `known-issues.md` removed. Committed as `c13fe44`, `ee64c3a`. 465 PASS.
 
 - **2026-11-04/05 (session 8)** -- Task E: the methodology-changes note (`methodology-changes.qmd`, `04_method-change-effects.R`, 5 self-checks); the §3.3 reason for keeping global CFs outside the ranges; the thesis distance rule by projection (`distance = "auto"`: Euclidean under PCA, Mahalanobis under CVA). Committed and pushed as `12b38e4`. 465 PASS.
 
@@ -248,7 +204,7 @@ Full detail for any entry: `git log -p progress.md` (or `git show <hash>`).
   `step16-pairs-check-decimals-plan.md`. Committed as `f0e3dd4`, `a89ff1f`, `49c9067`. 348 PASS.
 
 - **2026-10-31 (session 4)** — the rotation and Mahalanobis notes were reconciled and merged
-  (`biplot_rotation_and_pair_selection.md`, rewritten; plan `can-you-compare-the-nifty-flask.md`).
+  (`biplot_rotation_and_pair_selection.md`, rewritten; plan `notes-merge-rotation-phase2-plan.md`).
   - The Phase 2 note was renamed to `boundary-distance-and-robustness.md` (staged `git mv`).
   - Under CVA the two pair selectors are identical: d²_M = (n−g)·dist_z²; `17_3` §11 asserts it.
   - Documentation only; 314 PASS. Uncommitted.

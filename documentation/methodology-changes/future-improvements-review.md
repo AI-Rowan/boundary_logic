@@ -15,7 +15,7 @@ Date last edited: 2026-11-05
 - `documentation/methodology-changes/methodology-changes.qmd`: §5 (possible future changes) and
   §6 (interpretation points);
 - `CLAUDE.md`, §9: deferred work;
-- `.claude/plans/cryptic-snuggling-bee.md`: the plan behind this form.
+- `.claude/reference/future-improvements-hull-plan.md`: the plan behind this form.
 
 ---
 
@@ -100,7 +100,7 @@ and are recorded under each item's follow-up. Round 4 changed two things:
   plane, as the thesis requires (p.117). This changes Paper 1's Phase 3 numbers. The supervisor has
   not seen the methodology note yet; the version they will receive presents §3.6 as restored.
 
-The implementation follows the plan `.claude/plans/cryptic-snuggling-bee.md` (approved
+The implementation follows the plan `.claude/reference/future-improvements-hull-plan.md` (approved
 2026-11-05).
 
 | Step | Items | What it does | Moves Paper 1's numbers? |

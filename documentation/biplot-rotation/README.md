@@ -34,10 +34,10 @@ re-running `17_1`-`17_3` reproduces every number in the note.
 Rscript 17_3_minimal-rotation-verification.R
 ```
 
-All four are self-contained: they read `loan_data.csv` from the installed
-`boundarylogic` package, so there is no working directory to set and no data to
-supply. Requirements are `boundarylogic`, `mgcv`, and — for `17_1`/`17_2` —
-`plotly` and `reshape2`.
+All four are self-contained: they read `loan_data.csv` from the `boundarylogic`
+package they load, so there is no working directory to set and no data to
+supply. Requirements are `boundarylogic` (0.2.0 or later), `pkgload` (installed
+with `devtools`), `mgcv`, and — for `17_1`/`17_2` — `plotly` and `reshape2`.
 
 - `17_3` is **console output only** and is the one to run first. It asserts the
   geometry and reports the timings, and finishes in about a minute. If an
@@ -49,10 +49,19 @@ supply. Requirements are `boundarylogic`, `mgcv`, and — for `17_1`/`17_2` —
   not open a browser); their console output carries the numbers the note quotes.
 - `17_1a` draws a base-R six-panel figure on load.
 
-**Running these in the `boundary_logic` package repo** (rather than against whatever
-build is currently installed): run `devtools::load_all()` from the repo root before
-sourcing a script, or `devtools::install()` the branch under test first, so the
-numbers describe the working tree you are actually looking at.
+**Which package they load** (since 2026-11-07). `17_1`, `17_2` and `17_3` load the
+package themselves, in their "Load boundarylogic" block:
+
+- **Inside the `boundary_logic` repo** they load its working tree with
+  `pkgload::load_all()`, so the numbers describe the code you are looking at. They
+  find the repo by looking up from their own folder (when run with `Rscript` or
+  `source()`) and from the working directory (an open `boundary_logic.Rproj` sets it
+  to the repo root), and print `boundarylogic 0.2.0 (working tree)`.
+- **Elsewhere** they use the installed package, and stop with a message unless it is
+  0.2.0 or later. An older install fails at the first `set_filters()` call
+  (0.1.0 has no `set_filters(hull = )`); reinstall with `devtools::install()` from
+  the repo.
+- **A development copy already loaded** (`devtools::load_all()`) is kept.
 
 ## Two things to know before relying on the numbers
 

@@ -51,10 +51,55 @@
 
 rm(list = ls())
 
-suppressPackageStartupMessages({
-  library(boundarylogic)
-  library(mgcv)
+# --- Load boundarylogic -------------------------------------------------------
+# Inside the boundary_logic repo this loads the working tree (pkgload), so the
+# script always describes the code beside it: the installed copy can be much
+# older (0.1.0, for example, has no set_filters(hull = ) and stops at the first
+# set_filters() call below). Outside the repo it uses the installed package,
+# which must be 0.2.0 or later. A development copy that is already loaded
+# (devtools::load_all()) is kept.
+local({
+  is_dev <- isTRUE(tryCatch(pkgload::is_dev_package("boundarylogic"),
+                            error = function(e) FALSE))
+  if (!is_dev) {
+    # Where to look for the repo: this script's own folder when it is known
+    # (Rscript's --file=, or source()'s ofile), then the working directory.
+    starts <- getwd()
+    f_arg  <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+    if (length(f_arg)) starts <- c(dirname(sub("^--file=", "", f_arg[1L])), starts)
+    for (fr in rev(sys.frames()))
+      if (is.character(fr$ofile)) { starts <- c(dirname(fr$ofile), starts); break }
+    find_root <- function(d) {
+      d <- normalizePath(d, winslash = "/", mustWork = FALSE)
+      repeat {
+        f <- file.path(d, "DESCRIPTION")
+        if (file.exists(f) &&
+            identical(unname(read.dcf(f, fields = "Package")[1L, 1L]), "boundarylogic"))
+          return(d)
+        up <- dirname(d)
+        if (identical(up, d)) return(NULL)
+        d <- up
+      }
+    }
+    root <- NULL
+    for (s in starts) { root <- find_root(s); if (!is.null(root)) break }
+    if (!is.null(root) && requireNamespace("pkgload", quietly = TRUE)) {
+      pkgload::load_all(root, quiet = TRUE)
+      is_dev <- TRUE
+    } else {
+      library(boundarylogic)
+    }
+  }
+  v <- utils::packageVersion("boundarylogic")
+  if (v < "0.2.0")
+    stop(sprintf(paste0(
+      "This script needs boundarylogic 0.2.0 or later, but version %s is loaded. ",
+      "Run it inside the boundary_logic repo (it then loads the working tree), ",
+      "or install the package from the repo with devtools::install()."), v),
+      call. = FALSE)
+  cat(sprintf("boundarylogic %s (%s)\n", v, if (is_dev) "working tree" else "installed"))
 })
+suppressPackageStartupMessages(library(mgcv))
 
 prin_ang <- function(Q1, Q2)
   acos(pmin(1, pmax(-1, svd(t(Q1) %*% Q2)$d))) * 180 / pi

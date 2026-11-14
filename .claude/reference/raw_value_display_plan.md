@@ -1,5 +1,5 @@
 > **IMPLEMENTED 2026-06-16.** Archived copy of the approved plan from
-> `.claude/plans/currently-the-biplot-does-greedy-kurzweil.md`. Delivered: private
+> the plan-mode working copy (removed 2026-11-07). Delivered: private
 > `.scale_to_raw()` (level vs delta), raw observed->counterfactual values across
 > `plot.bl_shapley()` / `print.bl_shapley()` / `print.bl_sparse_result()` /
 > `print.bl_target()` (scaling stored on `bl_target`), and the script 03
