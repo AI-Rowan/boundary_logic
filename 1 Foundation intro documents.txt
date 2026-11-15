@@ -1,7 +1,7 @@
 Instruction Manual for the Boundary Logic R Package Project
 ============================================================
 Version 2 — Updated to reflect the implemented package (March 2026; last
-revised 2026-11-04)
+revised 2026-11-15)
 
 This document serves as the foundation reference for the Boundary Logic project.
 It is written as an internal project guide for future LLM coding agents and
@@ -464,33 +464,54 @@ boundary_logic/
 │   ├── project_points.R       ← bl_project_points(), bl_predict()
 │   ├── local_cf.R             ← bl_select_target(), set_filters(),
 │   │                              bl_find_local_cf()
-│   └── shapley.R              ← bl_shapley(), bl_find_sparse_cf()
+│   ├── shapley.R              ← bl_shapley(), bl_find_sparse_cf()
+│   ├── pick_point.R           ← bl_pick_point() (interactive point picker)
+│   └── datasets.R             ← Documentation of the loan_data dataset
+│
+├── man/                       ← Rd files (roxygen-generated)
 │
 ├── tests/testthat/
 │   ├── helper.R               ← Shared test fixtures
 │   ├── test-biplot_grid.R, test-boundary.R, test-boundary_plot.R
-│   ├── test-data_prepare.R, test-feasibility_utils.R, test-graphics_device.R
+│   ├── test-data_prepare.R, test-distance_by_method.R
+│   ├── test-feasibility_utils.R, test-graphics_device.R, test-hull_utils.R
 │   ├── test-local_cf.R, test-model_fit.R, test-plot_helpers.R
 │   ├── test-predict_utils.R, test-projection.R, test-result.R
-│   └── test-set_scaling.R     ← 13 test files (2026-11-04)
+│   └── test-set_scaling.R     ← 15 test files, 578 expectations
 │
-├── vignettes/
-│   └── Boundary_Logic_loan_default_workflow.Rmd ← Loan data, Phases 1-3
+├── vignettes/                 ← Precomputed
+│   ├── Boundary_Logic_loan_default_workflow.Rmd.orig ← Source (edit this)
+│   ├── Boundary_Logic_loan_default_workflow.Rmd      ← Knitted, shipped
+│   ├── figures/                                      ← Knitted figures
+│   └── precompile.R           ← Knits the source (run from the package root)
 │
-├── inst/extdata/
-│   └── pima_diabetes.csv      ← Bundled dataset for vignette
+├── inst/
+│   ├── CITATION
+│   └── extdata/
+│       ├── loan_data.csv      ← Loan data (harness, vignette)
+│       └── pima_diabetes.csv  ← Pima data (Paper 1 example, README)
 │
-├── scripts/
-│   ├── 00_pima_Boundary_Logic.R  ← Full interactive workflow (Pima)
-│   └── 00_pima_SHAP.R            ← Pima SHAP analysis script
+├── development/               ← Tracked, build-ignored
+│   ├── 03_loan_status_Boundary_Logic.R ← Main development / testing harness
+│   └── reference/             ← Code walkthroughs of the harness
 │
-├── docs/
-│   ├── flow_diagram.md           ← Mermaid function/data flow diagram
-│   └── implementation_summary.md ← Technical implementation summary
+├── documentation/             ← Tracked, build-ignored: technical notes
+│   ├── algorithms.md, local-convex-hull.md, boundary-distance-and-robustness.md
+│   ├── fixed-constraint-restore.md, sparse-counterfactual.md,
+│   │   nearest-vertex-tie-break.md, scaling_axis_relabel_note.md
+│   ├── future-developments.md ← Future code and method developments
+│   ├── biplot-rotation/       ← Rotation note and the scripts behind it
+│   ├── select-target-class/   ← bl_select_target() class-lookup note
+│   ├── methodology-changes/   ← The record of the changes since the thesis
+│   └── the final thesis PDF, the Pima workflow HTML
 │
-├── DESCRIPTION
-├── NAMESPACE
-└── README.md
+├── scripts/                   ← Git-ignored personal playground (Paper 1
+│                                  Pima example in scripts/paper1-pima/)
+├── docs/                      ← pkgdown site (generated)
+│
+├── DESCRIPTION, NAMESPACE, LICENSE, NEWS.md, README.md, _pkgdown.yml
+├── 1 Foundation intro documents.txt ← This document
+└── 2 implementation_summary.txt     ← Technical implementation summary
 
 
 ========================================================
@@ -499,10 +520,15 @@ boundary_logic/
 
 main               — Current stable package code; public-facing
 method_developments — Active development branch
+paper_nr1_changes  — Package work for Paper 1 (JCGS); the session branch while
+                     Paper 1 work is open (CLAUDE.md §10)
 original_PhD_code  — Preserved original PhD research scripts (read-only)
+Tag v0.2.0         — The release Paper 1 installs:
+                     devtools::install_github("AI-Rowan/boundary_logic@v0.2.0")
 
-Workflow: develop on method_developments, merge to main when stable.
-Both branches are pushed to origin (GitHub: AI-Rowan/boundary_logic).
+Workflow: develop on method_developments (or paper_nr1_changes for Paper 1),
+merge to main when stable. All branches are pushed to origin (GitHub:
+AI-Rowan/boundary_logic).
 
 
 ========================================================

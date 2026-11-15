@@ -2,8 +2,7 @@
 
 This note names every main stepwise algorithm that the package code runs and sets out its steps.
 A separate section shows the order in which the algorithms run and what each passes to the next.
-It describes the code at commit `ef014ca` (`boundarylogic` 0.2.0, 6 November 2026) with the fixes of
-its Findings (Section 7, decided and made on 6 November 2026), in the present tense.
+It describes the code of `boundarylogic` 0.2.0 (tag `v0.2.0`), in the present tense.
 
 **How to read it**
 
@@ -148,7 +147,7 @@ externally fitted model: it does no split and no filtering, and returns a `bl_da
 
 **Defaults that change the result.**
 - `train_fraction = 0.8` and `seed = 121L`.
-- `hull_fraction`: 1 in `bl_prepare_data()` (the full hull, no peeling; since 2026-11-05), but 0.9
+- `hull_fraction`: 1 in `bl_prepare_data()` (the full hull, no peeling), but 0.9
   in `bl_filter_outliers()` when called on its own. The loan harness and vignette pass 0.9, the Pima
   example 1.
 
@@ -360,7 +359,7 @@ search.
    - A contour that is still closed after clipping (first vertex equal to the last) is kept only if
      at least one *training* row, projected as in step 1, lies inside or on it (`.encloses_data()`,
      S3). The rows being searched play no part, so a row's result does not depend on the other rows
-     searched (since 2026-11-06; Finding F2).
+     searched (Finding F2).
    - Every other contour is kept, including a closed contour that the hull cut open.
    - If none is kept, all are used, with a warning.
 4. **Consistency pruning.** Back-project each vertex, $\hat{\mathbf{x}}(\mathbf{b})$, and score it. Keep it
@@ -454,7 +453,7 @@ plot method also returns `vec_to_boundary_sd`, `mahalanobis_check` and the plot.
 
 **Notes.**
 - The diagonal standardisation ignores the correlations in $\mathbf{W}$; the check measures what
-  that leaves out. The full Shapley decomposition is deferred work (CLAUDE.md §9).
+  that leaves out. The full Shapley decomposition is a future development (`future-developments.md` §1.6).
 - See Finding F3.
 
 ### B3. Biplot-region surrogate
@@ -604,9 +603,9 @@ inside C4.
 **Notes.**
 - **The plane is under-determined.** $\mathbf{Y}$ has rank 1, so the minimiser is fixed only along
   the target's direction. The plane's second direction is LAPACK's tie-break.
-- This is inherited from the PhD method, documented, and deliberately not changed (CLAUDE.md §9).
-  The proposed deterministic replacement is in
-  `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md` §4.1 and §5.
+- The thesis method has the same property. The rotation note
+  (`documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`) sets it out in §4.1, and
+  its §5 proposes a deterministic replacement (not implemented).
 - A target at the centre of the biplot ($\lVert\tilde{\mathbf{x}}\rVert\approx0$) makes the rotation
   undefined. C4 then warns.
 
@@ -653,12 +652,12 @@ one whose counterfactual is nearest by the distance rule.
 6. **Grid bounds.** Take the range of $\mathbf{Z}_{tr}$ over both axes together, padded by 10% on each
    side. This gives a square.
 7. **Hull** (when `hull`). Build the full convex hull of the rows of $\mathbf{Z}_{tr}$ on this plane
-   (S3, fraction 1); the target is not part of it (since 2026-11-06). It is rebuilt for every pair;
+   (S3, fraction 1); the target is not part of it (Finding F4). It is rebuilt for every pair;
    the global hull is never used here.
 8. **Grid.** An $m\times m$ grid $\mathbf{G}$, back-projected with the rotated matrices
    ($\mathbf{X}_G=\mathbf{G}\,\mathbf{V}_\rho^{-1}[1{:}2,\,]\,\mathbf{S}+\mathbf{1}\bar{\mathbf{x}}$), scored
    (S1) and clamped to $[0,1]$, as in A3, with one warning per call that counts the clamped cells
-   over all pairs (since 2026-11-06).
+   over all pairs.
 9. **Contours.** $\mathcal{B}$ at levels $c\pm\varepsilon$. Skip the pair if there are none.
 10. **Filter cascade**, for each contour, in this order (a contour skips to the next once none of
     its vertices is left):
@@ -666,8 +665,7 @@ one whose counterfactual is nearest by the distance rule.
        for a predicted class-0 target, $c-\varepsilon$ for class 1.
     2. *Plausibility* (when `hull`). Keep the vertices inside the plane's hull (S3, `.poly_clip()`).
        A contour still closed after the clip is kept only if it encloses training data on the plane
-       (`.encloses_data()` with $\mathbf{Z}_{tr}$), the empty-region rule of B1 step 3 (since
-       2026-11-06).
+       (`.encloses_data()` with $\mathbf{Z}_{tr}$), the empty-region rule of B1 step 3 (Finding F2).
     3. Back-project the vertices.
     4. *Actionability.* Apply the test of C2.
     5. *Feasibility.* Keep the vertices within the training ranges (S5), testing only the survivors.
@@ -979,15 +977,14 @@ flowchart TD
 
 ---
 
-## 7. Findings and decisions
+## 7. Behaviours of the code
 
-These were behaviours of the code that no other document recorded. Adriaan Rowan decided each one on
-6 November 2026; the decision and what was done follow each finding. The plan is
-`.claude/reference/algorithms-findings-fixes-plan.md`. The measurements come from the loan harness and
-from `scripts/paper1-pima/04_method-change-effects.R` (F3) and `06_findings-effects.R` (F2, F4), which
-compare the package before and after the changes.
+These are behaviours of the code that the algorithm sections do not spell out, with what they mean
+for the results. Where a number shows what a rule does, it compares the code with the same search
+with only that rule removed, on the loan harness and the Pima example (`scripts/paper1-pima/`).
+F3's measurements come from `scripts/paper1-pima/04_method-change-effects.R`.
 
-- **F1. B1's zero test for a missing boundary point.**
+- **F1. B1's zero test cannot detect a missing boundary point, and can stop the search.**
   - `bl_find_boundary()` combines the two opposite-side choices by adding matrices with zeros for
     the side not used. It then sets any row whose `B_z` is exactly $(0,0)$ to NA.
   - A row with no opposite-side contour is already NA (NA + 0), so the test never marks a missing
@@ -997,22 +994,23 @@ compare the package before and after the changes.
     predicted on that side get NA. The test is then NA for them, and `if (any(zero_rows))` stops
     with "missing value where TRUE/FALSE needed", unless some other row is exactly $(0,0)$.
   - The empty result (`.empty_return()`, when no contour survives) returns `B_z` as zeros, not NA.
-  - **Decision: kept unchanged.** A comment at the test in `bl_find_boundary()` records the known stop.
-- **F2. B1's result for one row could depend on the other rows searched.**
-  - A contour lying wholly inside the hull and closed was kept only if one of the rows passed in
-    `data`/`tdp` lay inside it, as in the PhD code (`1.4 Biplot Boundary Search_optimized.R`).
-    Searching a row on its own could therefore drop a contour that a search over the whole test set
-    kept. C4 had no such rule at all.
-  - **Decision: the training data decide, in both searches** (B1 step 3; C4 step 10.2, with the hull
-    on), through one helper, `.encloses_data()` (S3). A row's result no longer depends on the rows
-    searched with it.
-  - **Effect.** On the loan harness's 4-feature model B1 keeps 18 contours instead of 12 and 346 of
-    the 4,429 test rows' counterfactuals move (the robustness of Step 7b falls from 6813.80 to
-    6790.20); the 9-feature model and Pima are unchanged. In C4 the rule drops the closed contour
-    (level 0.510, no training data inside) that held the harness target's nearest constrained boundary
-    point on pair (3,4): its counterfactual moves from √d²_M 0.5838 to 0.6934 (prediction 0.547 to
-    0.693). On Pima every run of both targets is unchanged, and 4 of the 79 test rows' run-1
-    counterfactuals move, 4.5% further at the median.
+  - A comment at the test in `bl_find_boundary()` records the stop.
+- **F2. Both searches keep a closed contour only if it encloses training data.**
+  - A contour that is still closed after the hull clip is kept only if at least one training row lies
+    inside or on it on that plane (B1 step 3; C4 step 10.2, with the hull on), through one helper,
+    `.encloses_data()` (S3). This is the thesis's empty-region rule (§3.10 step 4, p.93), judged on
+    the training data, so a row's result does not depend on the other rows searched with it.
+  - If B1 judged the rule on the searched rows (`data`/`tdp`) instead, a search of one row could drop
+    a contour that a search over the whole test set keeps. On the loan harness's 4-feature model B1
+    would keep 12 contours instead of 18, and 346 of the 4,429 test rows' counterfactuals would
+    differ (the robustness of Step 7b would be 6813.80 instead of 6790.20); the 9-feature model and
+    Pima would be unchanged.
+  - Without the rule in C4, the harness target's constrained counterfactual (Step 11) would lie on a
+    closed contour (level 0.510) with no training data inside, on pair (3,4): √d²_M 0.5838 instead
+    of 0.6934 (prediction 0.547 instead of 0.693).
+  - On Pima no run of either target depends on the rule. Without it, one of the 79 test rows' run-1
+    counterfactuals (row 16) would lie on a closed contour with no training data inside; the
+    counterfactual the rule gives lies 1.9% further.
 - **F3. B2 and B1 measure different gaps, by design.**
   - B2 uses $(\mathbf{z}_i-\mathbf{b}_i)\mathbf{V}^{-1}_r\mathbf{S}$, the move along the plane to the
     boundary. B1's $d_X$ and $d^2_M$ use $\mathbf{x}^{cf}_i-\mathbf{x}_i$, from the observed point.
@@ -1023,48 +1021,60 @@ compare the package before and after the changes.
     off-plane part to the mean, which has nothing to do with the boundary.
   - **Measured:** the off-plane part is 80% of the summed squared B1 gap on the loan 9-feature model,
     59% on its 4-feature model, 78% on Pima's 7-feature model and 63% on its 4-feature model
-    (within-class SD units). Switching B2 to B1's gap was tried and rejected: the ranking then measures
-    the reconstruction error (on the loan model `person_gender` went from weakest to strongest) and
-    Pima's three weakest variables changed.
-  - **Decision: no change.** B2 (importance and robustness) keeps the thesis's in-plane gap; B1's
-    distances are reported only (the Pima example uses $\sqrt{d^2_M}$ to choose its targets). The
-    roxygen of `plot.bl_boundary()` and `bl_robustness()` and the boundary note §2 say so.
-- **F4. C4's local grid was set by the training points only, its hull included the target, and its
-  scores were not clamped.**
-  - A target outside the training cloud (an external applicant, for example) could lie outside its
-    own grid and outside the plot window, while the hull reached out to it. A target outside the
-    cloud does not stop the search, which compares distances to the valid boundary points.
-  - Without a clamp, the colour index $\lfloor 100f\rfloor+1$ gave NA colours above 1, silently
-    dropped cells in $(-0.01,0)$ and stopped the search below $-0.01$, for a custom `predict_fn`.
-  - **Decision:** each plane's hull is built from the **training data alone** (C4 step 7), so the
-    valid region is set by the training data, as in B1; the local plot **widens its window** to show
-    a target or counterfactual outside it (`.local_plot_limits()`, display only); the local scores
-    are **clamped** to $[0,1]$ with one warning (C4 step 8). The grid range is unchanged.
-  - **Effect.** The harness's new applicant (credit score 420) now gets its counterfactual inside the
-    training hull: √d²_M 2.82 instead of 1.70, credit score 534.92 instead of 489.44
-    (`documentation/local-convex-hull.md` §6).
+    (within-class SD units).
+  - If B2 used B1's gap, the ranking would measure the reconstruction error: on the loan model
+    `person_gender` would rank strongest instead of weakest, and Pima's three weakest variables would
+    change.
+  - B2 (importance and robustness) therefore uses the thesis's in-plane gap, and B1's distances are
+    reported only (the Pima example uses $\sqrt{d^2_M}$ to choose its targets). The roxygen of
+    `plot.bl_boundary()` and `bl_robustness()` and the boundary note §2 say so.
+- **F4. C4 bounds each plane's valid region by the training data alone, clamps its scores, and its
+  plot widens to show the target.**
+  - **The hull.** Each plane's hull is built from the training data alone (C4 step 7), so the valid
+    region is set by the training data, as in B1. A target outside the training data (an external
+    applicant, for example) does not stop the search, which compares distances to the valid boundary
+    points, and its counterfactual lies inside the training data.
+  - **If the hull also included the target** (as Appendix A7 builds it), it would reach out to a
+    target outside the training data, and the counterfactual could lie outside the training data:
+    - the loan harness's new applicant (Step 16, credit score 420, below the training range): pair
+      (1,2) at √d²_M 1.70 with credit score 489.44, instead of 2.82 with 534.92
+      (`documentation/local-convex-hull.md` §6);
+    - the Pima example's patient B (Insulin 900, above the training range's 846;
+      `scripts/paper1-pima/03_local.R`, 4-feature GAM, run 1's filters): pair (2,3) at 0.77 with
+      Insulin 819.01, the point the search finds with the hull off, instead of pair (2,4) at 2.45
+      with Insulin 641.45;
+    - its patient A (17 pregnancies, above 15) would keep its counterfactual (pair (2,4), 3.20,
+      Pregnancies 9): the larger hull would not reach the nearer point (pair (1,4), 2.51,
+      Pregnancies 13), which lies outside the training data.
+    - On Pima no run of either target depends on it; 3 of the 79 test rows' run-1 counterfactuals
+      (rows 46, 57 and 63) would differ, and the ones the training-only hull gives lie 7.1% further
+      at the median.
+  - **The window.** The grid's range is set by the training points, so a target outside the training
+    data can lie outside the grid. The local plot widens its window to show a target or
+    counterfactual outside it (`.local_plot_limits()`, display only); without that, the target would
+    fall outside the plot.
+  - **The clamp.** The local scores are clamped to $[0,1]$ with one warning (C4 step 8). Without the
+    clamp, for a custom `predict_fn`, the colour index $\lfloor 100f\rfloor+1$ would give NA colours
+    above 1, drop cells in $(-0.01,0)$ and stop the search below $-0.01$.
 - **F5. S2's Gini depends on the row order when scores tie.**
   - `calc_gini()` sorts by score and does not average tied scores.
   - With scores floored to 3 decimals, ties are common, so the Gini can change with the row order.
-  - **Decision: accepted, no change.**
-- **F6. Unused or hard-coded values in Phase 1 display code.**
-  - `bl_build_grid()` computed `inside_data` and never used it. The PhD code
-    (`1.1 biplot_plane_optimized.R`) used it to drop the training points outside a peeled hull from
-    the plotted points; the package plots points through `bl_project_points(filter_to_polygon =)`.
-    **Decision: removed.**
-  - `plot_biplotEZ()`'s two-colour grid split at a hard-coded 0.5. **Decision: it splits at the
-    model's `cutoff`** (display only; the same at 0.5).
+  - The Gini is reported only (stored in `bl_model` and `bl_result` and printed); no algorithm uses
+    it.
+- **F6. Phase 1 display code.**
+  - `plot_biplotEZ()`'s two-colour grid splits at the model's `cutoff` (display only; 0.5 by
+    default).
+  - The plotted points are filtered by `bl_project_points(filter_to_polygon =)`; `bl_build_grid()`
+    does not filter them.
 - **F7. C7's exact method re-scores coalitions.**
   - Each coalition $T$ is scored again for every $S\cup\{j\}=T$, with no caching.
   - This costs time only (for $p=7$, about 575 scorings for 128 coalitions), and the values are
     unaffected.
-  - **Decision: noted, no change.**
-- **F8. Documentation.**
-  - Two walkthroughs gave the back-projection without the $\cdot\mathbf{s}$ step, and two notes cited
-    line numbers that had moved.
-  - **Decision and fix:** the walkthroughs now give the general form, with $\mathbf{S}=\mathbf{I}$
-    under CVA; the notes cite functions and code blocks instead of line numbers; CLAUDE.md §5 asks
-    notes and walkthroughs to cite functions, not line numbers.
+- **F8. Documentation conventions.**
+  - The walkthroughs give the back-projection in its general form, with the $\cdot\mathbf{s}$ step
+    ($\mathbf{S}=\mathbf{I}$ under CVA).
+  - Notes and walkthroughs cite functions and named code blocks, not line numbers, which move with
+    every edit (CLAUDE.md §5).
 
 ---
 
@@ -1121,7 +1131,7 @@ its nearest row of $\mathbf{B}$ in squared 2D Euclidean distance.
 - Within a block it takes `max.col(-d2, ties.method = "first")`, the exact minimum, with the first
   vertex winning a tie.
 - Across blocks it updates only on a strictly smaller distance.
-- It is deterministic and uses no RNG (since 2026-10-30; `documentation/nearest-vertex-tie-break.md`).
+- It is deterministic and uses no RNG (`documentation/nearest-vertex-tie-break.md`).
 - Used by B1, B3 and C4.
 
 ### S5. Training ranges and the range filter

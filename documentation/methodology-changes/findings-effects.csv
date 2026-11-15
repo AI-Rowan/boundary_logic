@@ -2,11 +2,11 @@
 "meta",NA,NA,NA,"before_sha","ef014ca","meta",NA
 "meta",NA,NA,NA,"package_version","0.2.0","meta",NA
 "meta",NA,NA,NA,"source","load_all","meta",NA
-"meta",NA,NA,NA,"git_sha","17d3c18535e05fc9b66abb6ab8379d4d471fadf1","meta",NA
+"meta",NA,NA,NA,"git_sha","e41f22f288ac4996217c65862550be1092946603","meta",NA
 "meta",NA,NA,NA,"git_dirty","FALSE","meta",NA
 "meta",NA,NA,NA,"r_version","R version 4.6.0 (2026-04-24 ucrt)","meta",NA
 "meta",NA,NA,NA,"mgcv_version","1.9.4","meta",NA
-"meta",NA,NA,NA,"time","2026-11-07 06:56:19","meta",NA
+"meta",NA,NA,NA,"time","2026-11-14 22:50:24","meta",NA
 "M12","7f",NA,"train","contours_used_before","2","two versions",NA
 "M12","7f",NA,"train","contours_used_after","2","two versions",NA
 "M12","7f",NA,"train","rows","313","two versions",NA
@@ -125,3 +125,63 @@
 "M13","4f",NA,NA,"sweep_moved_rows","16, 46, 57, 63","two versions",NA
 "M13","4f",NA,NA,"sweep_moved_median_ratio","1.04492508760279","two versions","distance after / before, over the moved rows"
 "M13","4f",NA,NA,"sweep_moved_max_ratio","1.24140068832179","two versions",NA
+"M13ext","4f","A","default","same_result","TRUE","two versions",NA
+"M13ext","4f","A","default","solution_found_before","TRUE","two versions",NA
+"M13ext","4f","A","default","solution_found_after","TRUE","two versions",NA
+"M13ext","4f","A","default","best_pair_before","(2,4)","two versions",NA
+"M13ext","4f","A","default","best_pair_after","(2,4)","two versions",NA
+"M13ext","4f","A","default","sqrt_d2M_before","3.19731143739758","two versions",NA
+"M13ext","4f","A","default","sqrt_d2M_after","3.19731143739758","two versions",NA
+"M13ext","4f","A","default","Pregnancies_before","9","two versions",NA
+"M13ext","4f","A","default","Pregnancies_after","9","two versions",NA
+"M13ext","4f","A","default","Glucose_before","139.278479742818","two versions",NA
+"M13ext","4f","A","default","Glucose_after","139.278479742818","two versions",NA
+"M13ext","4f","A","default","Insulin_before","228.357091184274","two versions",NA
+"M13ext","4f","A","default","Insulin_after","228.357091184274","two versions",NA
+"M13ext","4f","A","default","Age_before","38.8934814414278","two versions",NA
+"M13ext","4f","A","default","Age_after","38.8934814414278","two versions",NA
+"M13ext","4f","A","no_hull","same_result","TRUE","two versions",NA
+"M13ext","4f","A","no_hull","solution_found_before","TRUE","two versions",NA
+"M13ext","4f","A","no_hull","solution_found_after","TRUE","two versions",NA
+"M13ext","4f","A","no_hull","best_pair_before","(1,4)","two versions",NA
+"M13ext","4f","A","no_hull","best_pair_after","(1,4)","two versions",NA
+"M13ext","4f","A","no_hull","sqrt_d2M_before","2.51446249537045","two versions",NA
+"M13ext","4f","A","no_hull","sqrt_d2M_after","2.51446249537045","two versions",NA
+"M13ext","4f","A","no_hull","Pregnancies_before","13","two versions",NA
+"M13ext","4f","A","no_hull","Pregnancies_after","13","two versions",NA
+"M13ext","4f","A","no_hull","Glucose_before","114.600356169609","two versions",NA
+"M13ext","4f","A","no_hull","Glucose_after","114.600356169609","two versions",NA
+"M13ext","4f","A","no_hull","Insulin_before","243.428776807248","two versions",NA
+"M13ext","4f","A","no_hull","Insulin_after","243.428776807248","two versions",NA
+"M13ext","4f","A","no_hull","Age_before","37.8969309396453","two versions",NA
+"M13ext","4f","A","no_hull","Age_after","37.8969309396453","two versions",NA
+"M13ext","4f","B","default","same_result","FALSE","two versions",NA
+"M13ext","4f","B","default","solution_found_before","TRUE","two versions",NA
+"M13ext","4f","B","default","solution_found_after","TRUE","two versions",NA
+"M13ext","4f","B","default","best_pair_before","(2,3)","two versions",NA
+"M13ext","4f","B","default","best_pair_after","(2,4)","two versions",NA
+"M13ext","4f","B","default","sqrt_d2M_before","0.765818789162429","two versions",NA
+"M13ext","4f","B","default","sqrt_d2M_after","2.45346148363332","two versions",NA
+"M13ext","4f","B","default","Pregnancies_before","4","two versions",NA
+"M13ext","4f","B","default","Pregnancies_after","4","two versions",NA
+"M13ext","4f","B","default","Glucose_before","170.451784319727","two versions",NA
+"M13ext","4f","B","default","Glucose_after","163.768003964129","two versions",NA
+"M13ext","4f","B","default","Insulin_before","819.009008310957","two versions",NA
+"M13ext","4f","B","default","Insulin_after","641.452664994147","two versions",NA
+"M13ext","4f","B","default","Age_before","24.6448871431789","two versions",NA
+"M13ext","4f","B","default","Age_after","27.5253437899745","two versions",NA
+"M13ext","4f","B","no_hull","same_result","TRUE","two versions",NA
+"M13ext","4f","B","no_hull","solution_found_before","TRUE","two versions",NA
+"M13ext","4f","B","no_hull","solution_found_after","TRUE","two versions",NA
+"M13ext","4f","B","no_hull","best_pair_before","(2,3)","two versions",NA
+"M13ext","4f","B","no_hull","best_pair_after","(2,3)","two versions",NA
+"M13ext","4f","B","no_hull","sqrt_d2M_before","0.765818789162429","two versions",NA
+"M13ext","4f","B","no_hull","sqrt_d2M_after","0.765818789162429","two versions",NA
+"M13ext","4f","B","no_hull","Pregnancies_before","4","two versions",NA
+"M13ext","4f","B","no_hull","Pregnancies_after","4","two versions",NA
+"M13ext","4f","B","no_hull","Glucose_before","170.451784319727","two versions",NA
+"M13ext","4f","B","no_hull","Glucose_after","170.451784319727","two versions",NA
+"M13ext","4f","B","no_hull","Insulin_before","819.009008310957","two versions",NA
+"M13ext","4f","B","no_hull","Insulin_after","819.009008310957","two versions",NA
+"M13ext","4f","B","no_hull","Age_before","24.6448871431789","two versions",NA
+"M13ext","4f","B","no_hull","Age_after","24.6448871431789","two versions",NA

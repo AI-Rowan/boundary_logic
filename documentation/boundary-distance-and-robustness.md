@@ -77,7 +77,7 @@ $$
     code path.
   - **The divisor makes $\mathbf{W}$ a covariance.** $\sqrt{d_M^2}$ then counts within-class standard deviations,
     and $\sqrt{W_{jj}}$ is the within-class SD that §3 divides by. The methodology-changes note
-    ([`methodology-changes/methodology-changes.qmd`](methodology-changes/methodology-changes.qmd), "The metric W as
+    ([`methodology-changes/methodology-changes.md`](methodology-changes/methodology-changes.md), "The metric W as
     a covariance matrix") records this reason and its effect.
   - **Under CVA the two agree:** `bp$Wmat / (n - g)` equals `metric` to rounding (checked on iris with four
     groups, biplotEZ 2.2, 2026-11-06).
@@ -427,7 +427,7 @@ All paths are relative to this file.
 
 - **Shapley attribution of the full Mahalanobis distance in Phase 2.**
   - **What it gives:** the theoretically correct per-feature decomposition.
-  - **Why it waits:** the cost is $O(n\cdot 2^p)$ (CLAUDE.md §9).
+  - **Why it waits:** the cost is $O(n\cdot 2^p)$ (`future-developments.md` §1.6).
 - **A Cholesky-whitened diagnostic plot.** It would show the whitened decomposition ($u_k^2$) across the training
   set, without claiming per-variable attribution. That is useful when the check's percentage is large; it has
   not been requested.

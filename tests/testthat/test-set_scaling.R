@@ -122,6 +122,35 @@ test_that("raw-unit relabel keeps geometry and shifts labels to raw scale", {
   }
 })
 
+test_that("raw-unit labels are exact at matching tick positions (PCA, standardise = FALSE)", {
+  d  <- make_std_data()
+  bl <- bl_wrap_data(d$std, d$std, var_names = d$feats)
+  bl <- bl_set_scaling(bl, center = d$center, scale = d$scale)
+  proj   <- bl_build_result(bl, method = "PCA", standardise = FALSE)
+  bp     <- proj$biplot_obj
+  bp_raw <- boundarylogic:::.bl_rescale_biplot_axes(bp, proj$scaling, d$feats)
+  expect_equal(bp_raw$Z, bp$Z)
+
+  ac_std <- biplotEZ::axes_coordinates(bp)
+  ac_raw <- biplotEZ::axes_coordinates(bp_raw)
+  for (j in seq_along(d$feats)) {
+    s <- ac_std[[j]]
+    r <- ac_raw[[j]]
+    expect_gte(nrow(s), 2L)
+    expect_gte(nrow(r), 2L)
+    # On the standardised axis the tick coordinates are linear in the label.
+    fx <- stats::lm(s[, 1] ~ s[, 3])
+    fy <- stats::lm(s[, 2] ~ s[, 3])
+    # Each raw tick must sit where the standardised axis places
+    # (raw label - center) / scale, i.e. raw label = std * scale + center.
+    std_val <- (r[, 3] - d$center[d$feats][j]) / d$scale[d$feats][j]
+    expect_equal(unname(r[, 1]), unname(coef(fx)[1] + coef(fx)[2] * std_val),
+                 tolerance = 1e-8)
+    expect_equal(unname(r[, 2]), unname(coef(fy)[1] + coef(fy)[2] * std_val),
+                 tolerance = 1e-8)
+  }
+})
+
 
 # ---- Raw-unit feature-value display (.scale_to_raw + Shapley/sparse/target) ----
 

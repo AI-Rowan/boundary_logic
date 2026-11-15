@@ -12,7 +12,7 @@ Date last edited: 2026-11-05
   problems and further work;
 - `documentation/fixed-constraint-restore.md`, §8: the follow-up searches for `"fixed"` and
   `"integer"`;
-- `documentation/methodology-changes/methodology-changes.qmd`: §5 (possible future changes) and
+- `documentation/methodology-changes/methodology-changes.md`: §5 (possible future changes) and
   §6 (interpretation points);
 - `CLAUDE.md`, §9: deferred work;
 - `.claude/reference/future-improvements-hull-plan.md`: the plan behind this form.
@@ -33,7 +33,7 @@ On 2026-11-04 you decided that none of the known issues would be implemented for
 lets you revisit that item by item.
 
 Once every item is resolved and the fixes are implemented, the methodology note
-(`methodology-changes.qmd`) becomes the single record of the design decisions from the thesis to the
+(`methodology-changes.md`) becomes the single record of the design decisions from the thesis to the
 package. Its section on future work is then rebuilt from the items you mark "Future improvement",
 with the paper sentences you agree here.
 
