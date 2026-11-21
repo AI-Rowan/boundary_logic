@@ -48,14 +48,14 @@ within the hull.
 
 Each observation is first projected to Z-space. Observations that fall
 \strong{outside} the training-data convex hull polygon are excluded from the
-surrogate classification — they receive \code{surrogate_pred = NA} — because
+surrogate classification -- they receive \code{surrogate_pred = NA} -- because
 the surrogate regions are defined only within the hull. A message reports
 how many observations were excluded. Accuracy is computed on in-hull
 observations only.
 
 In-hull observations are assigned to the nearest contour segment in
 Z-space. The contour's probability level determines the surrogate class:
-level < \code{cutoff} → class 0; level >= \code{cutoff} → class 1.
+level < \code{cutoff} -> class 0; level >= \code{cutoff} -> class 1.
 
 Accuracy is reported against (in-hull observations only):
 \itemize{

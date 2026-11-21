@@ -1,6 +1,6 @@
 ############################################################
-# plot.bl_boundary() — distance-to-boundary jitter / boxplot
-# bl_robustness()    — scalar total boundary distance
+# plot.bl_boundary() -- distance-to-boundary jitter / boxplot
+# bl_robustness()    -- scalar total boundary distance
 #
 # Refactored from: scripts/4.1 Global interpretations - Robust and VIP.r
 ############################################################
@@ -19,15 +19,15 @@ utils::globalVariables(c("values", "Variable"))
 #' the bottom).
 #'
 #' Two chart types are available via the `type` argument:
-#' * `"jitter"` (default) — one point per observation per variable, jittered
+#' * `"jitter"` (default) -- one point per observation per variable, jittered
 #'   vertically for legibility.
-#' * `"boxplot"` — box-and-whisker summaries per confusion group and variable.
+#' * `"boxplot"` -- box-and-whisker summaries per confusion group and variable.
 #'
 #' @section Colour scheme:
 #' Colours match the biplot convention from `bl_project_points()`:
-#' * When true labels are present in the source data: four confusion colours —
+#' * When true labels are present in the source data: four confusion colours --
 #'   TP (red), TN (blue), FP (purple), FN (orange).
-#' * When no true labels are available: two colours — predicted class 1 (red),
+#' * When no true labels are available: two colours -- predicted class 1 (red),
 #'   predicted class 0 (blue).
 #'
 #' @section Distance computation:
@@ -71,7 +71,7 @@ utils::globalVariables(c("values", "Variable"))
 #' variable's direction. The vertical line at x = 0 marks the boundary.
 #'
 #' The y-axis label shows `"VarName : <total>"` where `<total>` is the sum
-#' of absolute standardised distances across all observations — a
+#' of absolute standardised distances across all observations -- a
 #' variable-level importance proxy. Use `bl_robustness()` for the scalar
 #' total across all variables.
 #'
@@ -261,7 +261,7 @@ plot.bl_boundary <- function(x, type = c("jitter", "boxplot"),
     if (abs(pct) >= 25) {
       cat("  Note: |difference| >= 25% -- the per-feature plot leaves out a large\n")
       cat("        part of the full Mahalanobis distance (the correlations in W).\n")
-      cat("        See implementation_summary.txt Section 4.6.1 for alternatives.\n")
+      cat("        See '2 implementation_summary.txt' Section 4.6.1 for alternatives.\n")
     }
   }
 

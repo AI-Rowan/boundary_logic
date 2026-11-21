@@ -1,5 +1,5 @@
 ############################################################
-# Internal model fitting dispatcher — tidymodels edition
+# Internal model fitting dispatcher -- tidymodels edition
 # Refactored from: scripts/2.2 Model_use fitting v2.R
 #
 # Supported types: GLM, SVM, NNET, RForest (all parsnip/workflows).

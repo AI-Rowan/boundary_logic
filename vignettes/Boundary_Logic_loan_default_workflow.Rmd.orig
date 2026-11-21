@@ -312,14 +312,14 @@ print(bl_mod)
 
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
-| `model_type` | (required) | `"custom"` | `"custom"` scores with `predict_fn`; the built-in types (`"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`, `"RForest"`, `"XGB"`) use their own prediction call (Step 5b shows `"XGB"`) |
+| `model_type` | (required) | `"custom"` | `"custom"` scores with `predict_fn`; the built-in types (`"GLM"`, `"GAM"`, `"GBM"`, `"LDA"`, `"SVM"`, `"NNET"`, `"RForest"`, `"XGB"`) use their own prediction call (the refit in Steps 4b-6b uses `"XGB"`) |
 | `var_names` | (required) | the nine features | The features the model was trained on, in order |
 | `predict_fn` | `NULL` | the function above | `function(model, new_data)` returning probabilities of class 1; required for `"custom"` |
 | `train_data` | `NULL` | the training split | Used only to report the training accuracy and Gini |
 | `cutoff` | `0.5` | default | The decision threshold. Keep 0.5: the method assumes it |
 
 For a quick baseline, `bl_fit_model()` fits a GLM, SVM, neural network
-or random forest directly.
+or decision tree (`"RForest"`, an `rpart` tree) directly.
 
 **Step 6** builds the biplot of the model. `bl_build_result()` projects
 the training data, lays an `m` × `m` grid over the plane, maps every
@@ -770,7 +770,7 @@ print(flt)
 |---|---|
 | `"increase"` | The counterfactual value is at least the observed value |
 | `"decrease"` | The counterfactual value is at most the observed value |
-| `"fixed"` | The feature keeps its observed value. The search allows it to move by up to 0.5 model units (a point on the two-dimensional boundary rarely holds a feature exactly), then restores the observed value and re-checks the prediction. If the restored point no longer crosses the boundary, there is no counterfactual |
+| `"fixed"` | The feature keeps its observed value. The search allows it to move by up to 0.5 model units (a point on the two-dimensional boundary rarely holds a feature exactly), then restores the observed value and re-checks the prediction. If the restored point no longer crosses the boundary, or leaves a feature's training range (with `train_ranges = TRUE`), there is no counterfactual |
 | `c(min, max)` | The counterfactual value lies in this range, **in model units** (z-scores for `bl_results_v2`; convert with `bl_apply_scaling()`) |
 | `"integer"` | A whole number in the original units (a count or a score), alone or combined: `c("increase", "integer")`, `list(c(min, max), "integer")`. The counterfactual is rounded after the search and re-checked |
 | `hull = FALSE`, `train_ranges = FALSE` | Drop the plausibility or the feasibility rule |
@@ -975,8 +975,8 @@ plot(bl_sparse_free,
      ticks_n           = c(4, 10, 10, 10))
 ```
 
-Without constraints the counterfactual also raises the loan amount and
-lowers the credit score, changes the constraints rule out, and it lies
+Without actionability constraints the counterfactual also raises the loan
+amount and lowers the credit score, changes the constraints rule out, and it lies
 nearer the target (`r f2(sqrt(bl_local_free$dist_mahalanobis))` against
 `r f2(sqrt(bl_local$dist_mahalanobis))`). Its sparse counterfactual
 changes the interest rate and the loan-to-income ratio.

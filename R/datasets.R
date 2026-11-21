@@ -7,8 +7,10 @@
 #'
 #' A dataset of 45,000 personal loan applications used to demonstrate
 #' the \pkg{boundarylogic} workflow on a credit-risk classification problem.
+#' It is shipped as a CSV file in \code{inst/extdata}, not as a lazy-loaded
+#' data object; read it with \code{read.csv()} as shown under Details.
 #'
-#' @format A data frame with 45,000 rows and 14 variables:
+#' @format A CSV file with 45,000 rows and 14 variables:
 #' \describe{
 #'   \item{person_age}{Age of the applicant (numeric).}
 #'   \item{person_gender}{Gender of the applicant: \code{"female"} or
@@ -16,16 +18,16 @@
 #'     1 = male.}
 #'   \item{person_education}{Highest education level attained: \code{"High School"},
 #'     \code{"Associate"}, \code{"Bachelor"}, \code{"Master"}, or
-#'     \code{"Doctorate"}. Integer-encoded as an ordinal 0–4.}
+#'     \code{"Doctorate"}. Integer-encoded as an ordinal 0-4.}
 #'   \item{person_income}{Annual income in USD (numeric).}
 #'   \item{person_emp_exp}{Years of employment experience (numeric).}
 #'   \item{person_home_ownership}{Home ownership status: \code{"MORTGAGE"},
 #'     \code{"OTHER"}, \code{"OWN"}, or \code{"RENT"}. Integer-encoded as
-#'     0–3 in the example script.}
+#'     0-3 in the example script.}
 #'   \item{loan_amnt}{Loan amount applied for in USD (numeric).}
 #'   \item{loan_intent}{Stated purpose of the loan: \code{"DEBTCONSOLIDATION"},
 #'     \code{"EDUCATION"}, \code{"HOMEIMPROVEMENT"}, \code{"MEDICAL"},
-#'     \code{"PERSONAL"}, or \code{"VENTURE"}. Integer-encoded as 0–5.}
+#'     \code{"PERSONAL"}, or \code{"VENTURE"}. Integer-encoded as 0-5.}
 #'   \item{loan_int_rate}{Interest rate of the loan as a percentage (numeric).}
 #'   \item{loan_percent_income}{Loan amount as a fraction of annual income
 #'     (numeric).}

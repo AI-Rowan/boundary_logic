@@ -83,7 +83,7 @@ also be <code>bl_result$train_data</code> for a global training-data search.</p>
 
 <dt><code>B_pred</code></dt>
 <dd><p>Numeric vector; model probability at counterfactual
-(should be close to <code>cutoff</code> — validates back-projection quality).</p></dd>
+(should be close to <code>cutoff</code> – validates back-projection quality).</p></dd>
 
 <dt><code>dist_z</code></dt>
 <dd><p>Numeric vector; Euclidean distance obs to boundary
@@ -146,7 +146,7 @@ back-projected model prediction is consistent with the contour's
 probability level. The training variable ranges (<code>bl_result$train_ranges</code>)
 are checked <strong>after</strong> the nearest point is selected, not before. Applying
 the range filter as a pre-filter would remove geometrically correct
-candidates — particularly for PCA biplots where back-projecting a 2D
+candidates – particularly for PCA biplots where back-projecting a 2D
 Z-space point to p-dimensional X-space sets all non-plotted components to
 their mean (rank-2 reconstruction), which can push individual feature
 values outside observed ranges even for Z-space points well inside the

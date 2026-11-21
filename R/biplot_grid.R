@@ -233,10 +233,8 @@ bl_build_grid <- function(train_data,
     polygon <- .build_hull_polygon(Z_train, min_val, max_val, outlie = outlie)
   }
 
-  # Determine inside/outside for the grid points. (The PhD code also tested
-  # the training points here, to drop those outside a peeled hull from the
-  # plot; the package plots points through bl_project_points(), so that test
-  # was removed on 2026-11-06.)
+  # Determine inside/outside for the grid points. (The training points are
+  # not tested here: the package plots points through bl_project_points().)
   G_df <- as.data.frame(Zgrid)
   sp::coordinates(G_df) <- ~x + y
   inside_grid <- !is.na(sp::over(G_df, polygon))

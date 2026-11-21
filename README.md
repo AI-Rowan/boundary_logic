@@ -29,8 +29,14 @@ the predicted class.
 
 ## Installation
 
+The current release is version 0.2.0 (tag `v0.2.0`), the version the first
+journal paper uses. The changes since 0.1.0 are listed in `NEWS.md`.
+
 ```r
-# Install from GitHub (build_vignettes = TRUE makes vignette() available)
+# Install release 0.2.0 from GitHub (build_vignettes = TRUE makes vignette() available)
+devtools::install_github("AI-Rowan/boundary_logic@v0.2.0", build_vignettes = TRUE)
+
+# Or the latest code on the main branch
 devtools::install_github("AI-Rowan/boundary_logic", build_vignettes = TRUE)
 ```
 
@@ -281,6 +287,7 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 | `bl_wrap_data()` | Register pre-split, pre-coded data (no filtering) | `bl_data` |
 | `bl_filter_outliers()` | Convex hull outlier filter for `bl_wrap_data()` data | `bl_filter_result` |
 | `bl_set_scaling()` | Record a pre-model standardisation so plots and prints show raw units (display only) | same class as input |
+| `bl_apply_scaling()` | Convert new data given in raw units (e.g. a new applicant) to the model's units, with the recorded scaling | `data.frame` |
 | `bl_fit_model()` | Fit a supported classifier | `bl_model` |
 | `bl_wrap_model()` | Register an externally fitted model | `bl_model` |
 | `bl_build_result()` | Projection + grid + assembly in one call (preferred) | `bl_result` |
@@ -288,13 +295,12 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 | `bl_build_grid()` | Build prediction grid, extract boundary contours | `bl_grid` |
 | `bl_assemble()` | Collect all Phase 1 artifacts | `bl_result` |
 | `plot_biplotEZ()` | Plot biplot with grid, points, and boundary contours | (plot) |
+| `bl_project_points()` | Project and score any data frame, to overlay its points on the biplot (`plot_biplotEZ(points = )`) | `bl_points` |
 
 ### Phase 2 — Global interpretation
 
 | Function | Purpose | Returns |
 |---|---|---|
-| `bl_project_points()` | Project any data frame into Z-space | `bl_points` |
-| `bl_predict()` | Score all observations; tidy prediction data frame | `data.frame` |
 | `bl_find_boundary()` | Nearest boundary point per observation | `bl_boundary` |
 | `bl_robustness()` | Per-variable distance totals and robustness scalar | list (`sum_of_distance`, `robustness`, `distance`) |
 | `bl_surrogate()` | Region-based spatial surrogate model | `bl_surrogate` |
@@ -304,6 +310,7 @@ An `xgboost::xgboost()` model must be fitted with a factor 0/1 response, e.g.
 
 | Function | Purpose | Returns |
 |---|---|---|
+| `bl_predict()` | Score every row (by default the test data) into a tidy data frame, to choose a target | `data.frame` |
 | `bl_select_target()` | Wrap one observation as a target | `bl_target` |
 | `set_filters()` | Encode actionability constraints and the hull (plausibility) and training-range (feasibility) switches | `bl_filters` |
 | `bl_find_local_cf()` | Nearest boundary via biplot rotation | `bl_local_result` |
@@ -386,10 +393,11 @@ boundary_logic/
 
 The implementation summary is `2 implementation_summary.txt` in the repository root.
 
-Branches:
+Branches and tags:
 
-| Branch | Purpose |
+| Branch or tag | Purpose |
 |---|---|
+| tag `v0.2.0` | Release 0.2.0, the version the first journal paper pins |
 | `main` | Current stable code — use this for general access |
 | `method_developments` | Active development branch |
 | `paper_nr1_changes` | Package fixes for the first journal paper (in progress) |

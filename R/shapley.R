@@ -394,7 +394,7 @@ print.bl_shapley <- function(x, ...) {
 }
 
 
-#' Create a sparse counterfactual by zeroing contradicting variables
+#' Create a sparse counterfactual by changing supporting variables one at a time
 #'
 #' Builds a sparse version of the counterfactual that changes as few variables
 #' as needed. Starting from the observed point, it changes the variables whose

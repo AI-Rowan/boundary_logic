@@ -121,13 +121,13 @@ set to <code>cutoff</code> before extraction, so all contour lines are fully enc
 within the hull.</p>
 <p>Each observation is first projected to Z-space. Observations that fall
 <strong>outside</strong> the training-data convex hull polygon are excluded from the
-surrogate classification — they receive <code>surrogate_pred = NA</code> — because
+surrogate classification – they receive <code>surrogate_pred = NA</code> – because
 the surrogate regions are defined only within the hull. A message reports
 how many observations were excluded. Accuracy is computed on in-hull
 observations only.</p>
 <p>In-hull observations are assigned to the nearest contour segment in
 Z-space. The contour's probability level determines the surrogate class:
-level &lt; <code>cutoff</code> → class 0; level &gt;= <code>cutoff</code> → class 1.</p>
+level &lt; <code>cutoff</code> -&gt; class 0; level &gt;= <code>cutoff</code> -&gt; class 1.</p>
 <p>Accuracy is reported against (in-hull observations only):</p><ul><li><p>The fitted model's predictions (<code>accuracy_vs_model</code>)</p></li>
 <li><p>True class labels when present in <code>data</code> (<code>accuracy_vs_labels</code>)</p></li>
 </ul></div>

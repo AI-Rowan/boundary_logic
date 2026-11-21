@@ -2,7 +2,7 @@
 % Please edit documentation in R/shapley.R
 \name{bl_find_sparse_cf}
 \alias{bl_find_sparse_cf}
-\title{Create a sparse counterfactual by zeroing contradicting variables}
+\title{Create a sparse counterfactual by changing supporting variables one at a time}
 \usage{
 bl_find_sparse_cf(bl_shapley_result, round_to = NULL)
 }

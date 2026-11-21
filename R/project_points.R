@@ -4,7 +4,7 @@
 
 #' Project observations into the biplot Z-space
 #'
-#' Projects any data frame — training, test, or new observations — into the
+#' Projects any data frame -- training, test, or new observations -- into the
 #' 2D biplot plane using the projection matrix V stored in a `"bl_result"`
 #' object. Also scores each observation through the fitted model and assigns
 #' point colours:
@@ -55,10 +55,10 @@
 #' # Project training data
 #' train_pts <- bl_project_points(result$train_data, result)
 #'
-#' # Project test data (class column present — confusion colours)
+#' # Project test data (class column present -- confusion colours)
 #' test_pts  <- bl_project_points(result$test_data, result)
 #'
-#' # Project new observations (no class column — red/blue by prediction)
+#' # Project new observations (no class column -- red/blue by prediction)
 #' new_obs   <- result$test_data[1:5, result$var_names]
 #' new_pts   <- bl_project_points(new_obs, result)
 #'
@@ -183,12 +183,12 @@ bl_project_points <- function(data, bl_result,
 #'
 #' The returned data frame contains:
 #' \itemize{
-#'   \item \code{row} — row index (1-based).
-#'   \item \code{pred_prob} — model predicted probability (rounded to 3 d.p.).
-#'   \item \code{pred_class} — predicted class (0 or 1).
-#'   \item \code{true_class} — true class if a \code{"class"} column is present
+#'   \item \code{row} -- row index (1-based).
+#'   \item \code{pred_prob} -- model predicted probability (rounded to 3 d.p.).
+#'   \item \code{pred_class} -- predicted class (0 or 1).
+#'   \item \code{true_class} -- true class if a \code{"class"} column is present
 #'     in \code{data}; otherwise omitted.
-#'   \item \code{confusion} — \code{"TP"}, \code{"TN"}, \code{"FP"}, or
+#'   \item \code{confusion} -- \code{"TP"}, \code{"TN"}, \code{"FP"}, or
 #'     \code{"FN"} if true class is known; otherwise omitted.
 #'   \item One column per feature variable from \code{bl_result$var_names}.
 #' }

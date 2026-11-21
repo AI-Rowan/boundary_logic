@@ -8,19 +8,20 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ## Next session: start here
 
-**Commit the session-13 work first, if the user says so** (item 15), then **update the Paper 1 plan**,
-then write its algorithm boxes (item 2). Start on branch `paper_nr1_changes` (CLAUDE.md §10). The plan
-to update is
+**Commit the session-14 work first, if the user says so** (item 15), then **update the Paper 1 plan**
+(item 1), then write its algorithm boxes (item 2). Start on branch `paper_nr1_changes` (CLAUDE.md
+§10). The plan to update is
 `../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/.claude/plans/paper-1-plan.md`
 (last edited 2026-10-29). Plan the update first; what it must take in is under item 1. The hand-over
 for the paper work is the Claude Doc
 [boundarylogic v0.2.0: hand-over for Paper 1](https://claude.ai/artifact/Rb8YYhaNf43Xdj2dyZvyHz).
+**Open decision for the user** (item 16): the Phase 2 full Shapley decomposition.
 
 ---
 
-## Outstanding items (reviewed 2026-11-15)
+## Outstanding items (reviewed 2026-11-16)
 
-Items 3–13 are closed (below, one line each). Nothing open is a blocker.
+Items 3–14 are closed (below, one line each). Nothing open is a blocker.
 
 ### Paper 1
 
@@ -30,24 +31,34 @@ Items 3–13 are closed (below, one line each). Nothing open is a blocker.
    - **the method:** the convex hull of the training data on each rotated plane, with the empty-region
      rule (B10; `documentation/local-convex-hull.md`); the switches in `set_filters()` (the
      unconstrained counterfactual is one call); the variable importance measures the in-plane gap,
-     while the global distances are reported only (`algorithms.md` F3);
+     while the global distances are reported only (`algorithms.md` F3); a target inside every
+     training range can lie outside the hull on a plane (`local-convex-hull.md` §3);
+   - **the Pima example (changed 2026-11-15):** three targets, TP row 23, TN row 25 and **FP row 26**
+     (the misclassified patient; fixed restores that succeed, a "No effect" Shapley value, a sparse
+     counterfactual of two features), each its group's median row by a rule that does not rest on
+     rounding; **run 8** (*Glucose* in 70 to 140, the range constraint; it binds for the TP target);
+     the made-up **patients C** (empty-region rule) **and D** (training ranges), beside A and B. Decide
+     which of these go in the paper: Table 1's layout (three targets, runs 1, 3–8), the FP figures
+     (`fig-fp-a` to `-d`), the rule-patient figures (`fig-rule-*`), `fig-ext`;
    - **figures and Table 1:** figure 6 is the dot chart only (no 6(b)); figure 7(a) is the TP target's
-     run 4 searched without the hull; figures 5(b), 7(a), 7(b), 7(c), 9(a), 9(b) changed; Table 1 has
-     runs 1, 3, 4, 5, 6 and 7; whether the external-patient figure (`fig-ext`) goes in the paper;
-   - **the TP narrative:** plausibility against actionability (the issue 11 sentence chosen in
-     `future-improvements-review.md`), replacing the "older patient" story;
+     run 4 searched without the hull; figures 5(b), 7(a), 7(b), 7(c), 9(a), 9(b) changed;
+   - **the TP narrative:** plausibility against actionability (the issue 11 sentence chosen in the
+     reply form, now the appendix of `documentation/future-improvements-review.md`): runs 2 and 4,
+     not run 3;
    - **§5 (local interpretation):** the hull as part of the method, and the A2, B3 and B7 sentences;
-   - **§8 (properties and limitations):** the A1 result (upper-bound sentence, `05_full-space-gap.R`)
-     and the B2 platform sentence;
+   - **§8 (properties and limitations):** the A1 result (upper-bound sentence, `05_full-space-gap.R`;
+     the FP target's ratio is 1.861) and the B2 platform sentence;
    - **§9 (further work):** the four themed paragraphs built from the agreed sentences (G1 in the
-     form), drawing on `documentation/future-developments.md`;
-   - **the Pima paper sentences** for issues 5, 9, 11, 12 and 13 (`scripts/paper1-pima/issues.md`);
+     form), drawing on `documentation/future-improvements-review.md` Part 1;
+   - **the Pima paper sentences** for issues 5, 9, 11, 12 and 13 (`scripts/paper1-pima/issues.md`;
+     issues 15–17 record the new targets and points);
    - **the final thesis's page numbers** (CLAUDE.md §5 anchors);
    - **tasks T3** (paper repo infrastructure, TinyTeX) **and T4** (port `scripts/paper1-pima/` to the
      paper repo, switch `00_setup.R`'s `devtools::load_all("../..")` to `library(boundarylogic)`, check
      `numbers.rds` matches); figures 1–2 (schematics, made in the paper repo).
    Source: the archived Pima and task plans (`.claude/reference/paper1-pima-example-plan.md`,
-   `paper1-task-spec.md`), `future-improvements-review.md`, the hand-over Claude Doc.
+   `paper1-task-spec.md`), `.claude/reference/pima-targets-docs-consistency-plan.md`, the hand-over
+   Claude Doc.
 2. **The paper's algorithm boxes** (stage 2 of `documentation/algorithms.md`), straight after item 1:
    four LaTeX boxes for CVA in the paper's notation, with a traceability table. Plan:
    `.claude/plans/before-updating-the-paper-wiggly-wave.md`. When it starts, refresh its stale lines:
@@ -55,30 +66,37 @@ Items 3–13 are closed (below, one line each). Nothing open is a blocker.
 
 ### This repo
 
-14. **Sweep the remaining technical notes to the current-code rule** (CLAUDE.md §2), one per session:
-    the rotation note (`biplot-rotation/biplot_rotation_and_pair_selection.md`, the largest; its §2 keeps
-    the research-code citations), `nearest-vertex-tie-break.md`, `sparse-counterfactual.md`,
-    `boundary-distance-and-robustness.md`, `fixed-constraint-restore.md`,
-    `select-target-class/select_target_class_note.md`, `biplot-rotation/README.md`,
-    `scaling_axis_relabel_note.md`. `2 implementation_summary.txt` also carries history ("since
-    2026-...", "until then") and could follow. Numbers that compare two versions are re-measured with
-    one rule removed (scratchpad `patches.R` pattern) or left out.
-15. **Commit the session-13 work** when the user says so: on `paper_nr1_changes`, push, then
-    fast-forward `main` and `method_developments`. Documentation and one test only, so no reinstall
-    and no new tag. Then add the commit SHA to the hand-over Claude Doc ("Install and versions").
+15. **Commit the session-13 rest and session-14 work** when the user says so: on `paper_nr1_changes`
+    (the session-13 commit `c866b27` is local, not pushed), push, then fast-forward `main` and
+    `method_developments`. Documentation, R/ text (roxygen and comments only) and regenerated help
+    pages, so no reinstall and no new tag. Then add the commit SHA to the hand-over Claude Doc
+    ("Install and versions") together with the third target and the target rule. The staged index
+    already holds three changes (`git mv` of the reply form, `git rm` of `future-developments.md` and
+    of the old Pima HTML export): commit them deliberately (CLAUDE.md §5 on `git mv`).
+16. **Decide on the Phase 2 full Shapley decomposition** (`future-improvements-review.md` §1.6). With
+    d²_M = v'W⁻¹v as the value function the exact Shapley values have a closed form,
+    φ_j = v_j (W⁻¹v)_j, which sums to the full distance and needs no model calls; the documents'
+    reason for not using it ("O(n·2^p) model scorings") does not hold. It appears in
+    `boundary-distance-and-robustness.md` §4.1, `2 implementation_summary.txt` §4.6.1, the
+    methodology note §5 and B14's agreed paper sentence. A per-feature φ_j can be negative (a cross
+    term), a possible reason not to plot it as a distance. The decision is unchanged until the user
+    rules.
+17. **Supply reasons for 17 future items marked "Reason: not recorded"** in
+    `future-improvements-review.md` (the reply form gave none), if wanted.
 
 ### Closed
 
 - 3. Hand-over: the Claude Doc above (2026-11-15).
-- 4. Gate 3: the supervisor approved the methodology note; it is stored as
-  `documentation/methodology-changes/methodology-changes.md` (the `.qmd` and `.docx` removed,
-  2026-11-15). B5 and B8 are in `documentation/future-developments.md` §3.2 and §2.2.
+- 4. Gate 3: the supervisor approved the methodology note, stored as
+  `documentation/methodology-changes/methodology-changes.md` (2026-11-15).
 - 5–8. Tag `v0.2.0`, `method_developments`, public install, old Claude Doc (2026-11-14).
 - 9–10. Rotation-script loading fix committed; Pima review page re-rendered (2026-11-14).
-- 11. Root documents' trees and counts refreshed (2026-11-15).
+- 11. Root documents corrected against the code (2026-11-16; the 2026-11-15 refresh had covered only
+  trees and counts).
 - 12. Raw-unit label test for PCA without standardisation added (17 expectations; 2026-11-15).
-- 13. `local-convex-hull.md`'s missing §7: no commit ever had one; the references are repointed and
-  the note rewritten to the current-code rule (2026-11-15).
+- 13. `local-convex-hull.md`'s missing §7: CLAUDE.md §2 and the notes now cite §3 and §6 (2026-11-16).
+- 14. Every technical note, the implementation summary and the walkthroughs follow the current-code
+  rule (2026-11-16).
 
 ---
 
@@ -87,36 +105,73 @@ Items 3–13 are closed (below, one line each). Nothing open is a blocker.
 - **Paper 1 work is on branch `paper_nr1_changes`** (branched from `method_developments` at
   `b7aee65` on 2026-10-29, pushed with upstream). Start Paper 1 sessions on that branch
   (CLAUDE.md §10).
-- **`paper_nr1_changes`, `main` and `method_developments` (local and origin) are at `e41f22f`**, one
-  documentation-only commit after `0689341`; the session-13 work of 2026-11-14/15 is uncommitted
-  (item 15). **Tag `v0.2.0` = `0689341`** (the package code is the same). Commit and push only when
-  the user says so.
-- **The installed `boundarylogic` is 0.2.0** (reinstalled 2026-11-07 from the working tree, equal to
-  `main`). Reinstall after each merge to `main` that changes package code (CLAUDE.md §5).
+- **`paper_nr1_changes` is at `c866b27` locally** (the session-13 close-out, not pushed);
+  `origin/paper_nr1_changes`, `main` and `method_developments` are at `e41f22f`. **Tag `v0.2.0` =
+  `0689341`.** The session-14 work is uncommitted (item 15). Commit and push only when the user says
+  so.
+- **The installed `boundarylogic` is 0.2.0** (reinstalled 2026-11-07). Reinstall after each merge to
+  `main` that changes package code (CLAUDE.md §5); the session-14 R/ changes are text only.
 - **`scripts/` is gitignored** (the user's playground). The Paper 1 Pima example lives in
-  `scripts/paper1-pima/` (local only): review page `review.html`, issues `issues.md` (`issues.csv`
-  removed 2026-11-15; a copy is in the session scratchpad), the approximation gap
-  `05_full-space-gap.R`, the findings effects `06_findings-effects.R`, the external patients
-  (`fig-ext.R`). How to run it: CLAUDE.md §5. Phases 1–2 use the 7-feature GAM; Phase 3 the GAM
-  refitted on Pregnancies, Glucose, Insulin and Age. Table 1 has runs 1, 3, 4, 5, 6 and 7.
+  `scripts/paper1-pima/` (local only): review page `review.html` (with a coverage table of every
+  behaviour of the method and where it is shown), `issues.md` (issues 1–17; the two Gate 2 review
+  files were deleted on 2026-11-15), `05_full-space-gap.R`, `06_findings-effects.R`,
+  `07_rule-effects.R`, the figure scripts `fig-ext.R`, `fig-fp.R`, `fig-rule.R`. How to run it:
+  CLAUDE.md §5. Three targets, eight runs, four made-up patients; `tests.R` has 18 checks.
 - **The methodology note** is `documentation/methodology-changes/methodology-changes.md`, plain
   Markdown measured at `e41f22f` (R code = `v0.2.0`), approved by the supervisor; edit it by hand
-  (CLAUDE.md §5).
-- **Future developments:** `documentation/future-developments.md` lists every one; CLAUDE.md §9 points
-  there and keeps the `.bl_rotate()` warning. None is for Paper 1.
+  (CLAUDE.md §5). `04` and `06` measure runs 1–7 and the TP and TN targets only; re-run on
+  2026-11-15, every value identical.
+- **Future developments:** `documentation/future-improvements-review.md` is the one place (Part 1,
+  35 items with reasons; the 2026-11-05 reply form as its appendix). CLAUDE.md and the notes only
+  point to it. None is for Paper 1.
 - **The current-code rule** (CLAUDE.md §2): technical notes describe the current code; the history
-  lives in the methodology note and `NEWS.md`. Done: `algorithms.md`, `local-convex-hull.md`; the
-  rest is item 14.
-- **Test status: 578 PASS / 0 FAIL / 4 WARN / 0 SKIP** (2026-11-15; the 4 WARN are biplotEZ 2-class
+  lives in the methodology note, `NEWS.md` and the reply-form appendix. Every note now follows it.
+- **Test status: 578 PASS / 0 FAIL / 4 WARN / 0 SKIP** (2026-11-16; the 4 WARN are biplotEZ 2-class
   CVA notices). At tag `v0.2.0`: 561 PASS. **`R CMD check`: 0 errors / 0 warnings / 0 notes**
-  (2026-11-06, session 12).
+  (2026-11-16). Pima `tests.R`: 18 of 18.
 - **Verification:** run R as `.R` files (`Rscript.exe <driver>.R`), with drivers that
   `devtools::load_all()` the repo. The rotation scripts load the working tree themselves.
 - **`.claude/plans/` is gitignored** (local only); `.claude/reference/` is tracked.
 
 ---
 
-## Session summary (2026-11-14, session 13, latest)
+## Session summary (2026-11-15 to 2026-11-16, session 14, latest)
+
+Plan: `.claude/reference/pima-targets-docs-consistency-plan.md` (archived; working copy
+`.claude/plans/before-the-next-steps-temporal-storm.md`).
+
+- **Committed** the session-13 work as `c866b27` (not pushed); a `Bash(git commit *)` allow rule was
+  added to `.claude/settings.local.json` at the user's request.
+- **Pima example** (local): a read-only scan of all 79 test rows under every run showed the TP target
+  has a counterfactual in 2 of 6 Table 1 runs. Added the FP target (row 26) and a target rule that
+  does not rest on rounding (rank `floor(n/2) + 1`; TP and TN unchanged); run 8 (the range
+  constraint); patients C and D (empty-region rule, training ranges; a namespace patch turns the
+  empty-region rule off for C's comparison); `07_rule-effects.R` (the ranges change 6 of 79 test
+  rows, the empty-region rule 1). Every earlier number is identical; `tests.R` 18 of 18. The two Gate 2
+  review files were deleted (their content is in `issues.md`).
+- **Documentation audit** (about 100 findings) and corrections, by five then four parallel agents
+  plus the coordinator: the Foundation document and the implementation summary against the code;
+  NEWS.md 0.2.0 rewritten as one consistent section (dated 2026-11-07) with the missing features;
+  README (version, tagged install); the vignette (precompile passed); the walkthroughs; seven notes
+  (current harness numbers); `algorithms.md` (output lists, signatures); `local-convex-hull.md`
+  (patient C as a property of the method); CLAUDE.md (corrections, missing files and helpers, merged
+  rules, §9 only a pointer); R/ roxygen and comments (text only; 30 non-ASCII characters replaced;
+  two message wordings), 9 help pages regenerated; the memory copy of
+  `reference_data_prep_functions.md` synced; the old Pima HTML export removed.
+- **One future-developments file:** `future-improvements-review.md` moved to `documentation/` and
+  merged with `future-developments.md` (removed); every note's future section is a pointer.
+- **History sweep** of every remaining note and the implementation summary (item 14), with the
+  conditional numbers re-measured by one-rule patches (tie-break, empty-region rule, diagonal check,
+  CVA level order, PCA selectors); history not recorded elsewhere went to NEWS.md.
+- **pkgdown site** rebuilt; CLAUDE.md and progress.md removed from its search index and sitemap.
+- **Found for the user:** the closed-form Shapley decomposition (item 16); the importance's CVA
+  within-class SD is the package's choice, not the thesis rule (the documents now say so).
+- **Tests:** 578 PASS / 0 FAIL / 4 WARN; `R CMD check` 0/0/0. Blockers: none.
+- **Next:** commit on the user's word (item 15), then the Paper 1 plan update (item 1).
+
+---
+
+## Session summary (2026-11-14, session 13)
 
 - Release and branch housekeeping (items 5–9): the session-12 changes committed and pushed; tag
   `v0.2.0` on `0689341` pushed; `main` and `method_developments` fast-forwarded and pushed; the

@@ -103,7 +103,7 @@
 #' probability level. The training variable ranges (`bl_result$train_ranges`)
 #' are checked **after** the nearest point is selected, not before. Applying
 #' the range filter as a pre-filter would remove geometrically correct
-#' candidates — particularly for PCA biplots where back-projecting a 2D
+#' candidates -- particularly for PCA biplots where back-projecting a 2D
 #' Z-space point to p-dimensional X-space sets all non-plotted components to
 #' their mean (rank-2 reconstruction), which can push individual feature
 #' values outside observed ranges even for Z-space points well inside the
@@ -123,7 +123,7 @@
 #'   \item{`B_z`}{n x 2 matrix; Z-space boundary point per observation.}
 #'   \item{`B_x`}{Data frame (n x p); X-space counterfactual.}
 #'   \item{`B_pred`}{Numeric vector; model probability at counterfactual
-#'     (should be close to `cutoff` — validates back-projection quality).}
+#'     (should be close to `cutoff` -- validates back-projection quality).}
 #'   \item{`dist_z`}{Numeric vector; Euclidean distance obs to boundary
 #'     in Z-space.}
 #'   \item{`dist_x`}{Numeric vector; Euclidean distance obs to boundary
@@ -344,8 +344,8 @@ bl_find_boundary <- function(bl_result, data = NULL, tdp = NULL) {
   # ---- Choose opposing-side contour per obs ------------------------
   # B0 = nearest class-1 contour point per obs
   # B1 = nearest class-0 contour point per obs
-  # class-1 predicted obs → counterfactual is on class-0 side (B1)
-  # class-0 predicted obs → counterfactual is on class-1 side (B0)
+  # class-1 predicted obs -> counterfactual is on class-0 side (B1)
+  # class-0 predicted obs -> counterfactual is on class-1 side (B0)
   boundary_class_1 <- z_boundary_type >= cutoff
   boundary_class_0 <- !boundary_class_1
 

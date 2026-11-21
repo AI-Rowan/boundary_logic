@@ -52,18 +52,18 @@ the bottom).
 \details{
 Two chart types are available via the \code{type} argument:
 \itemize{
-\item \code{"jitter"} (default) — one point per observation per variable, jittered
+\item \code{"jitter"} (default) -- one point per observation per variable, jittered
 vertically for legibility.
-\item \code{"boxplot"} — box-and-whisker summaries per confusion group and variable.
+\item \code{"boxplot"} -- box-and-whisker summaries per confusion group and variable.
 }
 }
 \section{Colour scheme}{
 
 Colours match the biplot convention from \code{bl_project_points()}:
 \itemize{
-\item When true labels are present in the source data: four confusion colours —
+\item When true labels are present in the source data: four confusion colours --
 TP (red), TN (blue), FP (purple), FN (orange).
-\item When no true labels are available: two colours — predicted class 1 (red),
+\item When no true labels are available: two colours -- predicted class 1 (red),
 predicted class 0 (blue).
 }
 }
@@ -110,7 +110,7 @@ positive values indicate the observation is above the boundary in that
 variable's direction. The vertical line at x = 0 marks the boundary.
 
 The y-axis label shows \code{"VarName : <total>"} where \verb{<total>} is the sum
-of absolute standardised distances across all observations — a
+of absolute standardised distances across all observations -- a
 variable-level importance proxy. Use \code{bl_robustness()} for the scalar
 total across all variables.
 }

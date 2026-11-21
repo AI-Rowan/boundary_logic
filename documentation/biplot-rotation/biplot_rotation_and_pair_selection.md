@@ -35,15 +35,15 @@ This note uses $\mathbf{W}$ only to choose the plane under CVA, or under PCA wit
 - **Package source:** `R/local_cf.R` and `R/projection.R`.
 - **Package design documents:** `1 Foundation intro documents.txt` and `2 implementation_summary.txt`.
 
-**Files in this folder.** Every measurement in this note is reproduced by the R scripts beside it; `README.md` has
-the details. In brief:
+**Files in this folder.** The R scripts beside this note reproduce its measurements (the few from other sources are
+listed under "Where measured" below); `README.md` has the details. In brief:
 
 | script | setting | backs |
 |---|---|---|
 | `17_1a_toy-2d-to-1d-rotation.R` | 5 points, 2 variables → 1D biplot | §2.3, A.4, A.8 |
 | `17_1_loan-gam-pca-3d-3var-rotation.R` | 221 loans, 3 features, GAM — lossless | §3.4 (PCA), §4.2, A.2–A.7, Appendix B |
 | `17_2_loan-gam-pca-4var-slices.R` | 221 loans, 4 features, GAM — lossy | §4.1, §5.1, A.1, A.4, A.5 |
-| `17_3_minimal-rotation-verification.R` | both of the above, plus iris; console output only | §3.4 (CVA), §5, §6.1, A.2, A.9, A.10 |
+| `17_3_minimal-rotation-verification.R` | both of the above, plus iris; console output only | §3.4 (CVA), §5, A.2, A.9, A.10; the acceptance tests of `../future-improvements-review.md` §3.4 |
 
 **Run `17_3` first.**
 
@@ -51,15 +51,17 @@ the details. In brief:
   of §3.4. It reports the rest.
 - **Paths:** paths *inside* the scripts point at each other and at this note. Paths of the form `R/local_cf.R`,
   `development/…` and `documentation/…` refer to the package repository.
-- **When measured:** all numbers were measured on 2026-10-30, and the iris and loan figures in §3.4 on 2026-10-31,
-  against the package on branch `paper_nr1_changes` (R 4.6.0).
-- **Which selector:** the measurements use the Mahalanobis pair selector, the package's default for both projections
-  until 2026-11-05. Since then the default follows the thesis by projection (§3.4, §4.4), and the scripts pin
-  `distance = "mahalanobis"` so that every number here is reproduced unchanged (re-run on 2026-11-05).
-- **Which search:** since 2026-11-05 `bl_find_local_cf()` keeps only boundary points inside the convex hull of the
-  training data and the target on each rotated plane (`set_filters(hull = TRUE)`,
-  `documentation/local-convex-hull.md`). The measurements here concern the rotation and the pair search before
-  that filter, so the scripts also pin `set_filters(tgt, hull = FALSE)`, the search they measured.
+- **Where measured:** with R 4.6.0 on Windows. Most numbers are printed by the scripts; the few that are not name
+  their source where they are quoted: the loan harness (`development/03_loan_status_Boundary_Logic.R`) in §3.4 and
+  §4.1, the README's Pima CVA model in §4.8, and a loop over every row of `17_1`'s set-up in §3.4.
+- **Which selector:** the measurements use the Mahalanobis pair selector, which the scripts pin
+  (`distance = "mahalanobis"`). The package's default, `distance = "auto"`, follows the thesis by projection
+  (§3.4, §4.4): under CVA it is the same selector; under PCA it is the Euclidean rule, which picks a different pair
+  on 51 of `17_1`'s 221 rows (§3.4).
+- **Which search:** by default `bl_find_local_cf()` keeps only boundary points inside the convex hull of the
+  training data on each rotated plane, and drops a contour still closed after that clip unless it encloses training
+  data there (`set_filters(hull = TRUE)`, `documentation/local-convex-hull.md`). The scripts measure the rotation and
+  the pair search without that filter, so they also pin `set_filters(tgt, hull = FALSE)`.
 
 ---
 
@@ -290,7 +292,7 @@ The thesis fixes the cross-plane criterion **by projection**:
 **The two halves of the "dual approach" are one quantity under CVA.** The thesis's own p.91 statement says so, and
 §3.4 proves it for every rotated plane. The in-plane $L_2$ step therefore already finds the Mahalanobis-nearest
 point, and the cross-plane comparison ranks planes by the same measure. **Under PCA** the thesis's rule is
-Euclidean throughout; it is the package's default since 2026-11-05 (§3.4).
+Euclidean throughout; it is the package's default (§3.4).
 
 ### 2.6 The research code (`origin/original_PhD_code`)
 
@@ -439,13 +441,14 @@ Three implementation choices, all consistent with the thesis:
 **Order and cap:**
 
 - Pairs come in colexicographic order, $(1,2), (1,3), (2,3), (1,4), (2,4), (3,4), \ldots$.
-- They are capped at `max_pairs`, default `21L` in `bl_find_local_cf()` (10 until 2026-10-31).
+- They are capped at `max_pairs`, default `21L` in `bl_find_local_cf()`.
 - The design notes (`1 Foundation intro documents.txt` §10.7) also cap the count at the $\binom{p}{2}$ pairs that
   exist.
 
 **The cap is not in the thesis or the research code**, which try every pair. The default covers every pair up to
-$p=7$ ($\binom{7}{2}=21$), so the Pima example's search matches the thesis's. It first leaves pairs out at $p=8$
-($\binom{8}{2}=28$) (§4.7).
+$p=7$ ($\binom{7}{2}=21$), so on the thesis's seven-feature Pima example it tries every pair, as the thesis does.
+The Paper 1 Pima example runs Phase 3 on its four-feature refit, whose 6 pairs are all tried. The cap first leaves
+pairs out at $p=8$ ($\binom{8}{2}=28$) (§4.7).
 
 ### 3.3 The per-pair pipeline
 
@@ -458,26 +461,31 @@ stages:
 3. **Grid and score.**
    - An $m\times m$ grid ($m=200$ by default) spans the training data's rotated range, plus 10% padding.
    - It is back-projected to X-space and scored through the model in chunks of 50,000 rows.
+   - The scores are clamped to $[0, 1]$, as `bl_build_grid()` does for the global grid (a custom `predict_fn` can
+     return values outside it); the number of clamped cells, over all pairs, is reported once in a warning.
 4. **Extract and filter the boundary contour.** `grDevices::contourLines()` at $cutoff \pm b_{margin}$, then four
    filters on the vertices (the "Filter and validate contour segments" block). With `set_filters(hull = TRUE)`, the
-   default since 2026-11-05, the plane's training hull and the empty-contour rule run first, between (a) and (b)
+   default, the plane's training hull and the empty-region rule run between (a) and (b)
    (`documentation/local-convex-hull.md`); the rotation scripts set `hull = FALSE`, so the list below is what they
-   measure:
+   measure. The order is (a), the hull clip, the empty-region rule, (b), (c), (d):
    - (a) **opposing class:** only contour segments on the class *opposite* the target's prediction;
    - (b) **actionability:** the `set_filters` constraints (`"decrease"`, `"increase"`, `"fixed"`, `c(min,max)`;
      `"integer"` is not applied here, but to the counterfactual after the search, §3.5).
-     They run first because they are typically the most selective, so the loop can stop early
-     (`if (!any(keep)) next`);
-   - (c) **feasibility:** `train_ranges` (per-feature training min/max), applied to the survivors of (b);
+     They run before (c) and (d) because they are typically the most selective, so the loop can skip a segment
+     early (`if (!any(keep)) next`);
+   - (c) **feasibility:** `train_ranges` (per-feature training min/max), applied to the survivors of (b) while the
+     feasibility switch is on (`set_filters(train_ranges = TRUE)`, the default);
    - (d) **model re-score:** every surviving vertex is back-projected and re-scored, and dropped if the model
      disagrees with the contour's side of `cutoff`. This is the most expensive filter, which is why (b) and (c)
      run first.
 
-   **The hull, rebuilt per plane (since 2026-11-05).** The global biplot's polygon was built for the unrotated
-   plane, so rotation invalidates its coordinates and the search never uses it. With `set_filters(hull = TRUE)`
-   (the default) a convex hull of the training data and the target is built on each rotated plane, and only the
-   contour vertices inside it are kept, before filters (b)-(d) (`../local-convex-hull.md`). Until 2026-11-05 no
-   hull was applied, and that is the search every measurement in this note used: the scripts pin
+   **The hull, rebuilt per plane.** The global biplot's polygon is built for the unrotated plane, so rotation
+   invalidates its coordinates and the search never uses it. With `set_filters(hull = TRUE)`
+   (the default) a convex hull of the training data alone is built on each rotated plane
+   (`.build_hull_polygon(Z_train_rot, ...)`; the target is not part of it), and only the contour vertices inside it
+   are kept (`.poly_clip()`). A contour still closed after the clip is kept only if it encloses training data on
+   that plane (`.encloses_data()`, the empty-region rule). Both run after (a) and before filters (b)-(d)
+   (`../local-convex-hull.md`). The scripts' measurements are of the search without them: the scripts pin
    `set_filters(tgt, hull = FALSE)`.
 5. **Within-pair nearest vertex.** Among the survivors, the nearest to the target is found by 2D Euclidean distance
    in the rotated plane (`.nearest_idx_block()`). It is the exact minimum, taking the first vertex on an exact tie,
@@ -485,9 +493,9 @@ stages:
 
 ### 3.4 The selector and its metric
 
-The winning pair is the one with the smallest distance in X-space, by `distance`. The default, `"auto"` (since
-2026-11-05), follows the thesis rule (§2.5): the **squared Mahalanobis distance** under CVA and the **Euclidean
-distance on the total-SD scale** under PCA (the pair loop of `bl_find_local_cf()`, `R/local_cf.R`):
+The winning pair is the one with the smallest distance in X-space, by `distance`. The default, `"auto"`, follows
+the thesis rule (§2.5): the **squared Mahalanobis distance** under CVA and the **Euclidean distance on the total-SD
+scale** under PCA (the pair loop of `bl_find_local_cf()`, `R/local_cf.R`):
 
 $$
 d_M^2(v) = v^{\mathsf T}\mathbf{W}^{-1}v, \qquad d_x(v) = \Big(\sum_j (v_j / s_j)^2\Big)^{1/2}, \qquad v = B_x - x_{obs}
@@ -515,8 +523,8 @@ pair and every target.
   case).
 - **How it is inverted:** by Cholesky, with a ridge fallback.
 
-The companion note has the definition and the inversion. `distance = "euclidean"` selects by `dist_x`; until
-2026-11-05 it selected by the in-plane distance `dist_z`. All three distances are stored for every pair
+The companion note has the definition and the inversion. `distance = "mahalanobis"` selects by $d_M^2$ and
+`distance = "euclidean"` by `dist_x`, whatever the projection. All three distances are stored for every pair
 (`all_distances`, `all_distances_x`, `all_distances_mahalanobis`).
 
 #### Under CVA the in-plane distance *is* the Mahalanobis distance, for every pair
@@ -607,21 +615,22 @@ pair (3,4); on the loan harness's free search, both pick (3,4). The thesis state
   `"integer"` candidates (§3.5).
 - **The Mahalanobis selector:** it uses $\mathbf{W}$ = `W_binary`, the within-class covariance by the 0/1 class on
   unstandardised features. That is a different metric, and the ratio varies by pair: 1.30 to 1.58 on iris
-  (`17_3` §11). It was the PCA default until 2026-11-05.
+  (`17_3` §11). It is the selector the rotation scripts pin, not the thesis's PCA rule.
 - **How often they disagree:**
-  - over the 221 rows of `17_1`'s PCA set-up, the two selectors pick different pairs on 51 (23%);
-  - in the standardised-iris fixture of `tests/testthat/test-boundary.R` (PCA, target 1), Z-distance would pick
-    (1,4) and Mahalanobis (3,4).
+  - over the 221 rows of `17_1`'s PCA set-up, the two selectors pick different pairs on 51 (23%), with the hull
+    and without it (a loop over every row of the set-up; the script itself searches row 6);
+  - in the standardised-iris fixture of `tests/testthat/test-boundary.R` (PCA, target 1), searched without the hull
+    (`set_filters(hull = FALSE)`), the Euclidean selector picks (1,4) and the Mahalanobis selector (3,4). With the
+    hull, both pick (3,4): the (1,4) point lies outside the plane's hull, and the nearest point inside it is
+    further away (Euclidean 2.21 against 0.89).
 
-**So, by projection** (since 2026-11-05):
+**So, by projection:**
 
 | `distance` | CVA | PCA |
 |---|---|---|
 | `"auto"` (default) | `"mahalanobis"` | `"euclidean"` |
-| `"mahalanobis"` | the thesis's criterion; ranks the pairs as the in-plane distance does | `W_binary` Mahalanobis; the PCA default until 2026-11-05, not the thesis's rule |
-| `"euclidean"` | Euclidean in X-space on the total-SD scale; a different metric, not the thesis's CVA rule | Euclidean in X-space on the total-SD scale, equal to the in-plane distance at the search point; the thesis's rule (p.86) |
-
-Until 2026-11-05 `"euclidean"` was the in-plane distance itself, identical to `"mahalanobis"` under CVA.
+| `"mahalanobis"` | the thesis's criterion; ranks the pairs as the in-plane distance does | `W_binary` Mahalanobis; not the thesis's rule (the rotation scripts pin it) |
+| `"euclidean"` | Euclidean in X-space on the total-SD scale; a different metric, not the thesis's CVA rule | Euclidean in X-space on the total-SD scale, equal to the in-plane distance at the search point under a standardised PCA; the thesis's rule (p.86) |
 
 ### 3.5 Winner selection, the "fixed" restore and the "integer" rounding
 
@@ -659,18 +668,19 @@ if (is.finite(selector) && selector < best_selector) {
   contour rarely holds a feature at exactly its observed value.
 - **After the winner is chosen:** each fixed feature the search moved is set back to its observed value. If that
   point still crosses the boundary and is within `train_ranges`, it becomes the counterfactual (`B_x`, `B_pred`).
-  Otherwise no counterfactual is reported (strict, since 2026-11-04). `fixed_check` records the outcome.
+  Otherwise no counterfactual is reported, rather than the search's point, which holds the fixed feature only to
+  within the tolerance. `fixed_check` records the outcome.
 - **The restored point is generally not on the plane:**
   - `B_z` is its projection, which is what the local plot draws;
   - `dist_z`, `dist_x`, `dist_mahalanobis` and the per-pair tables still describe the search's point.
 - Details: [`../fixed-constraint-restore.md`](../fixed-constraint-restore.md) §1–§4.
 
-**Then the "integer" rounding** (`.round_integers()`, since 2026-11-04).
+**Then the "integer" rounding** (`.round_integers()`).
 
 - **What it does:** for each `"integer"` feature that is not fixed and has moved off a whole number, it tries the
   whole values (raw units) just below and above. It keeps the combinations that still cross the boundary and
   meet every constraint and `train_ranges`, and takes the nearest in X-space by the same distance as the pair
-  search (`.cf_sq_distance()`; until 2026-11-05 the Euclidean option measured the projections on the plane).
+  search (`.cf_sq_distance()`), which measures these off-plane points in X-space.
 - **Its result:** the chosen point replaces `B_x`, `B_z` (its projection, `.project_local()`) and `B_pred`. With
   no valid combination no counterfactual is reported. `integer_check` records the outcome.
 - **Like the restored point, it lies off the plane,** and the distances still describe the search's point.
@@ -684,16 +694,16 @@ if (is.finite(selector) && selector < best_selector) {
 | rotation | Procrustes, no dilation, columns 1–2 | the same (§3.1) |
 | pairs tried | all $\binom{p}{2}$ | up to `max_pairs = 21L`: all pairs for $p \le 7$ (§3.2) |
 | grid built over | the target and the test data (research code) | the training data's rotated range |
-| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | the convex hull of the training data and the target, rebuilt in each rotated plane (`set_filters(hull = TRUE)`, since 2026-11-05; before, no hull, §3.3); no enclosure rule |
+| plausibility | the convex hull, rebuilt in each rotated plane; boundary areas without data discarded; closed contours must enclose the target | the convex hull of the training data alone, rebuilt in each rotated plane, and a closed contour kept only if it encloses training data there (`set_filters(hull = TRUE)`, the default; `hull = FALSE` switches both off, §3.3) |
 | actionability | range expressions (`set_filters`) | `"decrease"`, `"increase"`, `"fixed"` (with the post-search restore), `c(min,max)`, `"integer"` (rounded after the search) |
 | feasibility | `train_ranges` | `train_ranges`, filter (c) |
 | nearest vertex in a plane | 2D Euclidean, random tie-break | 2D Euclidean, exact minimum (§3.3) |
-| cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | by `distance = "auto"`: $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ under CVA; total-SD Euclidean in X-space under PCA (since 2026-11-05; before, Mahalanobis for both) (§3.4) |
+| cross-plane criterion | $\mathbf{d}'\mathbf{W}_{SSP}^{-1}\mathbf{d}$ under CVA; Euclidean under PCA (thesis only) | by `distance = "auto"`: $v'\mathbf{W}^{-1}v$ with $\mathbf{W} = \mathbf{W}_{SSP}/(n-g)$ under CVA; total-SD Euclidean in X-space under PCA (§3.4) |
 | a pair with no boundary point | B = 0, kept with a spurious distance | skipped |
 | the explanation used downstream | the research code's default flow is unrotated (§2.6) | always the rotated winner |
 
 The divisor $n-g$ scales every distance by the same constant, so it never changes the winner. Under CVA the package
-selects exactly as the thesis does, and under PCA it does so by default since 2026-11-05 (§4.4).
+selects exactly as the thesis does, and under PCA it does so by default (§4.4).
 
 ---
 
@@ -723,10 +733,14 @@ evidence.
   `bl_result$V`, a difference of 4.65e-15, gives planes **65.91°** apart. The counterfactual moves with the plane
   (A.1).
 - **An instance in the package itself.**
-  - **What happened:** reordering the CVA group levels (TP/TN/FP/FN), a change with no mathematical effect,
-    perturbed `V` enough to change every Phase 3 result in the loan harness. Target 13's constrained
-    counterfactual moved from 0.547 to 0.509.
-  - **What the package does now:** it pins the level order (CLAUDE.md §6).
+  - **What happens:** reordering the CVA group levels (TP/TN/FP/FN), a change with no mathematical effect,
+    perturbs `V` enough to change the Phase 3 results in the loan harness. Passing the order TP, TN, FP, FN as
+    `cva_classes` to `bl_build_result()` changes `bl_results_v2$V` by at most 4.1e-17, yet target 13's
+    constrained counterfactual moves from pair (3,4), prediction 0.693, to pair (1,2), prediction 0.509, and its
+    search without actionability constraints (Step 15) from (3,4), 0.542, to (1,2), 0.667.
+  - **What the package does:** when it derives the groups itself, it fixes their levels in alphabetical order
+    (FN, FP, TN, TP, as `as.factor()` gives), so the same data always gives the same `V` (`bl_build_projection()`;
+    CLAUDE.md §6).
 - **Within one platform the search is deterministic** (A.2):
   - `.bl_rotate()` is bit-identical for identical inputs;
   - the nearest vertex is the exact minimum.
@@ -749,7 +763,7 @@ error.
 
 ### 4.2 The pair labels are weak
 
-- **The naming problem.** The search enumerates named eigenvector pairs, but each rotated plane is only loosely tied
+- **The naming problem.** The search enumerates named component pairs, but each rotated plane is only loosely tied
   to the pair that names it. At $p=4$, only **21%** of the selected (2,3) plane's second direction lies in the
   (2,3) eigenplane (`17_2` §9).
 - **The same axes from different labels.** At $p=3$, all three labels give rotated axes closest to the same
@@ -759,9 +773,8 @@ error.
 
 So "Best pair: (3,4)" in the output, and the wording in any paper, imply an eigenplane that is not what is drawn. It
 is more accurate to describe the search as *sampling $\binom{p}{2}$ planes through the target* than as
-*enumerating eigenplanes*. Since 2026-11-05 the package's help pages and messages say "component pair" and state
-that the selected plane need not coincide with the plane of the two components that name it; Paper 1 uses the
-same wording.
+*enumerating eigenplanes*. The package's help pages and messages say "component pair" and state that the selected
+plane need not coincide with the plane of the two components that name it; Paper 1 uses the same wording.
 
 ### 4.3 The local plot's orientation is arbitrary
 
@@ -769,42 +782,35 @@ same wording.
   uses columns 1–2 of `Vrho`, which is LAPACK's completion.
 - **The scale of it.** Two bases can span the same plane to 2.2e-16 and still differ entry-wise by 1.61 (Appendix
   B). The picture's orientation and axis layout are therefore incidental.
-- **No user correction is possible.** `rotate_deg` has been removed from the local plots, since the orientation
-  belongs to the method. §5.2 proposes a frame convention that fixes it.
+- **No user correction is possible.** The local plots take no `rotate_deg` (they stop if one is passed), since the
+  orientation belongs to the method. §5.2 proposes a frame convention that fixes it.
 
-### 4.4 The metric: one selector under CVA; the PCA default (resolved 2026-11-05)
+### 4.4 The metric: one by default, two under PCA with `"mahalanobis"`
 
-- **Under CVA there was one selector, presented as two.**
-  - Until 2026-11-05 `distance = "euclidean"` selected by the in-plane distance, which already measures the
-    Mahalanobis distance, so the option could not change the result (§3.4).
-  - Since then `"euclidean"` is the X-space Euclidean distance on the total-SD scale: under CVA a different metric,
-    and not the thesis's rule. The default, `"auto"`, is Mahalanobis under CVA.
-  - Before 2026-10-31 the package's documentation claimed the opposite (that Z-distances are not comparable across
-    pairs).
-- **Under PCA the default departed from the thesis (resolved 2026-11-05).**
-  - The thesis's rule is standardised Euclidean (p.86). Until 2026-11-05 the default was `W_binary` Mahalanobis,
-    which selects a different pair on 23% of `17_1`'s rows (§3.4).
-  - That default also mixed metrics: within a plane the nearest vertex is chosen by standardised Euclidean
-    distance, across planes by `W_binary` Mahalanobis. The point judged "nearest" was not nearest in the measure
-    that judged the "best" plane.
+The default, `distance = "auto"`, is the thesis's rule by projection (§2.5, §3.4), and under it one metric acts
+within and across planes:
 
-**Decision (2026-10-31): the PCA default is deferred.**
+- **Under CVA:** the pairs are compared by the squared Mahalanobis distance, which for in-plane points is $n-g$
+  times the squared in-plane distance, for every pair (§3.4). The nearest vertex within each plane is therefore also
+  the Mahalanobis-nearest, and the planes are ranked in the same measure.
+- **Under PCA:** the pairs are compared by the Euclidean distance in X-space, each feature divided by its total SD
+  (p.86). Under a standardised PCA it equals the in-plane distance at the search point.
+- **Phase 2's variable importance** follows the same rule: the within-class SD under CVA, the total SD under PCA
+  (the companion note).
 
-- **Paper 1 compares counterfactuals by Mahalanobis distance only**, under CVA, where it equals the in-plane
-  distance (§3.4). The PCA departure does not touch its results.
-- **The PCA default (`W_binary`) stays as it is** until the rotation problem (§4.1) is fully addressed (§5). The
-  choice of metric under PCA (§5.4) is taken then, not before.
+**An explicit `distance` changes the metric.**
 
-**Resolution (2026-11-05, on the user's instruction).** The default became `distance = "auto"`, the thesis's rule by
-projection, before the rotation problem was addressed:
+- **`"euclidean"` under CVA** is the X-space Euclidean distance on the total-SD scale: a different metric, not the
+  thesis's rule, which can rank the pairs differently.
+- **`"mahalanobis"` under PCA mixes two metrics.** The planes are compared by `W_binary` Mahalanobis, while the
+  nearest vertex within each plane is still chosen by standardised Euclidean distance, so the point judged
+  "nearest" is not nearest in the measure that judges the "best" plane. The two selectors pick a different pair on
+  51 of the 221 rows of `17_1`'s set-up (23%; §3.4).
 
-- **Under PCA:** the pairs are compared by the Euclidean distance in X-space, each feature divided by its total SD.
-  It equals the in-plane distance at the search point, so one metric now acts within and across planes.
-- **Under CVA:** Mahalanobis, as before.
-- **Phase 2's variable importance** follows the same rule (total SD under PCA).
-
-Paper 1 (CVA) is unchanged. The measurements in this note use the Mahalanobis selector, which `17_1`–`17_3` now
-pin.
+**What this means for the measurements here.** The rotation scripts pin `distance = "mahalanobis"` and
+`set_filters(tgt, hull = FALSE)`. Their PCA measurements (the loan set-ups of `17_1`, `17_2` and `17_3`) are
+therefore of the mixed selector, not of the package's default; under CVA (`17_3` §11) the pinned selector is the
+default's. Paper 1 uses CVA, where the default is the thesis's Mahalanobis rule.
 
 ### 4.5 Constraints are applied after contouring
 
@@ -836,25 +842,25 @@ Three counterfactuals leave the drawn plane:
 - **Forcing a pair.** `max_pairs = 1L` pins the search to (1,2), because pairs are emitted colexicographically.
   There is no way to force any other pair.
 - **Capping the search.**
-  - The default `max_pairs = 21L` tries every pair up to $p=7$. At the Pima example's $p=7$ it tries all 21 pairs,
-    including the thesis's winning pair (1,7), which is 16th in the package's order.
+  - The default `max_pairs = 21L` tries every pair up to $p=7$. At the thesis's seven-feature Pima example it tries
+    all 21 pairs, including the thesis's winning pair (1,7), which is 16th in the package's order. The Paper 1 Pima
+    example runs Phase 3 on four features, so it tries all 6 pairs.
   - From $p=8$ ($\binom{8}{2}=28$) it tries fewer pairs than the thesis: every pair involving the highest components
     is left out.
-  - Until 2026-10-31 the default was `10L`, which left pairs out from $p=6$ and never reached (1,7).
 
 ### 4.8 A target at the centroid
 
-**Verified on 2026-11-05** (the README's Pima CVA model, with the target at `X_center`):
+**What happens**, verified on the README's Pima CVA model with the target at `X_center`:
 
 - if $x_t = 0$, the Procrustes matrix is zero, so the SVD returns the identity and $\mathbf{A} = \mathbf{I}$;
 - every pair label then returns the unrotated plane of components (1,2): the plane for pair (3,4) equals
   `V[, 1:2]`;
 - the search still runs and can find a counterfactual.
 
-**The guard (since 2026-11-05):** `bl_find_local_cf()` warns once, before the pair loop, when
+**The guard.** `bl_find_local_cf()` warns once, before the pair loop, when
 `sqrt(sum(x_target_st^2)) < sqrt(.Machine$double.eps)`: the target lies at the centre of the biplot, so the
-Procrustes rotation is undefined and the local plane is arbitrary. `.bl_rotate()` is unchanged, and so are the
-results. §5.2's edge cases give the convention the proposed minimal rotation would follow.
+Procrustes rotation is undefined and the local plane is arbitrary. The warning changes neither `.bl_rotate()` nor
+the result. §5.2's edge cases give the convention the proposed minimal rotation would follow.
 
 ### 4.9 Inherent limitations — documented, not to be "fixed"
 
@@ -898,7 +904,7 @@ it needs an explicit decision (CLAUDE.md §9) and the adoption path of §5.6.
 
 - **The rotation's job:** put the target *on* the drawn plane, so the local reading is exact.
 - **The search's job:** find the nearest boundary *available within that framework*.
-- **Out of scope:** searching the full $p$-dimensional space (§4.9, §6.3).
+- **Out of scope:** searching the full $p$-dimensional space (§4.9; `../future-improvements-review.md` §1.1).
 
 ### 5.1 Exactness requires only that the plane contains the target
 
@@ -997,7 +1003,7 @@ safe to fix.
 - **Recommended:** $\mathbf{V}_r = (\mathbf{R}\mathbf{V}_{[,a]},\ \mathbf{R}\mathbf{V}_{[,b]})$, the named axes
   carried through the rotation.
   - RC1 and RC2 then read as "PC $a$ and PC $b$, tilted by $\theta$".
-  - The "columns 1–2 regardless of pair" convention of §3.1 is no longer needed.
+  - The "columns 1–2 regardless of pair" convention of §3.1 would not be needed.
 - **Alternative:** the target-aligned frame $(x_t/\lVert x_t\rVert,\ \cdot)$.
   - It puts every target on the horizontal axis, making figures comparable across targets.
   - The cost is loading arrows that move between targets.
@@ -1069,20 +1075,19 @@ At $p=3$, pinning to (1,2) lands within 0.05% of the *worst* plane in the family
 - **Cost:** about **1.5×** the current search when batched across planes, and an order of magnitude more when
   implemented naïvely. That is affordable per target, but a cost, not a saving.
 - **A caveat:** stage 1 and the package use different discretisations, so the percentages are indicative until
-  stage 2 is run on the winning plane (§6.1, test 4).
+  stage 2 is run on the winning plane (`../future-improvements-review.md` §3.4, test 4).
 
 ### 5.4 One metric end to end, and feasibility as a constraint
 
-1. **One metric, chosen by projection** (resolving §4.4; **the default was adopted on 2026-11-05**: the thesis's
-   standardised Euclidean under PCA, Mahalanobis under CVA).
-   - **Under CVA** there is already one metric, because the in-plane distance is Mahalanobis (§3.4). The
-     `distance` option can be documented as having no effect, or removed for CVA.
-   - **Under PCA**, choose one metric and use it both within and across planes:
-     - either the thesis's standardised Euclidean, which needs no change within the plane;
-     - or `W_binary` Mahalanobis within the plane as well. The vertices are already back-projected for filter (d),
-       so this costs no extra model evaluations.
-
-     Which one was a methodological decision for the user, who chose the thesis's rule (2026-11-05).
+1. **One metric, chosen by projection** (§4.4). This part is already the package's default, `distance = "auto"`:
+   the thesis's standardised Euclidean under PCA, Mahalanobis under CVA.
+   - **Under CVA** there is one metric for the default, because the in-plane distance is Mahalanobis (§3.4). An
+     explicit `distance = "euclidean"` is a different metric (the X-space distance with the total SD), which can
+     rank the pairs differently; that is its purpose.
+   - **Under PCA** the default's standardised Euclidean is also the distance within the plane, so it needs no
+     change there. An explicit `distance = "mahalanobis"` would become one metric end to end only if the nearest
+     vertex within each plane were also chosen by `W_binary` Mahalanobis. The vertices are already back-projected
+     for filter (d), so this would cost no extra model evaluations.
 2. **Feasibility as a constraint, not a filter** (resolving §4.5).
    - Restrict the grid and contour extraction to the feasible region, so the search seeks the nearest *feasible*
      point.
@@ -1105,66 +1110,19 @@ At $p=3$, pinning to (1,2) lands within 0.05% of the *worst* plane in the family
 - `rotation = c("procrustes", "minimal")`;
 - `plane_search = c("pairs", "family")`.
 
-**Switch the defaults** only once the §6.1 acceptance tests have been run and reported across a full training set,
+**Switch the defaults** only once the acceptance tests (`../future-improvements-review.md` §3.4) have been run and reported across a full training set,
 not just the two targets measured here.
 
 ---
 
 ## 6. Future developments
 
-### 6.1 Acceptance tests for §5
-
-All are run by `17_3`; the "runs in" column names its section. Tests 1, 2, 3 and 6 are asserted, so the script fails
-if they stop holding.
-
-| # | test | runs in | status |
-|---|---|---|---|
-| 1 | **Exactness** — $x_t \in \operatorname{span}(\mathbf{V}_r)$ to ~1e-12 for every candidate | `17_3` §2 | ✅ asserted; residuals 1.1e-15 to 4.2e-15, all six pairs |
-| 2 | **Determinism** — identical across ≥5 calls and across BLAS/LAPACK builds | `17_3` §3 | ✅ asserted bit-identical across 5 calls; cross-BLAS **not yet run** |
-| 3 | **Minimality / label integrity** — principal angles $(0,\theta)$ exactly | `17_3` §2 | ✅ asserted; `ang1` = 0.00e+00 and `ang2` $=\theta$, all six pairs |
-| 4 | **Monotonicity** — family optimum $\le$ current, per target | `17_3` §7, §8 | ◐ asserted and holding at both targets, but the family figure comes from the stage-1 ray scan and the package figure from its own 200×200 grid. Needs stage 2 re-run on the winning plane for a like-for-like number, and a sweep over all rows to quantify what the label sample costs |
-| 5 | **Variance retained** — adequacy, axis predictivity, RSS at $\mathbf{J}=\operatorname{diag}(1,1,0,\ldots)$, minimal versus current | — | ⬜ **not run.** Reuse `17_1` §13 / `17_2` §11's diagnostic block |
-| 6 | **Thesis reproduction** — the 28.14° at $p=2, r=1$ | `17_3` §10 | ✅ asserted; 28.1411°, matching Procrustes to 6.75e-14 |
-| 7 | **Cost** | `17_3` §9 | ◐ measured at $p=3$ and reported, not asserted — wall clock is machine-dependent. $p\ge4$ **not yet timed** |
-
-**Properties of the current package that `17_3` also asserts** (not on this list):
-
-- §5 and §8b: within-platform determinism (A.2);
-- §11: the CVA identity (§3.4).
-
-### 6.2 Further work on the current method
-
-Each item needs an explicit instruction (CLAUDE.md §9). Ranked as in §4:
-
-1. **Cross-platform reproducibility** (§4.1). Run `17_3` and the harness on another OS or BLAS (macOS, Linux,
-   OpenBLAS) and compare. This matters for Paper 1, where a reviewer on another platform may not reproduce the
-   quoted counterfactuals.
-2. **The pair terminology** (§4.2). Decide how to describe a pair in output and in papers; report $\theta$ or the
-   overlap.
-3. **A frame convention** for the local plot (§4.3, §5.2).
-4. **The metric under PCA** (§4.4, §5.4). **Resolved 2026-11-05:** the thesis's Euclidean rule is the PCA default
-   (`distance = "auto"`). Still to do: add a test that pins the CVA identity: the ratio is $n-g$ for every pair, including 2-group
-   CVA. `17_3` §11 asserts it today; `tests/testthat/` does not.
-5. **Feasibility as a constraint** (§4.5, §5.4).
-6. **Off-plane counterfactuals** (§4.6). Mark them on the plot, or recompute `dist_z` / `dist_mahalanobis` for the
-   reported point.
-7. **Pair control** (§4.7):
-   - a `pairs =` argument to force any pair;
-   - a `max_pairs` default tied to $\binom{p}{2}$, so the default search covers every pair for any $p$, as the
-     thesis's does. The default of 21 already does so up to $p=7$.
-8. **A centroid guard** (§4.8). Done on 2026-11-05: verified, and `bl_find_local_cf()` now warns.
-
-### 6.3 What the proposal does not fix
-
-- **§4.9 stands.** The search finds the best plane *within the biplot framework*, not the nearest boundary in the
-  full $p$-dimensional space. The drawn curve is still a slice of the decision surface. Global fidelity is still
-  traded for local accuracy:
-  - the minimal rotation should *reduce* that trade for a given eigenplane, because it is the smallest rotation
-    achieving exactness;
-  - that is test 5, and it is not yet measured.
-- **Downstream objects still inherit the plane.** Shapley attribution and sparse counterfactuals inherit whichever
-  plane is drawn. The search makes that choice principled and reproducible; it does not remove the dependence.
-- **Off-plane points are unchanged.** Sparse, restored and rounded counterfactuals still leave the plane (§4.6).
+The future developments of the rotation and the pair search are in `../future-improvements-review.md`,
+with the reason each waits: the proposal of §5 (§1.1, which also lists what it does not fix), its
+acceptance tests and their status (§3.4), cross-platform reproducibility (§3.3), the pair terminology
+(§2.2.4), a test that pins the CVA identity (§3.2), feasibility as a constraint (§1.2), off-plane
+counterfactuals (§1.5) and pair control (§2.2.3). `17_3` also asserts two properties of the current
+package: within-platform determinism (A.2) and the CVA identity (§3.4).
 
 ---
 
@@ -1225,7 +1183,7 @@ Asserted by:
 - `tests/testthat/test-boundary.R`, which checks for identical results under any RNG state and after
   `bl_find_boundary()` / `bl_surrogate()`.
 
-Before 2026-10-30, repeated calls could differ through a random tie-break in the nearest-vertex step
+With a random tie-break in the nearest-vertex step, as in the research code (§2.6), repeated calls could differ
 (`../nearest-vertex-tie-break.md`).
 
 ### A.3 The pair labels at $p=3$ (`17_1` §12; supports §4.2)
@@ -1393,7 +1351,7 @@ The data behind the thesis's example is probably not the script's.
 - **Under the current construction**, it shares nothing. That is the mechanism behind the 0.3–70% overlaps `17_2`
   §9 measures at $p=4$, and behind three labels giving the same axes (A.3).
 
-The returned basis was bit-identical across five calls (`17_3` §3).
+The returned basis is bit-identical across five calls (`17_3` §3).
 
 ### A.10 The family search (`17_3` §6–§9; supports §5.3)
 
@@ -1428,7 +1386,7 @@ The returned basis was bit-identical across five calls (`17_3` §3).
 - **What differs:** the sweep's figures come from the stage-1 ray scan, the package's from its 200×200 grid.
 - **Which way it biases:** the ray scan's 10° angular resolution can only *miss* the nearest point, so if anything
   it understates the improvement.
-- **What is still needed:** a like-for-like figure needs stage 2 on the winning plane (§6.1, test 4).
+- **What is still needed:** a like-for-like figure needs stage 2 on the winning plane (`../future-improvements-review.md` §3.4, test 4).
 
 **Cost.**
 
@@ -1438,8 +1396,8 @@ The returned basis was bit-identical across five calls (`17_3` §3).
   ray scan scores 36 rows per call.
 - **Batched across planes:** all 180 × 36 = 6,480 rows go in one call per march/bisect step, 20 calls in all. That
   brings it to **1.4–1.7×**.
-- **The recorded ratios** (`17_3` §9): 6.3× / 1.65× on 2026-09-04, and 12.1× / 1.44–1.63× on 2026-10-30. They move
-  with machine load; the ratio, not the seconds, is the point.
+- **The recorded ratios** (`17_3` §9): two runs gave 6.3× and 12.1× plane at a time, and 1.65× and 1.44–1.63×
+  batched. They move with machine load; the ratio, not the seconds, is the point.
 
 ---
 

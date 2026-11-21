@@ -320,8 +320,8 @@ bl_wrap_data <- function(train_data,
 bl_set_scaling <- function(x, center, scale, method = "z-score") {
 
   if (!inherits(x, c("bl_data", "bl_filter_result")))
-    stop("'x' must be a 'bl_data' object from bl_wrap_data()/bl_prepare_data() ",
-         "or a 'bl_filter_result' object from bl_filter_outliers().",
+    stop("'x' must be a 'bl_data' object from bl_wrap_data() or a ",
+         "'bl_filter_result' object from bl_prepare_data()/bl_filter_outliers().",
          call. = FALSE)
 
   var_names <- x$var_names

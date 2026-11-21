@@ -1,21 +1,718 @@
-# Future Improvements Review: Replies on the Open Items
+# Future improvements
 
 Date created: 2026-11-05
-Date last edited: 2026-11-05
+Date last edited: 2026-11-16
+
+This file is the only place for the future developments of `boundarylogic`: changes to the method,
+to the code and its interface, to the tests, and to the documentation and release. Each item says
+why it is future work and not done now. None is implemented, and none is part of the package that
+Paper 1 uses; Paper 1 names some of them as areas of future improvement (each item's **Decision**
+says which). Each needs an explicit instruction (CLAUDE.md §9). CLAUDE.md and the technical notes
+point here and do not list future developments themselves.
+
+**Part 1** is the list. Each item gives:
+- **What and why:** what the development is, and what it would give.
+- **Decision:** the decision on it, from the replies of 2026-11-05 (the Appendix) or a later record.
+- **Reason:** why it is future work and not done now, as the decision records it. "Reason: not
+  recorded" means that the record gives no reason.
+- **Code**, **Effect** (the expected effect on results), **Effort** (a rough estimate) and
+  **Source** (the reply, A1–A9 or B1–B24, or the note section it comes from).
+
+**The Appendix** keeps the replies of 2026-11-05: the form in which every open item was decided (fix
+now, future improvement or no action), with its later rounds. It is the dated record of those
+decisions.
+
+Paths are relative to `documentation/`. "The rotation note" is
+`biplot-rotation/biplot_rotation_and_pair_selection.md`, and "the methodology note" is
+`methodology-changes/methodology-changes.md`. Thesis pages are the printed pages of the final thesis.
+
+---
+
+# Part 1: The developments
+
+## 1. Method
+
+These change what the method computes, or add a new result.
+
+### 1.1 A unique local plane: minimal rotation with a search over planes
+
+- **What and why.** `.bl_rotate()` aligns the target with the chosen component pair through a
+  Procrustes rotation. Its target matrix, `Y <- rbind(-x, 0, x)`, has rank 1, so the Procrustes
+  cross-product has rank 1 too. The minimiser is then fixed only along the target's direction, and
+  the plane's second direction is LAPACK's tie-break for a degenerate subspace.
+  - **On the loan data** (GAM, PCA, $p=4$): bases that differ by 4.65e-15 give planes 65.91° apart,
+    and only 21% of a selected (2,3) plane's second direction lies in the (2,3) eigenplane. The
+    target lies in every such plane, so the check a reader would make, whether the target lands
+    correctly, passes either way.
+  - **Reproducibility.** The plane is deterministic for identical inputs on one platform. Across
+    platforms it is untested (§3.3). The thesis method has the same property: it is inherited, not a
+    porting error.
+  - **The proposal.** A closed-form minimal (Givens) rotation carries the named eigenplane onto the
+    target. A reproducible search over the family of planes that contain the target follows. This
+    makes the plane unique and broadens the search beyond fixed pairs, in the spirit of the thesis's
+    grand tour (§6.3, p.144). The rotation note §5 has the derivation and the measurements (its
+    A.9, A.10). It stays there.
+  - **Adoption path** (rotation note §5.5, §5.6). The proposal lands as new options with the
+    defaults unchanged: `rotation = c("procrustes", "minimal")` and
+    `plane_search = c("pairs", "family")`. The defaults switch only after the acceptance tests
+    (§3.4) pass across a full training set. The output then reports the objective over the searched
+    family with its runner-up minima, and keeps $\theta$ and the nearest named pair.
+  - **Frame convention** (B4). The same work fixes the orientation of the axes within the local
+    plane, which is now also LAPACK's choice (rotation note §4.3, §5.2). This changes the figures'
+    orientation, not their numbers.
+  - **What it does not fix**. The search still finds the best plane within the
+    biplot framework, not the nearest boundary in the full space. The Shapley values and the sparse
+    counterfactual still inherit the plane that is drawn. Restored, rounded and sparse
+    counterfactuals still leave the plane (§1.5).
+- **Decision:** future improvement, after Paper 1, named in the paper (B1; B4 goes with it). Do not
+  change `.bl_rotate()` or implement the proposal without an explicit instruction.
+- **Reason:** it moves every Phase 3 number, so it follows Paper 1 (B1: "Future (after Paper 1)";
+  methodology note §5). Because it moves every Phase 3 counterfactual, it is not covered by the rule
+  of CLAUDE.md §4 that the maths may be replaced only when the outputs are proven equivalent. Its
+  acceptance tests 4, 5 and 7 are also incomplete (§3.4).
+- **Code:** `.bl_rotate()`, the pair loop of `bl_find_local_cf()`, `plot.bl_local_result()`.
+- **Effect:** moves every Phase 3 result (counterfactuals, Shapley values, sparse counterfactuals).
+- **Effort:** high.
+- **Source:** B1, B4; CLAUDE.md §9; rotation note §4.1, §4.3, §5; methodology note §3.12,
+  §5 (Table 5).
+
+### 1.2 Feasibility as a constraint inside the search
+
+- **What and why.** The constraints and the training ranges filter the vertices of the boundary
+  contour after it is extracted. The reported point is the nearest among the survivors, so the
+  nearest feasible point can lie between two vertices. On the loan data the training ranges remove
+  18–56% of the candidates per pair, and a replication of the pair search without that filter
+  agrees with the package on only 76 of 221 rows. Restricting the grid and the contour extraction to
+  the feasible region, with the actionability constraints as box or half-space constraints, would
+  find the nearest feasible point directly.
+- **Decision:** future improvement, named in the paper (B6).
+- **Reason:** not recorded. The form notes that it would move Paper 1's numbers.
+- **Code:** the filter cascade of `bl_find_local_cf()` (`.apply_actionability()`, the training-range
+  filter).
+- **Effect:** changes the constrained runs.
+- **Effort:** medium.
+- **Source:** B6; rotation note §4.5, §5.4; methodology note §5 (Table 5).
+
+### 1.3 Counterfactuals that hold `"fixed"` features exactly
+
+A failed restore of a `"fixed"` feature means no counterfactual (`fixed-constraint-restore.md` §4),
+although one may exist. On Pima, the TN target's runs 3 and 4 find boundary points, but the
+restored points score 0.475 and 0.487, so neither run reports a counterfactual (methodology note
+§3.7). Three remedies follow.
+
+#### 1.3.1 A follow-up search from the restored point
+
+- **What and why.** Hold the fixed features at their observed values, and extend the move in the
+  free features along the search's own direction until the model crosses the cutoff, within the
+  training ranges and the other constraints. It is a 1-D search, so it is cheap and deterministic.
+  Its point lies off the plane, as a restored point already does, and its distance is at least the
+  restored point's.
+- **Decision:** future improvement, named in the paper (A5, option (b)). Paper 1 reports the empty
+  runs as a result of the strict rule (Pima issue 12).
+- **Reason:** it would move Paper 1's numbers (the TN target's runs 3 and 4 may gain
+  counterfactuals). It is a new method change, which needs the supervisor's approval, and option (b)
+  keeps Paper 1 on the method the supervisor was reviewing (A5).
+- **Code:** `.restore_fixed()`, `bl_find_local_cf()`.
+- **Effect:** the fixed runs (the Pima TN target's runs 3 and 4).
+- **Effort:** medium.
+- **Source:** A5; `fixed-constraint-restore.md` §8; methodology note §3.7, §5 (Table 5); Pima
+  issue 12.
+
+#### 1.3.2 Searching in the actionable features only
+
+- **What and why.** Hold the fixed features at their observed values before the rotation, so that
+  the local biplot and its boundary are built in the subspace of the free features. Every boundary
+  point then holds the fixed features exactly, and no restore is needed. This is the first of the
+  thesis's two approaches to constraints (§3.9.2, p.88). It changes the projection the local search
+  uses: a different one for each set of constraints.
+- **Decision:** future improvement, named in the paper (A6, option (b)).
+- **Reason:** it is the cleanest solution, but too large a change to make during Paper 1. It is a
+  change of method, which needs the supervisor's approval, and it would move every fixed run (A6).
+- **Code:** `.bl_rotate()`, the pair loop of `bl_find_local_cf()`.
+- **Effect:** every fixed run; a different projection for the local search.
+- **Effort:** high.
+- **Source:** A6; `fixed-constraint-restore.md` §8; methodology note §3.7, §5 (Table 5).
+
+#### 1.3.3 Retrying the restore on the next-best pair
+
+- **What and why.** The restore is tried only on the winning pair's point. Trying it on the other
+  pairs' points, nearest first, and taking the first that still crosses would rescue some targets.
+- **Decision:** future improvement, named in the paper (B12).
+- **Reason:** it needs each pair's boundary point to be kept (§2.1), which the search does not do and
+  which is itself future work (B12: "Future (needs A2)").
+- **Code:** `.restore_fixed()`, `bl_find_local_cf()`.
+- **Effect:** the fixed runs.
+- **Effort:** low, once §2.1 exists.
+- **Source:** B12; `fixed-constraint-restore.md` §8.
+
+### 1.4 Integer rounding
+
+#### 1.4.1 Free features compensate after rounding
+
+- **What and why.** `.round_integers()` tries only the whole values just below and just above each
+  moved `"integer"` feature, with the other features where the search put them. When the nearer
+  whole value does not cross, the further one is taken, even when a small change in the free
+  features would let the nearer one cross. Holding the nearer value and running §1.3.1's follow-up
+  search along the free features would reduce the distance cost of the rounding. On Pima, the TN
+  target's search point has *Pregnancies* 10.21 ($\sqrt{d^2_M}$ 0.14); 10 does not cross, so 11 is
+  taken, and $\sqrt{d^2_M}$ rises to 0.42.
+- **Decision:** future improvement, named in the paper (A7, option (b)).
+- **Reason:** it needs §1.3.1's follow-up search, which is itself future work: the two belong
+  together (A7). It would also move Paper 1's numbers (the TN target's runs 1 and 5).
+- **Code:** `.round_integers()`, `bl_find_local_cf()`.
+- **Effect:** the integer runs (the Pima TN target's runs 1 and 5).
+- **Effort:** medium, or low once §1.3.1 exists.
+- **Source:** A7; `fixed-constraint-restore.md` §5; methodology note §3.8, §5 (Table 5); Pima
+  issue 13.
+
+#### 1.4.2 Other step sizes
+
+- **What and why.** A step size per feature in `set_filters()`, for example 0.5, or 100 for a loan
+  amount. Only whole numbers are supported.
+- **Decision:** future improvement, named in the paper (B13).
+- **Reason:** not recorded.
+- **Code:** `.round_integers()`, `.parse_constraint()`, `set_filters()`.
+- **Effect:** none at the default.
+- **Effort:** low.
+- **Source:** B13; `fixed-constraint-restore.md` §8; `sparse-counterfactual.md` §3; methodology note
+  §5.
+
+### 1.5 Off-plane counterfactuals
+
+- **What and why.** The restored, rounded and sparse counterfactuals lie off the plane. The plot
+  draws them at their projections, which need not lie on the drawn boundary. For a restored or
+  rounded counterfactual, `dist_z`, `dist_x` and `dist_mahalanobis` describe the search's point, not
+  the reported one. The plot could mark these points as off-plane, or the distances could be
+  recomputed for the reported point.
+- **Decision:** future improvement (B7). Paper 1 states which distances Table 1 quotes (the search
+  point's and the counterfactual's $\sqrt{d^2_M}$), as the method stands.
+- **Reason:** not recorded. The form notes that only the printed distances would change.
+- **Code:** `bl_find_local_cf()`, `plot.bl_local_result()`, `plot.bl_sparse_result()`.
+- **Effect:** the printed distances only.
+- **Effort:** low to medium.
+- **Source:** B7; rotation note §4.6.
+
+### 1.6 Full Mahalanobis decomposition in Phase 2
+
+- **What and why.** `plot.bl_boundary()` and `bl_robustness()` standardise each feature by its own
+  within-class SD (the diagonal of **W**), so the plotted measure ignores the correlations in **W**.
+  On Pima the gap to the full Mahalanobis distance is 27.4% on seven features and 35.2% on four. A
+  Shapley decomposition of the full distance would attribute the correlated part too: it is the
+  theoretically correct per-feature decomposition.
+  - **A closed form.** With the value function $d^2_M=v'\mathbf{W}^{-1}v$ (a feature outside the
+    coalition keeps its observed value), the exact Shapley values are
+    $\phi_j=v_j\,(\mathbf{W}^{-1}v)_j$. Each cross term $a_{ij}v_iv_j$ ($a_{ij}$ an entry of
+    $\mathbf{W}^{-1}$) is split equally between $i$ and $j$. The values sum to $v'\mathbf{W}^{-1}v$,
+    need no model call, and cost $O(p^2)$ per row.
+  - **A caveat.** A $\phi_j$ can be negative, when its cross terms are negative, so it cannot always
+    be plotted as a distance.
+- **Decision:** future improvement, named in the paper (B14).
+- **Reason:** the recorded reason is the cost: $O(n\cdot 2^p)$, growing exponentially with the number
+  of features (B14's paper sentence; `boundary-distance-and-robustness.md` §7). That argument does
+  not hold for this value function: the closed form costs $O(p^2)$ per row, with no model call. The
+  decision is unchanged until the user decides on it; the negative $\phi_j$ is a possible reason not
+  to plot the decomposition as a per-feature distance.
+- **Code:** `plot.bl_boundary()`, `bl_robustness()`.
+- **Effect:** changes the importance values.
+- **Effort:** recorded as medium; low with the closed form.
+- **Source:** B14; `boundary-distance-and-robustness.md` §4, §7; `2 implementation_summary.txt`
+  §4.6.1; methodology note §3.1, §5 (Table 5); Pima issue 9.
+
+### 1.7 New results
+
+#### 1.7.1 Aggregated Shapley values
+
+- **What and why.** A global importance built from the local attributions over a representative set
+  of data points (thesis §6.2, p.143). It needs a rotation and a Shapley computation for each point.
+- **Decision:** future improvement, named in the paper (B15).
+- **Reason:** not recorded.
+- **Code:** a new function after `bl_shapley()`.
+- **Effect:** a new output; no current result changes.
+- **Effort:** high.
+- **Source:** B15; methodology note §5 (Table 5).
+
+#### 1.7.2 Calibrated probabilities from the boundary distance
+
+- **What and why.** Platt scaling on the length of the change vector (Euclidean or Mahalanobis) would
+  give a model-agnostic posterior class probability from the distance to the boundary (thesis §6.4,
+  pp.145–146).
+- **Decision:** future work in the boundary note; no reply covers it.
+- **Reason:** not recorded.
+- **Code:** a new function after `bl_find_boundary()`.
+- **Effect:** a new output; no current result changes.
+- **Effort:** medium.
+- **Source:** `boundary-distance-and-robustness.md` §7.
+
+#### 1.7.3 A Cholesky-whitened diagnostic plot
+
+- **What and why.** A plot of the whitened decomposition ($u_k^2$) across the training set, without
+  a claim of per-feature attribution. It is useful when the Mahalanobis check's percentage is large.
+- **Decision:** future work in the boundary note; no reply covers it.
+- **Reason:** it has not been requested (`boundary-distance-and-robustness.md` §7).
+- **Code:** `plot.bl_boundary()`.
+- **Effect:** a new display; no result changes.
+- **Effort:** low.
+- **Source:** `boundary-distance-and-robustness.md` §4.2, §7.
+
+### 1.8 New capabilities
+
+#### 1.8.1 Multi-class models
+
+- **What and why.** The method explains binary classifiers. A multi-class model is explained one
+  class at a time (the class of interest as 1, the others as 0), so the counterfactual leaves that
+  class rather than moving towards a specific other class. One boundary per pair of classes, for
+  example through linear discriminant analysis (`MASS::lda()` in `bl_wrap_model()`, or a
+  `bl_fit_lda()`), would extend the method. The CVA biplot already separates more than two groups.
+- **Decision:** future improvement, named in the paper as a key area of future research (B17).
+- **Reason:** a multi-class model is "currently resolved by only targeting one of the multi classes
+  as 1, the rest as 0, so counterfactual is out of the target class, not towards a specific class"
+  (the reply on B17).
+- **Code:** `bl_wrap_model()`, `.pred_function()`, the grid, both searches.
+- **Effect:** a new capability; binary results do not change.
+- **Effort:** high.
+- **Source:** B17; methodology note §5 (Table 5); `2 implementation_summary.txt` §4.1.
+
+#### 1.8.2 A CVA biplot for a singular W ($p>n$)
+
+- **What and why.** **W** is singular for wide data. The generalised SVD of Ganey & Gardner-Lubbe
+  (2026, *Statistical Methods & Applications* 35, 825–847; R package `wideRhino`) gives a CVA biplot
+  in this case.
+- **Decision:** future improvement, named in the paper (B16).
+- **Reason:** not recorded.
+- **Code:** `bl_build_projection()`.
+- **Effect:** a new capability; no current result changes.
+- **Effort:** medium to high.
+- **Source:** B16; methodology note §5 (Table 5).
+
+#### 1.8.3 A different transformation per feature
+
+- **What and why.** `bl_set_scaling()` records one affine method for all features (each with its own
+  centre and scale). A transformation per feature (z-score, min-max, log or Box-Cox, none) would help
+  skewed or mixed-scale features. A non-affine inverse needs calibrated non-linear axes, such as the
+  spline-based biplots of Groenen, le Roux & Gardner-Lubbe (2015, *Advances in Data Analysis and
+  Classification* 9, 219–238; biplotEZ's spline axes, `PCOaxes = "splines"`), or a stated "affine
+  only" limit. Display only.
+- **Decision:** future improvement, named in the paper (B18). The reply names spline axes as the
+  future area to incorporate.
+- **Reason:** not recorded.
+- **Code:** `bl_set_scaling()`, `.bl_rescale_biplot_axes()`, `.scale_to_raw()`, `bl_apply_scaling()`.
+- **Effect:** none (display only).
+- **Effort:** medium.
+- **Source:** B18; methodology note §5 (Table 5); `scaling_axis_relabel_note.md`.
+
+---
+
+## 2. Code and interface
+
+These change no result at the defaults.
+
+### 2.1 Keeping every pair's plane and boundary point
+
+- **What and why.** `bl_find_local_cf()` searches every pair, but keeps the plane, grid and boundary
+  point of the winning pair only; the other pairs keep only their distances. Storing each pair's
+  `Vr_rot`, `tVr_rot`, `B_x`, `B_z`, `B_pred` and distances (for example when `keep_pairs = TRUE`),
+  with a pair's grid rebuilt on demand for plotting, would allow a figure of the search across
+  planes, the alternative counterfactuals on their own planes, and §1.3.3's retry.
+- **Decision:** future improvement, named in the paper (A2, option (b), sentence (ii)).
+- **Reason:** nothing in Paper 1 needs the other planes (A2). Its figure 6 already shows the search as
+  a dot chart of the per-pair distances.
+- **Code:** the result of `bl_find_local_cf()`.
+- **Effect:** none.
+- **Effort:** low to medium.
+- **Source:** A2; methodology note §5 (Table 5).
+
+### 2.2 Smaller interface changes
+
+#### 2.2.1 A configurable `"fixed"` tolerance
+
+- **What and why.** `.fixed_tol` is 0.5 model units for every feature, and no argument changes it. In
+  the raw-unit Pima model that is half a pregnancy or half a year; on a standardised model it is half
+  a training SD (±3,001 for `loan_amnt` on the loan harness). So it suits features measured in whole
+  units, but not features on a small scale. Too tight leaves no candidates; too loose makes the
+  restore fail more often. A `fixed_tol` argument (one number, or a named vector per
+  feature; possibly in raw units or as a fraction of the within-class SD, `sqrt(diag(W))`), with a
+  default equal to 0.5 model units, would suit features measured on different scales.
+- **Decision:** future improvement, named in the paper (A4, option (c)), against the recommendation
+  to fix it now.
+- **Reason:** not recorded.
+- **Code:** `.fixed_tol`, `.apply_actionability()`, `bl_find_local_cf()`.
+- **Effect:** none at the default.
+- **Effort:** low.
+- **Source:** A4; methodology note §3.7, §5 (Table 5).
+
+#### 2.2.2 A per-row feasibility flag in the global search
+
+- **What and why.** `bl_find_boundary()` keeps counterfactuals outside the training ranges and
+  reports only their number (10 of 313 training rows and 5 of 79 test rows on the 4-feature Pima
+  model). A flag per row would show which. An option to filter by the ranges before the selection
+  would offer the thesis's rule (§3.10 step 4, p.93).
+- **Decision:** future improvement, on its own, not in the paper (B11).
+- **Reason:** on the seven-feature model that Paper 1 uses for Phase 2, no global counterfactual falls
+  outside the training ranges (0 of 313 training and 0 of 79 test rows), so the paper needs no
+  sentence on it (B11).
+- **Code:** `bl_find_boundary()`.
+- **Effect:** none at the default.
+- **Effort:** low.
+- **Source:** B11; methodology note §3.3, §5 (Table 5).
+
+#### 2.2.3 Pair control
+
+- **What and why.** `max_pairs = 1L` forces pair (1,2), but no other pair can be forced. A
+  `pairs =` argument would force any pair. A `max_pairs` default tied to $\binom{p}{2}$ would make
+  the default cover every pair for any $p$: the default of 21 covers every pair up to $p=7$, and from
+  $p=8$ it leaves out every pair that involves the highest components.
+- **Decision:** future improvement, not in the paper (B8).
+- **Reason:** not recorded. The form notes that it changes nothing for $p\le7$, where the default
+  already searches every pair.
+- **Code:** `bl_find_local_cf()`, `.generate_pairs()`.
+- **Effect:** none at the default for $p\le7$.
+- **Effort:** low.
+- **Source:** B8; rotation note §4.7.
+
+#### 2.2.4 The pair label in output
+
+- **What and why.** Report how far the selected plane lies from the eigenplane its pair names: the
+  angle $\theta$, or the overlap. The angle does not predict the overlap: among 74 cases with
+  $\theta<5°$ the overlap spans 0% to 100% (rotation note §4.2).
+- **Decision:** further work (this item). B3 settled the wording only: the help
+  pages and Paper 1 say "component pair", and that the selected plane need not coincide with the
+  plane of the two components that name it.
+- **Reason:** not recorded.
+- **Code:** `print.bl_local_result()`, and `bl_find_local_cf()` to compute it.
+- **Effect:** none (output only).
+- **Effort:** low.
+- **Source:** rotation note §4.2; B3.
+
+#### 2.2.5 A switch for the empty-region rule
+
+- **What and why.** With the hull on, the local search drops a closed boundary line that encloses no
+  training data on the plane (`.encloses_data()`; thesis §3.10 step 4, p.93), and `set_filters()` has
+  no switch to turn that part off on its own. A switch (for example
+  `set_filters(empty_region = TRUE)`) would let a user show what the rule changes, as the Pima
+  example's patient C does by replacing the helper inside the script
+  (`without_empty_region_rule()` in `scripts/paper1-pima/00_setup.R`).
+- **Decision:** a possible future development, listed with Pima issue 17 (2026-11-15).
+- **Reason:** the current method is complete without one (Pima issue 17), and a switch in
+  `set_filters()` would be a package change after tag v0.2.0, which Paper 1 pins (the review plan of
+  2026-11-15, assumption 6).
+- **Code:** `set_filters()`, `.filter_switches()`, `bl_find_local_cf()`.
+- **Effect:** none at the default.
+- **Effort:** low.
+- **Source:** Pima issue 17 (2026-11-15); `local-convex-hull.md`; `algorithms.md` F2.
+
+#### 2.2.6 `new_title` for `plot.bl_projection()`
+
+- **What and why.** Every other biplot plot method accepts `new_title = NA` for a custom title
+  (CLAUDE.md §5). `plot.bl_projection()` does not: its `...` is ignored. Adding it would make the
+  plot methods uniform.
+- **Decision:** future development (2026-11-15).
+- **Reason:** adding it after tag v0.2.0 would change the API that Paper 1 pins.
+- **Code:** `plot.bl_projection()`.
+- **Effect:** none.
+- **Effort:** low.
+- **Source:** the review plan of 2026-11-15 (`.claude/plans/before-the-next-steps-temporal-storm.md`,
+  WP4 and assumption 2); CLAUDE.md §5 (the `new_title` rule).
+
+### 2.3 Behaviours of the code (`algorithms.md` §7)
+
+On 2026-11-06 these three behaviours were recorded as notes, with no code change
+(`.claude/reference/algorithms-findings-fixes-plan.md`). Each describes something that could be
+developed.
+
+#### 2.3.1 The global search's zero test (F1)
+
+- **What and why.** `bl_find_boundary()` combines the two opposite-side choices by adding matrices
+  with zeros for the side not used, then sets any row whose `B_z` is exactly $(0,0)$ to NA. A row
+  with no opposite-side contour is already NA, so the test never marks a missing row; it can only
+  turn a real boundary point at the biplot's origin into NA. When every surviving contour lies on one
+  side, the rows predicted on that side get NA, the test is NA for them, and `if (any(zero_rows))`
+  stops with "missing value where TRUE/FALSE needed". The empty result (`.empty_return()`) returns
+  `B_z` as zeros, not NA. Recording the rows without an opposite-side contour explicitly, as NA, would
+  let the search return a result in that case.
+- **Decision:** keep unchanged; a comment at the test in `bl_find_boundary()` and `algorithms.md` F1
+  record the stop (2026-11-06).
+- **Reason:** not recorded.
+- **Code:** `bl_find_boundary()` (the zero test, `.empty_return()`).
+- **Effect:** none where the search runs now; the case that stops would return NA rows instead.
+- **Effort:** low.
+- **Source:** `algorithms.md` §7 F1; `.claude/reference/algorithms-findings-fixes-plan.md`.
+
+#### 2.3.2 A Gini that does not depend on the row order (F5)
+
+- **What and why.** `calc_gini()` sorts by score and does not average tied scores. With scores
+  floored to 3 decimals, ties are common, so the Gini can change with the row order. Averaging over
+  tied scores would make it independent of the order.
+- **Decision:** accept, and note it (2026-11-06).
+- **Reason:** not recorded.
+- **Code:** `calc_gini()` (called by `bl_fit_model()` and `bl_wrap_model()`).
+- **Effect:** the reported Gini only. No algorithm uses it: it is stored in `bl_model` and
+  `bl_result`, and printed.
+- **Effort:** low.
+- **Source:** `algorithms.md` §7 F5; `.claude/reference/algorithms-findings-fixes-plan.md`.
+
+#### 2.3.3 Caching coalition scores in the exact Shapley method (F7)
+
+- **What and why.** The exact method scores each coalition $T$ again for every $S\cup\{j\}=T$, with no
+  caching: for $p=7$, about 575 scorings for 128 coalitions. Scoring each coalition once would save
+  time.
+- **Decision:** note it; no change (2026-11-06).
+- **Reason:** not recorded.
+- **Code:** `.shapley_exact_one()`, `.build_rows_from_masks()`.
+- **Effect:** none on the values; time only.
+- **Effort:** low.
+- **Source:** `algorithms.md` §7 F7; `.claude/reference/algorithms-findings-fixes-plan.md`.
+
+### 2.4 biplotEZ display add-ons
+
+- **What and why.** `plot_biplotEZ()` uses only a thin slice of biplotEZ's rendering API: `axes()` on
+  a blank canvas (`samples(opacity = 0)`), with the package's own grid, points, contours and target
+  marker drawn on top. biplotEZ offers more, none of it wired into `plot_biplotEZ()`,
+  `plot.bl_local_result()` or `plot.bl_surrogate()`. The candidates, with the walkthrough's notes:
+
+  | biplotEZ function | What it would add | Note |
+  |---|---|---|
+  | `means()` | Class or group mean markers and labels | Needs grouping by outcome group (TP/TN/FP/FN) to fit the package's colours |
+  | `alpha.bags()` | Alpha-bag contours: the region holding alpha% of a class's points | A density-based summary region per class |
+  | `ellipses()` | Kappa concentration ellipses per class | A parametric alternative to alpha-bags |
+  | `density1D()` / `density2D()` | Kernel density curves or heatmaps over the biplot | An alternative or complement to the probability-coloured grid |
+  | `legend.type()` | An in-plot legend for samples, means, bags, ellipses and regions | The package prints a text summary to the console instead |
+  | `newsamples()` / `newaxes()` | Supplementary points or axes, styled apart from the primary biplot | Could set external data apart from the training and test overlays |
+  | `interpolate()` | Projects a new dataset onto a fitted biplot object | A different mechanism from `bl_project_points()`, which uses `bl_result$V` and `X_center` directly |
+  | `classification()` / `prediction()` | biplotEZ's own classification regions and prediction overlays | An alternative to the package's prediction grid and contours |
+  | `fit.measures()` | Quality-of-fit diagnostics (overall quality, axis, sample and class predictivity) | Not visual, but could help decide which additions are worth making |
+
+  The walkthrough rates three groups as not useful: `regress()` (an alternative construction, not an
+  addition to the PCA/CVA biplot); `rotate()`, `reflect()` and `translate_axes()` (the package has
+  its own rotation, `.apply_biplot_rotation()`, which keeps the grid, contours and target in step);
+  and `CA()`, `CATPCA()`, `PCO()`, `AoD()`, `CLPs()`, `CLRs()` (for categorical or distance data, not
+  continuous features).
+- **Decision:** candidates for future additions in the Phase 1 walkthrough; no reply covers them.
+- **Reason:** each would be new, scoped feature work. `plot_biplotEZ()` uses a thin slice of
+  biplotEZ on purpose: the package needs full control over the outcome-group colours, the
+  prediction-probability surface, the boundary contours and the synchronised rotation, and none of
+  these map cleanly onto biplotEZ's group-driven sample styling.
+- **Code:** `plot_biplotEZ()`, `plot.bl_local_result()`, `plot.bl_surrogate()`.
+- **Effect:** display only; no result changes.
+- **Effort:** not estimated.
+- **Source:** Phase 1 walkthrough (`development/reference/review_section4_to_6.md`, "biplotEZ visual
+  features").
+
+---
+
+## 3. Tests
+
+The tests cover the code paths and the display rules. These would pin computed values, or check
+them on other platforms.
+
+### 3.1 Values of computed results
+
+- **What and why.** Tests of the values of the `bl_find_local_cf()` boundary point, the Shapley
+  values on a real model, `bl_robustness()`, `bl_surrogate()` and `bl_build_result()`. The local
+  plane depends on the linear-algebra routine (§1.1), so values need a tolerance and a stated
+  platform, or §1.1 first. The design agreed before the tests were deferred (B21, option (a)):
+  - property tests everywhere: the counterfactual crosses the cutoff, meets every constraint and the
+    training ranges, its distances recompute from its values, and the chosen pair minimises the
+    distance;
+  - exact values for everything that does not depend on the plane;
+  - exact values of the local search on Windows only (`skip_on_os()`), with a comment that points to
+    §1.1;
+  - the data: iris as two classes, and one test on the bundled Pima file.
+- **Decision:** future improvement, not in the paper; it goes with CRAN preparation (§4.2) (B21,
+  Round 4).
+- **Reason:** the user's instruction (Round 4): "I don't want the tests. It must only work on my
+  computer. There can be a note in the paper that this may be a problem." The tests are needed only
+  if the package is used beyond that computer.
+- **Code:** `tests/testthat/`.
+- **Effect:** none.
+- **Effort:** not estimated.
+- **Source:** B21.
+
+### 3.2 The CVA identity
+
+- **What and why.** A test that $d^2_M=(n-g)\,d_Z^2$ for every pair, including two-group CVA
+  (rotation note §3.4). The identity follows from biplotEZ's CVA scaling,
+  $\mathbf{V}'\mathbf{W}\mathbf{V}=\mathbf{I}/(n-g)$; the per-pair rotation cancels, so it holds
+  for the current rotation and for the minimal one alike. `17_3` §11 asserts it; `tests/testthat/`
+  does not.
+- **Decision:** future improvement, not in the paper, with §3.1 (B5, Round 4).
+- **Reason:** as §3.1: no tests now, since the package only has to work on the user's computer
+  (Round 4).
+- **Code:** `tests/testthat/`.
+- **Effect:** none.
+- **Effort:** low (about ten lines).
+- **Source:** B5; rotation note §3.4.
+
+### 3.3 Cross-platform reproducibility
+
+- **What and why.** Re-run the Pima pipeline (`run_all.R`, `tests.R`), the loan harness and `17_3` on
+  Linux and macOS, and on other BLAS/LAPACK builds (for example OpenBLAS), for example through GitHub
+  Actions, and compare `numbers.rds`. Because of §1.1, small numerical differences matter: ordering
+  the CVA groups as the thesis code did changes **V** by no more than 5.0e-17, and the Pima TP target's
+  run 1 then has no counterfactual (no whole number of pregnancies near the new search point crosses),
+  against pair (3,4) at 1.82 with the package's order (methodology note §3.12 and Table 4,
+  measurement K3).
+- **Decision:** future improvement, named in the paper, with a mitigation (B2, option (a)): the paper
+  states the platform (R 4.6.0 on Windows) and that the local plane is under-determined, and the
+  supplement includes `sessionInfo()`.
+- **Reason:** the user's instruction (Round 4): the package only has to work on the user's computer,
+  with a note in the paper that this may be a problem. A check was also not practical (B2, Round 2):
+  no Linux distribution is installed under WSL on this machine, and `scripts/` is gitignored, so
+  GitHub Actions cannot run the Pima scripts until they are in a repository.
+- **Code:** none (a check, not a change).
+- **Effect:** none; it tests whether the results reproduce.
+- **Effort:** low: about half a session for one GitHub Actions run, once the scripts are in the
+  paper repository (B2, option (b)).
+- **Source:** B2; rotation note §4.1; methodology note §3.12, §5 (Table 5).
+
+### 3.4 The acceptance tests of §1.1's proposal
+
+- **What and why.** Seven acceptance tests decide whether §1.1's minimal rotation can replace the
+  current one. `17_3_minimal-rotation-verification.R` runs them all; tests 1, 2, 3 and 6 are asserted,
+  so the script fails if they stop holding. Tests 4, 5 and 7 are incomplete:
+
+  | # | Test | Runs in | Status |
+  |---|---|---|---|
+  | 1 | **Exactness:** $x_t \in \operatorname{span}(\mathbf{V}_r)$ to about 1e-12 for every candidate | `17_3` §2 | Asserted; residuals 1.1e-15 to 4.2e-15, all six pairs |
+  | 2 | **Determinism:** identical across at least 5 calls and across BLAS/LAPACK builds | `17_3` §3 | Asserted bit-identical across 5 calls; across builds not yet run (§3.3) |
+  | 3 | **Minimality / label integrity:** principal angles $(0,\theta)$ exactly | `17_3` §2 | Asserted; the first angle 0.00e+00 and the second $\theta$, all six pairs |
+  | 4 | **Monotonicity:** the family optimum is at most the current distance, per target | `17_3` §7, §8 | Asserted and holding at both targets, but the family figure comes from the stage-1 ray scan and the package figure from its own 200×200 grid. Needs stage 2 re-run on the winning plane for a like-for-like number, and a sweep over all rows to show what the label sample costs |
+  | 5 | **Variance retained:** adequacy, axis predictivity, RSS at $\mathbf{J}=\operatorname{diag}(1,1,0,\ldots)$, minimal against current | — | Not run. Reuse the diagnostic block of `17_1` §13 / `17_2` §11 |
+  | 6 | **Thesis reproduction:** the 28.14° at $p=2$, $r=1$ | `17_3` §10 | Asserted; 28.1411°, matching Procrustes to 6.75e-14 |
+  | 7 | **Cost** | `17_3` §9 | Measured at $p=3$ and reported, not asserted (wall clock depends on the machine); $p\ge4$ not yet timed |
+
+  `17_3` also asserts two properties of the current package: within-platform determinism (§5, §8b;
+  rotation note A.2) and the CVA identity (§11; §3.2).
+- **Decision:** future work, with §1.1 (B1: "The acceptance tests 4, 5 and 7 (§6.1) are
+  incomplete").
+- **Reason:** they are needed only before §1.1 replaces the current rotation, and §1.1 follows
+  Paper 1 (B1).
+- **Code:** `biplot-rotation/17_3_minimal-rotation-verification.R`.
+- **Effect:** none.
+- **Effort:** not estimated.
+- **Source:** B1; rotation note §5.
+
+---
+
+## 4. Documentation and release
+
+### 4.1 A vignette on the mathematical method
+
+- **What and why.** A vignette that derives the biplot projection and the counterfactual geometry
+  from first principles.
+- **Decision:** future improvement, not in the paper (B22).
+- **Reason:** not recorded.
+- **Code:** `vignettes/`.
+- **Effect:** none.
+- **Effort:** not estimated.
+- **Source:** B22.
+
+### 4.2 CRAN preparation
+
+- **What and why.** The checks, examples within the time limits, and the submission, with §3.1's
+  tests.
+- **Decision:** future improvement, not in the paper (B23).
+- **Reason:** not recorded at the decision (Round 2). Round 4 records that the package only has to
+  work on the user's computer, and puts the tests (§3.1, §3.2) with CRAN preparation.
+- **Code:** the whole package.
+- **Effect:** none.
+- **Effort:** not estimated.
+- **Source:** B23.
+
+### 4.3 DESCRIPTION and `.Rbuildignore` at the next version
+
+- **What and why.**
+  - DESCRIPTION has no `URL` or `BugReports` field. Both could point to the GitHub repository
+    (`AI-Rowan/boundary_logic`, and its issues page), so that the help index, pkgdown and a CRAN page
+    link to the source and to the place to report problems. Its `Date` (2026-11-05) is also stale.
+  - `.Rbuildignore` has a redundant line (`^scripts/pima\ diabetes\.csv`, already covered by
+    `^scripts`) and lacks one; the review plan does not name the missing line
+    (`outputs_dev_oos/`, a gitignored folder at the root, has none).
+- **Decision:** not edited now; they go to the next version (the review plan of 2026-11-15,
+  assumption 4).
+- **Reason:** DESCRIPTION is not edited after tag v0.2.0, which Paper 1 pins: "its date and the
+  missing `URL` go to the next version" (assumption 4).
+- **Code:** DESCRIPTION, `.Rbuildignore`.
+- **Effect:** none.
+- **Effort:** low.
+- **Source:** the review plan of 2026-11-15 (`.claude/plans/before-the-next-steps-temporal-storm.md`,
+  WP4, assumption 4 and Appendix A).
+
+### 4.4 A help page for the bundled Pima data
+
+- **What and why.** The README's Pima example reads `inst/extdata/pima_diabetes.csv` (768 rows; the
+  class column `Outcome`), but `R/datasets.R` documents only `loan_data`. A help page would give the
+  data's source, its columns, and the zeros that mark missing values (the README keeps complete rows
+  only).
+- **Decision:** future development (2026-11-15).
+- **Reason:** not recorded.
+- **Code:** `R/datasets.R`, `man/`.
+- **Effect:** none.
+- **Effort:** low.
+- **Source:** the review plan of 2026-11-15 (WP4); README ("Bringing your own model").
+
+### 4.5 The plot display arguments
+
+- **What and why.** No note explains the display arguments of the plot methods; only their roxygen
+  help and the walkthroughs do:
+  - `ticks_v`, `ticks_var`, `ticks_n` (tick marks per axis) and `label_offset_var`,
+    `label_offset_dist` (labels moved outward), in `plot_biplotEZ()`, `plot.bl_local_result()` and
+    `plot.bl_surrogate()`, with their pairing rule (each distance or count pairs with its variable by
+    position; `.make_label_line_vec()`, `.make_ticks_vec()`);
+  - `grid_col` (a two-colour grid split at the model's cutoff) and `confusion_cols` (outcome-group
+    colours or predicted-class colours), in `plot_biplotEZ()`;
+  - `show_arrows`, in `plot.bl_local_result()`, `plot.bl_sparse_result()` and `bl_pick_point()`;
+  - `no_grid` and `plot_points`, in `plot_biplotEZ()` and `plot.bl_local_result()` (where
+    `plot_points` has different defaults).
+
+  A section of a note, for example next to the "Display conventions" of
+  `scaling_axis_relabel_note.md`, would explain them, with the advice for figures (CLAUDE.md §5:
+  `ticks_v = 4L`, and `ticks_var`/`ticks_n` for a short axis).
+- **Decision:** future development (2026-11-15).
+- **Reason:** not recorded.
+- **Code:** none (documentation); the roxygen is in `R/plot_biplot.R`, `R/local_cf.R`,
+  `R/surrogate.R`, `R/shapley.R` and `R/pick_point.R`.
+- **Effect:** none.
+- **Effort:** low.
+- **Source:** the review plan of 2026-11-15 (WP4).
+
+---
+
+# Appendix: The replies of 2026-11-05
+
+**Status (2026-11-16).** This is the reply form "Future Improvements Review: Replies on the Open
+Items", written and answered on 2026-11-05. On 2026-11-16 it was moved here from
+`documentation/methodology-changes/future-improvements-review.md`, and its code line numbers were
+replaced by function and section names; its wording is otherwise unchanged. It is the dated record
+of the decisions; Part 1 holds the current list. Later work superseded these statements:
+- **The local hull (Round 4's summary and B10).** Round 4 records the hull on each rotated plane as
+  built from the training data and the target, with no enclosure rule for closed contours, and
+  switched by `hull =` in `bl_find_local_cf()`. Since 2026-11-06 it is built from the training data
+  alone. A contour that is still closed after the clip is kept only if it encloses training data on
+  the plane (the empty-region rule, `.encloses_data()`). The hull's switch is `set_filters(hull =)`,
+  not an argument of `bl_find_local_cf()` (methodology note §3.6; `documentation/local-convex-hull.md`).
+- **B2's measurement K3.** Its TP numbers (pair (2,3) to (1,3), distance 1.42 to 1.70) predate the
+  hull. With the hull, ordering the CVA groups as the thesis code did leaves the TP target with no
+  counterfactual, against pair (3,4) at 1.82 with the package's order (methodology note §3.12 and
+  Table 4).
+- **A5 and A6.** "Only TP run 4 has a counterfactual" predates the hull: with the hull, TP run 4 has
+  none either. Of the six runs with a fixed variable for the TP and TN targets, only the TN target's
+  run 7 (added later) has one (methodology note §3.7).
 
 **Author of the replies:** Adriaan Rowan
 **Prepared by:** Claude, from the package's notes as of commit `12b38e4` (branch `paper_nr1_changes`)
+**Source of Part A:** the former `documentation/known-issues.md` (removed on 2026-11-05 once every
+item was decided; in git history at `c13fe44`).
 **Companion documents** (paths are relative to the package root):
-- `documentation/known-issues.md`: the source of Part A (removed on 2026-11-05 once every item was
-  decided; in git history at `c13fe44`);
 - `documentation/biplot-rotation/biplot_rotation_and_pair_selection.md`, §4 and §6: the rotation's
   problems and further work;
 - `documentation/fixed-constraint-restore.md`, §8: the follow-up searches for `"fixed"` and
   `"integer"`;
-- `documentation/methodology-changes/methodology-changes.md`: §5 (possible future changes) and
-  §6 (interpretation points);
-- `CLAUDE.md`, §9: deferred work;
+- `documentation/methodology-changes/methodology-changes.md`: §5 (future work); the interpretation
+  points are in §3.6 and §3.12;
+- Part 1 of this file: the future developments, formerly CLAUDE.md §9's deferred work;
 - `.claude/reference/future-improvements-hull-plan.md`: the plan behind this form.
+
+The future items of these notes are now in Part 1.
 
 ---
 
@@ -55,7 +752,7 @@ The rounds continue until every item's **Status** reads "Resolved".
   `documentation/methodology-changes/method-change-effects.csv`.
 - Phase 3 runs on the GAM refitted on four features (*Pregnancies*, *Glucose*, *Insulin*, *Age*).
 - √d²_M is the Mahalanobis distance from the target.
-- Line numbers are as of 2026-11-05.
+- Code is cited by function (the form's line numbers of 2026-11-05 were replaced on 2026-11-16).
 
 **The runs in Table 1:**
 
@@ -170,8 +867,8 @@ Steps 1 to 5 are done; nothing is committed. `devtools::test()` gives 465 PASS, 
   searched*, which may be further away than the nearest point of the full boundary.
 - Paper 1's distances are therefore upper bounds of unknown tightness. Nobody has measured the gap.
 
-**Where.** The global contour is at `R/biplot_grid.R:277` (used by `bl_find_boundary()`). The local
-contour, built per pair in `bl_find_local_cf()`, is at `R/local_cf.R:736`.
+**Where.** The global contour is built in `bl_build_grid()` (used by `bl_find_boundary()`). The local
+contour is built per pair in the pair loop of `bl_find_local_cf()`.
 
 **Effect on Paper 1.** None on the numbers. The paper can only say the distances are upper bounds.
 Paper 1 also has no comparison with other methods (paper plan §9), so this is a likely reviewer
@@ -347,8 +1044,8 @@ further)." Status: Resolved.
 - The `"fixed"` restore and the `"integer"` rounding are tried on the winning pair's point only. A
   target can therefore lose a counterfactual that another pair's point would have given (see B12).
 
-**Where.** The per-pair distances are recorded at `R/local_cf.R:684` (`all_distances_mahalanobis`).
-`best_result` overwrites the plane and the point at `R/local_cf.R:865`.
+**Where.** The per-pair distances are recorded in the pair loop of `bl_find_local_cf()`
+(`all_distances_mahalanobis`). `best_result` overwrites the plane and the point in the same loop.
 
 **Effect on Paper 1.** None on the numbers. Figure 6 already shows the search as a dot chart of the
 per-pair distances.
@@ -415,8 +1112,9 @@ work, I suggest a second sentence that names the improvement:
 FN red. Every other biplot uses the thesis scheme: TP red, TN blue, FP purple, FN orange. So red
 means FN in one plot and TP in the others.
 
-**Where.** The odd one out is `R/projection.R:320` (`col_map`). The thesis scheme is at
-`R/boundary_plot.R:170`, `R/project_points.R:129` and `R/local_cf.R:1682`.
+**Where.** The odd one out was the colour map set in `bl_build_projection()`, which
+`plot.bl_projection()` uses. The thesis scheme was in `plot.bl_boundary()`, `bl_project_points()`
+and `plot.bl_local_result()`. Since A3's fix all four use `.confusion_cols` (`R/utils.R`).
 
 **Effect on Paper 1.** None. Paper 1 does not use `plot.bl_projection()`.
 
@@ -471,7 +1169,7 @@ Comments:
   pregnancy or half a year. On the standardised loan harness it is half a training SD (±3,001 for
   `loan_amnt`).
 
-**Where.** `R/local_cf.R:94` (`.fixed_tol <- 0.5`).
+**Where.** `.fixed_tol <- 0.5` (`R/local_cf.R`).
 
 **Effect on Paper 1.**
 - **Too tight leaves no candidates.** TP run 3 (*Pregnancies* and *Age* fixed) has no boundary point
@@ -535,7 +1233,7 @@ constraints. Its second half goes in the future-work paragraph on constraints (s
   back to their observed values, no longer crosses the boundary, no counterfactual is reported.
 - This happens even when a counterfactual that holds the fixed variables exists.
 
-**Where.** `R/local_cf.R:1067` (`.restore_fixed()`). Also `documentation/fixed-constraint-restore.md`
+**Where.** `.restore_fixed()` (`R/local_cf.R`). Also `documentation/fixed-constraint-restore.md`
 §4 and §8 (first bullet).
 
 **Effect on Paper 1.**
@@ -611,7 +1309,7 @@ Comments:
 variables are held only by the tolerance during the search and by the restore afterwards. With half
 the variables fixed, few points on a 2D plane hold them.
 
-**Where.** `.bl_rotate()` is at `R/local_cf.R:45`, and the pair loop at `R/local_cf.R:688`. Also
+**Where.** `.bl_rotate()`, and the pair loop of `bl_find_local_cf()` (both in `R/local_cf.R`). Also
 `documentation/fixed-constraint-restore.md` §8 (second bullet).
 
 **Effect on Paper 1.** The same as A5: with two of the four variables fixed, only TP run 4 has a
@@ -677,7 +1375,7 @@ Comments:
 - When the nearer whole value does not cross the boundary, the further one is taken. This happens
   even when a small change in the free variables would let the nearer one cross.
 
-**Where.** `R/local_cf.R:1161` (`.round_integers()`). Also `documentation/fixed-constraint-restore.md`
+**Where.** `.round_integers()` (`R/local_cf.R`). Also `documentation/fixed-constraint-restore.md`
 §5.
 
 **Effect on Paper 1.**
@@ -750,8 +1448,8 @@ its numbers against `table1.csv`: the distance rises from 0.1405 to 0.4191, a fa
 - `bl_find_local_cf()` returns no counterfactual: the constraints eliminate every segment on all 15
   pairs (re-run on 2026-11-04).
 
-**Where.** The example is at `README.md:188`, and its set-up (the GAM and `bl_results_pima`) at
-`README.md:136`.
+**Where.** The example is in the README's "Actionability constraints" section, and its set-up (the
+GAM and `bl_results_pima`) in its "Bringing your own model" section.
 
 **Effect on Paper 1.** None on the numbers. But the paper will point readers and reviewers to the
 package, and the README is the first thing they will run.
@@ -819,8 +1517,9 @@ the fallbacks as written. A8.2: the printed result, plus the sentence on `blocki
 **Today.** The first-pass result in the loan harness is titled "Loan default (prior defaulters) --
 XGB, CVA biplot". But Step 3 keeps only the applicants **without** a prior default on file.
 
-**Where.** The title is at `development/03_loan_status_Boundary_Logic.R:251` and the filter at
-`:142`. The walkthrough quotes the title at `development/reference/review_section4_to_6.md:358`.
+**Where.** The title is in the `bl_build_result()` call of Steps 4–6 of
+`development/03_loan_status_Boundary_Logic.R`, and the filter in its Step 3. The walkthrough quotes
+the title in §6 of `development/reference/review_section4_to_6.md`.
 
 **Effect on Paper 1.** None.
 

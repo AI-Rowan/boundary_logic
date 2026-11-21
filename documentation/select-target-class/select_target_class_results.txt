@@ -1,4 +1,4 @@
-boundarylogic version : 0.1.0
+boundarylogic version : 0.2.0
 rows after zero filter: 392
 training rows         : 313
 test rows             : 79

@@ -368,7 +368,7 @@ bl_results <- bl_build_result(
 | `title` | `""` | `"Loan default ... CVA biplot"` | Biplot title; `plot(..., new_title = )` overrides it at plot time |
 | `b_margin` | `0.001` | `0.001` | Half-width of the boundary band: contours at `0.5 ± b_margin` (6.2, item 9) |
 | `m` | `200L` | default | Grid resolution: m × m = 40,000 scored points |
-| `proj_dims` | `c(1L, 2L)` | default | Eigenvectors that span the biplot plane |
+| `proj_dims` | `c(1L, 2L)` | default | The two components (columns of `V`) that span the biplot plane |
 | `standardise` | `TRUE` | default | Ignored here: CVA forces `FALSE` |
 | `cva_classes` | `NULL` | default | CVA groups; `NULL` with a model uses the TP/TN/FP/FN labels |
 | `outlie` | `1` | default | Fraction of training points inside the grid hull; `1` encloses all of them |
@@ -594,8 +594,9 @@ additions:**
 | `CA()`, `CATPCA()`, `PCO()`, `AoD()`, `CLPs()`, `CLRs()` | Alternative biplot constructions for categorical / distance-matrix data | Not applicable to this package's continuous-feature binary-classification setting |
 
 None of the above are wired into `plot_biplotEZ()`, `plot.bl_local_result()`,
-or `plot.bl_surrogate()` today. Adding any of them would be new, scoped feature
-work (see CLAUDE.md Section 9, "Deferred / Future Work").
+or `plot.bl_surrogate()`. Adding any of them would be new, scoped feature
+work; the package's future developments are listed in
+`documentation/future-improvements-review.md`.
 
 **`points` here:** Because no `points=` argument is passed, `plot_biplotEZ()` automatically calls `bl_project_points(bl_results$train_data, bl_results)` internally to project the training data.
 

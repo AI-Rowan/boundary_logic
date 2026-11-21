@@ -139,7 +139,7 @@ vignette sets and the defaults that change the result
 output.</p>
 <blockquote>
 <p><strong>About this vignette:</strong> it is precomputed on the full
-data set. The output shown was produced with boundarylogic 0.2.0 on 6
+data set. The output shown was produced with boundarylogic 0.2.0 on 16
 November 2026.</p>
 </blockquote>
 <hr>
@@ -591,7 +591,8 @@ this way.</p>
 built-in types (<code>"GLM"</code>, <code>"GAM"</code>,
 <code>"GBM"</code>, <code>"LDA"</code>, <code>"SVM"</code>,
 <code>"NNET"</code>, <code>"RForest"</code>, <code>"XGB"</code>) use
-their own prediction call (Step 5b shows <code>"XGB"</code>)</td>
+their own prediction call (the refit in Steps 4b-6b uses
+<code>"XGB"</code>)</td>
 </tr>
 <tr class="even">
 <td><code>var_names</code></td>
@@ -623,7 +624,8 @@ class 1; required for <code>"custom"</code>
 </tbody>
 </table>
 <p>For a quick baseline, <code><a href="../reference/bl_fit_model.html">bl_fit_model()</a></code> fits a GLM, SVM,
-neural network or random forest directly.</p>
+neural network or decision tree (<code>"RForest"</code>, an
+<code>rpart</code> tree) directly.</p>
 <p><strong>Step 6</strong> builds the biplot of the model.
 <code><a href="../reference/bl_build_result.html">bl_build_result()</a></code> projects the training data, lays an
 <code>m</code> × <code>m</code> grid over the plane, maps every grid
@@ -649,7 +651,7 @@ cutoff.</p>
 <span><span class="co">#&gt;   Accuracy     : 0.8280  |  Gini: 0.8093</span></span>
 <span><span class="co">#&gt;   Grid size    : 200 x 200</span></span>
 <span><span class="co">#&gt;   Grid hull    : outlie = 1.00</span></span>
-<span><span class="co">#&gt;   Created      : 2026-11-06 23:16:51</span></span></code></pre></div>
+<span><span class="co">#&gt;   Created      : 2026-11-16 01:13:24</span></span></code></pre></div>
 <p><strong>Parameters: <code><a href="../reference/bl_build_result.html">bl_build_result()</a></code>, with a
 model</strong></p>
 <table class="table">
@@ -1120,7 +1122,7 @@ against 0.8280 for the nine-feature model.</p>
 <span><span class="co">#&gt;   Grid size    : 200 x 200</span></span>
 <span><span class="co">#&gt;   Grid hull    : outlie = 1.00</span></span>
 <span><span class="co">#&gt;   Axis units   : raw (z-score scaling stored)</span></span>
-<span><span class="co">#&gt;   Created      : 2026-11-06 23:17:02</span></span>
+<span><span class="co">#&gt;   Created      : 2026-11-16 01:13:32</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">bl_results_v2</span><span class="op">)</span></span></code></pre></div>
 <div class="figure">
@@ -1482,8 +1484,9 @@ accepts</strong></p>
 <td>The feature keeps its observed value. The search allows it to move
 by up to 0.5 model units (a point on the two-dimensional boundary rarely
 holds a feature exactly), then restores the observed value and re-checks
-the prediction. If the restored point no longer crosses the boundary,
-there is no counterfactual</td>
+the prediction. If the restored point no longer crosses the boundary, or
+leaves a feature’s training range (with
+<code>train_ranges = TRUE</code>), there is no counterfactual</td>
 </tr>
 <tr class="even">
 <td><code>c(min, max)</code></td>
@@ -1998,10 +2001,11 @@ plot of chunk step15-sparse
 <span><span class="co">#&gt;   Sparse CF pred : 0.5420</span></span>
 <span><span class="co">#&gt;   Solution valid : TRUE</span></span>
 <span><span class="co">#&gt; -------------------------</span></span></code></pre>
-<p>Without constraints the counterfactual also raises the loan amount
-and lowers the credit score, changes the constraints rule out, and it
-lies nearer the target (0.56 against 0.69). Its sparse counterfactual
-changes the interest rate and the loan-to-income ratio.</p>
+<p>Without actionability constraints the counterfactual also raises the
+loan amount and lowers the credit score, changes the constraints rule
+out, and it lies nearer the target (0.56 against 0.69). Its sparse
+counterfactual changes the interest rate and the loan-to-income
+ratio.</p>
 <hr>
 </div>
 <div class="section level3">

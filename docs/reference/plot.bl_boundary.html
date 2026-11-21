@@ -116,17 +116,17 @@ percentage of <code>full</code>). <code>NULL</code> for <code>"euclidean"</code>
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Two chart types are available via the <code>type</code> argument:</p><ul><li><p><code>"jitter"</code> (default) — one point per observation per variable, jittered
+    <p>Two chart types are available via the <code>type</code> argument:</p><ul><li><p><code>"jitter"</code> (default) – one point per observation per variable, jittered
 vertically for legibility.</p></li>
-<li><p><code>"boxplot"</code> — box-and-whisker summaries per confusion group and variable.</p></li>
+<li><p><code>"boxplot"</code> – box-and-whisker summaries per confusion group and variable.</p></li>
 </ul></div>
     <div class="section level2">
     <h2 id="colour-scheme">Colour scheme<a class="anchor" aria-label="anchor" href="#colour-scheme"></a></h2>
 
 
-<p>Colours match the biplot convention from <code><a href="bl_project_points.html">bl_project_points()</a></code>:</p><ul><li><p>When true labels are present in the source data: four confusion colours —
+<p>Colours match the biplot convention from <code><a href="bl_project_points.html">bl_project_points()</a></code>:</p><ul><li><p>When true labels are present in the source data: four confusion colours –
 TP (red), TN (blue), FP (purple), FN (orange).</p></li>
-<li><p>When no true labels are available: two colours — predicted class 1 (red),
+<li><p>When no true labels are available: two colours – predicted class 1 (red),
 predicted class 0 (blue).</p></li>
 </ul></div>
     <div class="section level2">
@@ -172,7 +172,7 @@ variable importance and the robustness are measured on the in-plane gap;
 positive values indicate the observation is above the boundary in that
 variable's direction. The vertical line at x = 0 marks the boundary.</p>
 <p>The y-axis label shows <code>"VarName : &lt;total&gt;"</code> where <code>&lt;total&gt;</code> is the sum
-of absolute standardised distances across all observations — a
+of absolute standardised distances across all observations – a
 variable-level importance proxy. Use <code><a href="bl_robustness.html">bl_robustness()</a></code> for the scalar
 total across all variables.</p>
     </div>

@@ -71,12 +71,12 @@ followed by all feature columns.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The returned data frame contains:</p><ul><li><p><code>row</code> — row index (1-based).</p></li>
-<li><p><code>pred_prob</code> — model predicted probability (rounded to 3 d.p.).</p></li>
-<li><p><code>pred_class</code> — predicted class (0 or 1).</p></li>
-<li><p><code>true_class</code> — true class if a <code>"class"</code> column is present
+    <p>The returned data frame contains:</p><ul><li><p><code>row</code> – row index (1-based).</p></li>
+<li><p><code>pred_prob</code> – model predicted probability (rounded to 3 d.p.).</p></li>
+<li><p><code>pred_class</code> – predicted class (0 or 1).</p></li>
+<li><p><code>true_class</code> – true class if a <code>"class"</code> column is present
 in <code>data</code>; otherwise omitted.</p></li>
-<li><p><code>confusion</code> — <code>"TP"</code>, <code>"TN"</code>, <code>"FP"</code>, or
+<li><p><code>confusion</code> – <code>"TP"</code>, <code>"TN"</code>, <code>"FP"</code>, or
 <code>"FN"</code> if true class is known; otherwise omitted.</p></li>
 <li><p>One column per feature variable from <code>bl_result$var_names</code>.</p></li>
 </ul></div>

@@ -45,7 +45,7 @@
 {
   rm(list = ls())
   devtools::load_all()
-  # library(boundary_logic) # alternative if downloaded the package from github
+  # library(boundarylogic) # alternative if downloaded the package from github
 }
 #devtools::check()
 

@@ -22,7 +22,7 @@ A list of class \code{"bl_boundary"} with components:
 \item{\code{B_z}}{n x 2 matrix; Z-space boundary point per observation.}
 \item{\code{B_x}}{Data frame (n x p); X-space counterfactual.}
 \item{\code{B_pred}}{Numeric vector; model probability at counterfactual
-(should be close to \code{cutoff} — validates back-projection quality).}
+(should be close to \code{cutoff} -- validates back-projection quality).}
 \item{\code{dist_z}}{Numeric vector; Euclidean distance obs to boundary
 in Z-space.}
 \item{\code{dist_x}}{Numeric vector; Euclidean distance obs to boundary
@@ -65,7 +65,7 @@ back-projected model prediction is consistent with the contour's
 probability level. The training variable ranges (\code{bl_result$train_ranges})
 are checked \strong{after} the nearest point is selected, not before. Applying
 the range filter as a pre-filter would remove geometrically correct
-candidates — particularly for PCA biplots where back-projecting a 2D
+candidates -- particularly for PCA biplots where back-projecting a 2D
 Z-space point to p-dimensional X-space sets all non-plotted components to
 their mean (rank-2 reconstruction), which can push individual feature
 values outside observed ranges even for Z-space points well inside the

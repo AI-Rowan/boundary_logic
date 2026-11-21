@@ -1,237 +1,214 @@
 # Technical Note: A Deterministic Nearest Boundary Vertex
 
+Date created: 2026-10-30
+Date last edited: 2026-11-16
+
 **Author:** Adriaan Rowan
-**Date:** 2026-10-30
 **Package:** `boundarylogic`
-**Branch:** `paper_nr1_changes`
 **Location:** `documentation/nearest-vertex-tie-break.md`
 **Companion documents (paths relative to this file):**
 - `../2 implementation_summary.txt` Section 4.5 (`bl_find_boundary()`): code mechanics
-- `biplot-rotation/biplot_rotation_and_pair_selection.md` Appendix A.2: the
-  reproducibility findings this note explains
+- `biplot-rotation/biplot_rotation_and_pair_selection.md` Appendix A.2: the within-platform
+  determinism of the local search, which this rule provides for the nearest-vertex step
 - `../tests/testthat/test-boundary.R`: the tests that pin the behaviour
-- `../.claude/reference/nearest-vertex-tie-break-plan.md`: the approved plan that was executed
+- `methodology-changes/methodology-changes.md` §2 and §4 ("Nearest boundary vertex"): the history
+  of this step
 
 ---
 
-## 1. What changed
+## 1. The rule
 
-All three boundary searches find their counterfactual as the contour vertex nearest
-to an observation in the 2D biplot: `bl_find_boundary()` (global), `bl_surrogate()` and
-`bl_find_local_cf()` (local, in each rotated plane). They share one helper,
-`.nearest_idx_block()` in `R/boundary.R`, and one line in it changed:
+All three boundary searches find their counterfactual as the contour vertex nearest to an
+observation in the 2D biplot: `bl_find_boundary()` (global), `bl_surrogate()` (the surrogate
+model's class for each row) and `bl_find_local_cf()` (local, in each rotated plane). They share one
+helper, `.nearest_idx_block()` in `R/boundary.R`, which takes the nearest vertex with
 
-| | Line | Vertex returned |
-|---|---|---|
-| Before | `min_loc <- max.col(-d2)` | A random draw from every vertex "tied" with the nearest, within a tolerance (Section 2) |
-| After | `min_loc <- max.col(-d2, ties.method = "first")` | The exact nearest vertex, or the first one on an exact tie |
+```r
+min_loc <- max.col(-d2, ties.method = "first")
+```
 
-With the change, the three searches are deterministic. The same call on the same
-objects returns the same counterfactual every time, whatever ran before it in the
-session.
+`d2` holds the squared distances from each observation (rows) to each contour vertex (columns), so
+the line returns the column of the row minimum: the exact nearest vertex, or the first one on an
+exact tie.
 
-## 2. The mechanism
+The three searches are therefore deterministic. The same call on the same objects returns the same
+counterfactual every time, whatever ran before it in the session. They use no random numbers, so a
+search neither depends on nor changes the session's random-number state.
 
-`d2` holds squared distances from each observation (rows) to each contour vertex
-(columns), so `max.col(-d2)` was meant to return the column of the row minimum. The
-PhD code that the helper was ported from comments the line "index of min per row". But
-`max.col()`'s default is `ties.method = "random"`, and R documents it as follows
-(`?max.col`):
+## 2. What R's default tie-break would do
+
+`max.col()`'s default is `ties.method = "random"`, and R documents it as follows (`?max.col`):
 
 > When `ties.method = "random"`, as per default, ties are broken at random. In this
 > case, the determination of a tie assumes that the entries are probabilities: there is
 > a relative tolerance of 1e-5, relative to the largest (in magnitude, omitting
 > infinity) entry in the row.
 
-Two features of that rule matter here.
+Two features of that rule would matter here.
 
 1. **The tolerance is relative to the farthest vertex.**
-   - The entries are negated squared distances, so the largest magnitude belongs to the
-     contour vertex farthest from the observation.
-   - Every vertex whose squared distance lies within 1e-5 × (farthest squared distance)
-     of the nearest counts as tied.
-   - The band therefore widens with the size of the contour set and with the
-     observation's distance from it. That is why the loan harness's external applicant,
-     about 116 units from the boundary, was the local result most affected (Section 5).
-2. **The draw uses the session's random-number stream.** The pick therefore depends on
-   the state of that stream, which every earlier call that uses random numbers moves.
-   That includes:
+   - The entries are negated squared distances, so the largest magnitude belongs to the contour
+     vertex farthest from the observation (among the vertices the helper compares at once).
+   - Every vertex whose squared distance lies within about 1e-5 × (farthest squared distance) of
+     the nearest would count as tied.
+   - The band therefore widens with the extent of the contour set and with the observation's
+     distance from it: an observation far from the boundary has the widest band.
+2. **The draw uses the session's random-number stream** (`max.col()` draws only when a row has a
+   tie). The pick would then depend on the state of that stream, which every earlier call that uses
+   random numbers moves. That includes:
    - the searches themselves, since all three call this helper;
    - `set.seed()` inside `bl_prepare_data()`;
    - `bl_shapley(seed = )`;
    - any user code.
 
-   This explains both reproducibility findings the rotation note once recorded (it now
-   records the deterministic behaviour, in its Appendix A.2):
-   - **Call order:** the reported distance depended on what was called before.
-   - **Repeat calls:** `best_pair` flipped across identical calls when a near-tie decided
-     which pair was closest.
+   Under that rule:
+   - **Call order would matter:** a counterfactual would depend on what was called before it.
+   - **Repeat calls could differ:** when a near-tie decides which component pair is closest,
+     `best_pair` could change between identical calls of `bl_find_local_cf()`.
+   - **Two fresh R sessions running the same script would still agree,** because
+     `bl_prepare_data()` calls `set.seed()`, so the same script makes the same draws. A workflow
+     through `bl_wrap_data()`, which seeds nothing, would differ from run to run.
 
-It also explains why two fresh R sessions running the same script agreed with each
-other. `bl_prepare_data()` calls `set.seed()`, so the same script makes the same draws.
-The `bl_wrap_data()` path seeds nothing, which is why the call-order sequence the rotation
-note then recorded differed from run to run.
+The vertices inside the band are almost equidistant from the observation **in the plane**, but they
+can be quite different counterfactuals. Each back-projects to a different feature vector, and the
+model scores that vector, not the plane. Section 5 measures how different on the loan data.
 
-The two tied vertices are almost equidistant from the observation **in the plane**,
-but they can be quite different counterfactuals. Each back-projects to a different
-feature vector, and the model scores that vector, not the plane. In the iris example
-below, the two candidates in pair (1,3) are 1.82300 from the target in the plane (equal
-to five decimals), yet their Mahalanobis distances in feature space are 2.0812 and 2.0852.
+## 3. The thesis's rule
 
-## 3. How it was diagnosed
+The thesis selects the nearest counterfactual (§3.10, step 7, p.93) and states that the biplot
+method is deterministic: it always generates the same counterfactuals from the same projection
+matrices (§3.9.3, "Stability", p.92). Its code in Appendix A takes the nearest boundary point with
+`which.min` (A3, pp.184–185; A6, p.206), which returns the first minimum, with no tolerance.
 
-The test case is the standardised-iris pipeline from `test-boundary.R`: GLM, PCA,
-`m = 60`, `b_margin = 0.01`, target 1. On it, pair (1,3) returned one of two
-counterfactuals.
+R documents `ties.method = "first"` as equal to `unname(apply(m, 1, which.max))`. On `-d2` the
+helper therefore returns what `which.min` returns on `d2`: the package's rule is the thesis's rule,
+not a change of method.
 
-| Check | Result |
-|---|---|
-| `V`, `X_center`, model coefficients, `metric_inv` across 6 rebuilds | bit-identical |
-| Rotation (`.bl_rotate()`), its SVD, the grid, model scores, contours, across 12 calls | bit-identical |
-| 10 calls, no seed | 2 distinct results |
-| `set.seed(42)` before each call | 1 distinct result |
-| Same seed, plus one `runif(1)` before the call | result changes |
-| Same seed, plus 200 `svd()` calls before the call | result unchanged |
-| Tie set at the nearest-vertex step, pair (1,3) | 2 distinct vertices inside the band (band 2.66e-4 in squared distance; farthest squared distance 26.57) |
-| `ties.method = "first"`, 10 calls, no seed | 1 distinct result |
+## 4. What the nearest vertex decides
 
-- **Inputs and computation:** every stage before the nearest-vertex step is
-  bit-identical across calls.
-- **Floating point ruled out:** BLAS is R's 200 KB reference `Rblas.dll`, which is
-  deterministic. That excludes multithreaded floating-point noise.
-- **No mutation:** nothing modifies or caches anything on `bl_result` or `bl_target`.
+The nearest vertex is each search's counterfactual, so it decides every number built on one:
+- **Phase 2:** `bl_find_boundary()`'s `B_z`, `B_x`, `B_pred` and its distances `dist_z`, `dist_x`
+  and `dist_mahalanobis`, and through them the per-variable importance and the robustness of
+  `plot.bl_boundary()` and `bl_robustness()`;
+- **the surrogate:** `bl_surrogate()`'s class for each row, and its accuracy;
+- **Phase 3:** each component pair's boundary point and distance, the best pair and the
+  counterfactual, and with them the Shapley values and the sparse counterfactual.
 
-The only state that changed between calls was the random-number stream, and the only
-consumer of it on the search path was `max.col()`.
+A rule that changed the vertex could move any of these. Section 5 measures how far.
 
-## 4. Origin
+## 5. What a random tie-break would change on the loan harness
 
-The helper is a direct port of the PhD research code. The line is identical in
-`scripts/1.4 Biplot Boundary Search_optimized.R:45` on branch `original_PhD_code`, and
-the PhD local workflow (`4.3 Different Eigenvalues.R`) uses the same boundary search.
-So the random pick is part of the method as it was run for the thesis.
-- **Which thesis numbers carry it:** any counterfactual, distance, robustness score or
-  surrogate accuracy produced by these searches.
-- **How large the effect is:** Section 5 gives the scale on the loan data.
-- **What this means for Task E:** this is a bug fix rather than a change of method,
-  since the thesis describes the *nearest* boundary point. It belongs in the
-  methodology-changes note for the supervisor.
+The measurement patches `.nearest_idx_block()` in a driver (CLAUDE.md §5, "To measure one rule
+alone"): a copy of its body with only `ties.method = "first"` changed to `"random"`. The driver runs
+the loan harness, `development/03_loan_status_Boundary_Logic.R`, with the exact rule, then repeats
+the harness's searches with the random rule, twice without setting a seed and once under each of
+`set.seed(1)` to `set.seed(10)`, and compares every result with the exact rule's. A copy with
+`"first"` left in place reproduces the exact results, and the helper is restored afterwards.
 
-## 5. Measured impact
+### 5.1 The local searches
 
-### 5.1 Loan harness, before and after
-
-Each column is a full run of `development/03_loan_status_Boundary_Logic.R`, and the two
-console logs were diffed. Everything not listed is identical.
-
-| Output | Before | After |
+| Search | Exact rule | Random rule, 12 runs |
 |---|---|---|
-| Phase 1 (data, model, projection, grid) | — | unchanged |
-| Robustness total, v1 / v2 model | 9203.63 / 6813.76 | 9203.29 / 6813.80 |
-| Per-variable totals | — | change in the 2nd decimal; **ranking unchanged**, so the pruned feature set and `bl_results_v2` are identical |
-| Surrogate accuracy vs model, v1 / v2 | 0.8334 / 0.8843 | 0.8337 / 0.8845 |
-| Target 13, constrained and unconstrained local CF, Shapley, sparse CF | — | unchanged |
-| External applicant: CF prediction / sparse CF prediction | 0.488 / 0.427 | 0.368 / 0.347 |
-| External applicant: √d²_M / best pair | 14638.44 / (1,2) | 14638.39 / (1,2) |
+| Target 13, constrained (Step 11) | pair (3,4), √d²_M 0.6934, prediction 0.693 | identical in all 12 |
+| Target 13, unconstrained (Step 15) | pair (3,4), √d²_M 0.5554, prediction 0.542 | identical in all 12 |
+| External applicant (Step 16) | pair (1,2), √d²_M 2.8241, prediction 0.541 | identical in all 12 |
 
-The "before" column is one particular sequence of draws. Section 5.2 measures the spread
-over draws.
+Every pair's distance is identical as well, so here the random rule picks the exact nearest vertex
+each time. These three targets lie close to their boundary, where the band is narrow (Section 2); a
+target far from the boundary could still change.
 
-### 5.2 How much the random pick could move a result
+### 5.2 The global search and the surrogate
 
-The old rule was run under 10 seeds and compared with the exact nearest vertex.
-
-| Search | Result |
-|---|---|
-| Global, v1 model, 4,429 test rows | 51 rows (1.15%) get a different counterfactual under at least one seed (23–31 per seed) |
-| Global, v2 model, 4,429 test rows | 133 rows (3.0%) (59–79 per seed) |
-| Size of those differences (both models) | plane distance changes by < 1e-4, the point in the plane by < 0.004, but the counterfactual's feature values by up to **0.36 training SDs** and its model score by up to **0.18** |
-| Local, target 13 (constrained and unconstrained) | identical under every seed |
-| Local, external applicant | 4 distinct counterfactuals over 10 seeds; CF prediction 0.368 or 0.488 |
-
-Over 62,024 nearest-vertex queries (both global searches and the three local
-calls):
-- 492 (0.79%) had more than one distinct vertex inside the old tie band;
-- **none** had an exact tie between distinct vertices. `ties.method = "first"` therefore
-  never falls back on vertex order in practice.
-
-### 5.3 The rotation note's findings
-
-| Finding | Before | After |
+| | v1 model (9 features) | v2 model (4 features) |
 |---|---|---|
-| call order, `17_3` §8b, row 49: full search / pinned search | 1.147879 or 1.153789 / 1.208670 or 1.202898 | 1.147879 / 1.208670, every call |
-| repeat calls, `17_1` set-up, row 102, five calls | `best_pair` (1,2), (1,3), (1,3), (1,2), (1,3) | (1,2) every call |
+| Test rows with a different counterfactual under at least one of the 10 seeds | 51 of 4,429 (1.15%) | 128 of 4,429 (2.89%) |
+| Rows that change under a single seed | 23–31 | 53–74 |
+| Largest change in the plane distance | 9.6e-5 | 4.5e-5 |
+| Largest move of the point in the plane | 0.0037 | 0.0027 |
+| Largest change in a feature of the counterfactual | 0.36 training SDs | 0.24 training SDs |
+| Largest change in the counterfactual's model score | 0.18 | 0.08 |
+| Robustness: exact rule | 9203.29 | 6790.20 |
+| Robustness: random rule, 10 seeds | 9203.04 to 9204.09 | 6790.06 to 6790.66 |
+| Variable ranking (the pruning order) | unchanged under all 10 seeds | unchanged under all 10 seeds |
+| Surrogate accuracy vs model: exact rule | 0.8337 | 0.8845 |
+| Surrogate accuracy vs model: random rule, 5 seeds | 0.8327 to 0.8337 | 0.8841 to 0.8850 |
 
-For row 102, the exact nearest vertex in pair (1,3) has a squared Mahalanobis distance
-of 0.232776, which loses to (1,2)'s 0.229143. A near-tied vertex at 0.228868 sometimes
-won. The rotation note had attributed the flip to the rotation's plane
-under-determination (its §4.1). That attribution was wrong: `.bl_rotate()` is
-bit-identical across calls.
+The vertices the random rule could pick are almost equidistant from the observation in the plane
+(the distance changes by less than 1e-4), yet they can be far apart as counterfactuals: up to 0.36
+training standard deviations in a feature and 0.18 in the model's score. The totals built from
+them move only slightly, and the ranking of the variables does not change.
+
+### 5.3 How often a query has a choice
+
+The searches above make 88,598 nearest-vertex queries (the two global searches and the three local
+ones; a query is one observation against one block of contour vertices). Of these:
+- 503 (0.57%) have more than one distinct vertex inside the random rule's band;
+- **none** has an exact tie between distinct vertices, so `ties.method = "first"` never falls back
+  on vertex order here.
 
 ## 6. Why `ties.method = "first"`
 
-- **It is the exact minimum.** R documents `"first"` as equal to
-  `unname(apply(m, 1, which.max))`, with no tolerance. The searches promise the nearest
-  boundary point, and this returns it.
-- **It is deterministic and leaves the random-number stream alone.** A search no longer
-  changes the user's RNG state, and the user's RNG state no longer changes a search.
-- **Exact ties are resolved by vertex order,** which is reproducible. Section 5.2 found
-  none in practice.
-- **Across blocks it stays consistent.** The helper processes long contours in blocks,
-  and keeps a block's minimum only if it is strictly smaller (`<`). An exact tie across
-  blocks therefore keeps the earlier block, which is the same "first" rule.
+- **It is the exact minimum.** It is `which.min` on the squared distances (Section 3), with no
+  tolerance. The searches promise the nearest boundary point, and this returns it.
+- **It is deterministic and leaves the random-number stream alone.** A search does not change the
+  user's random-number state, and the user's random-number state does not change a search.
+- **Exact ties are resolved by vertex order,** which is reproducible. Section 5.3 found none.
+- **Across blocks it stays consistent.** The helper processes long contours in blocks, and keeps a
+  block's minimum only if it is strictly smaller (`<`). An exact tie across blocks therefore keeps
+  the earlier block, which is the same "first" rule.
 
-Rejected alternatives:
-- **Seeding inside the helper.** This makes the pick reproducible, but it is still not
-  the nearest vertex, and it would reset the caller's random-number stream on every call.
-- **A deterministic rule with a tolerance** (for example, the first vertex within the
-  band). This is reproducible, but again not the nearest, and the band has no meaning
-  for distances.
+Two other rules would be reproducible but would not return the nearest vertex:
+- **Seeding inside the helper** would make the random pick reproducible, but the pick would still
+  not be the nearest vertex, and it would reset the caller's random-number stream on every call.
+- **A deterministic rule with a tolerance** (for example, the first vertex within the band) would
+  be reproducible, but again not the nearest, and the band has no meaning for distances.
 
-## 7. What this does not fix
+**Never take the nearest point on distances with a rule that breaks ties at random,** such as
+`max.col()` with its default `ties.method = "random"`: it would bring back the behaviour of
+Sections 2 and 5.
 
-- **The rotation's plane under-determination (rotation note §4.1)** is unchanged. The
-  local plane is still LAPACK's arbitrary completion of a rank-1 problem.
+## 7. What the exact rule does not settle
+
+- **The rotation's plane under-determination (rotation note §4.1).** The local plane is LAPACK's
+  completion of a rank-1 problem.
   - Within one session it is bit-identical, so it is reproducible.
-  - It can change with a different BLAS/LAPACK build, platform or R version, or with any
-    numerical perturbation of the inputs. A known example: reordering the CVA group
-    levels moved every Phase 3 number (CLAUDE.md §6, 2026-10-30).
+  - It can change with a different BLAS/LAPACK build, platform or R version, or with any numerical
+    perturbation of the inputs, such as a different order of the CVA groups (methodology note
+    §3.12).
   - The rotation note's §5 proposal addresses this, not the problem in this note.
-- **A 2D search is still a 2D search.** The nearest vertex in the plane is not the
-  nearest boundary point in the full feature space (rotation note §4.9).
+- **A 2D search is still a 2D search.** The nearest vertex in the plane is not the nearest
+  boundary point in the full feature space (rotation note §4.9).
 
-## 8. Records corrected
+## 8. Reproducing
 
-The rotation note's section numbers below are those of 2026-10-30. The note was renumbered on
-2026-10-31, and this material is now its Appendix A.2.
-
-- **Rotation note:**
-  - §5.3 and §5.9: "Explained and fixed" paragraphs, with the before-and-after numbers
-    in Section 5.3 above;
-  - §6.3: no longer claims §6.2 removes §5.3's cause;
-  - §5: a dated line saying its search numbers predate the fix.
-- **`17_1`, `17_2`, `17_3`:** comments and printed text that repeated the old
-  attribution or the "first call on a fresh object" advice.
-- **CLAUDE.md §6:** the "distance can differ between repeated calls" warning is replaced
-  by the deterministic rule.
-- **`review_section7_to_8.md`:** robustness figures from a fresh harness run.
-- **The Task C plan:** Task D's "best-pair instability" and "call-history dependence"
-  items are now marked fixed.
-
-## 9. Reproducing
-
-`tests/testthat/test-boundary.R` pins the behaviour:
-- the true nearest vertex inside the old band, under 20 seeds;
-- equality with `which.min`;
-- first-on-exact-tie;
+`tests/testthat/test-boundary.R` pins the behaviour in six tests:
+- the true nearest vertex inside the random rule's band, under 20 seeds;
+- equality with `which.min` on every row;
+- the first nearest vertex on an exact tie;
 - no use of random numbers;
-- identical `bl_find_local_cf()`, `bl_find_boundary()` and `bl_surrogate()` results under
-  any RNG state and after other calls.
+- identical `bl_find_local_cf()` results under any random-number state and after other searches;
+- identical `bl_find_boundary()` and `bl_surrogate()` results under any random-number state.
 
-With the old line put back, 5 of its 6 tests fail. The rule itself, on one row:
+With `ties.method = "random"` in the helper, 5 of the 6 would fail. Only the `which.min` test would
+pass, since its random points have no near-ties.
+
+The rule itself, on one row:
 
 ```r
 d2 <- matrix(c(1 + 1e-4, 1, 2e4), nrow = 1)   # the nearest is column 2
 max.col(-d2)                                  # 1 or 2, at random: both within 1e-5 * 2e4
 max.col(-d2, ties.method = "first")           # 2
+```
+
+To measure the random rule on other data, as in Section 5, swap the helper in the namespace and
+restore it afterwards:
+
+```r
+ns  <- asNamespace("boundarylogic")
+old <- get(".nearest_idx_block", envir = ns)
+src <- sub('ties.method = "first"', 'ties.method = "random"', deparse(old), fixed = TRUE)
+new <- eval(parse(text = src)); environment(new) <- ns
+unlockBinding(".nearest_idx_block", ns); assign(".nearest_idx_block", new, envir = ns)
+# ... run the searches under several seeds, then restore:
+assign(".nearest_idx_block", old, envir = ns); lockBinding(".nearest_idx_block", ns)
 ```

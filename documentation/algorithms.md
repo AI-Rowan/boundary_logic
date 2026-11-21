@@ -102,7 +102,7 @@ $\mathbf{V}_\rho^{-1}[1{:}2,\,]$.
 |---|---|---|
 | S1 | Model scoring with the 3-decimal floor | `.pred_function()` (`R/predict_utils.R`) |
 | S2 | Model fitting and training metrics | `bl_fit_model()`, `.fit_model()`, `calc_gini()`; `bl_wrap_model()` |
-| S3 | Convex hull construction and clipping | `.build_hull_polygon()`, `.poly_clip()`, `.points_in_polygon()`, `.grid_in_hull()` (`R/hull_utils.R`) |
+| S3 | Convex hull construction and clipping | `.build_hull_polygon()`, `.poly_clip()`, `.points_in_polygon()`, `.grid_in_hull()`, `.encloses_data()` (`R/hull_utils.R`) |
 | S4 | Nearest-vertex search | `.nearest_idx_block()` (`R/boundary.R`) |
 | S5 | Training ranges and the range filter | `get_variable_ranges()`, `get_filter_logical_vector()` (`R/feasibility_utils.R`) |
 | S6 | Distance rule and X-space distances | `.resolve_distance()` (`R/utils.R`), `.cf_sq_distance()` (`R/local_cf.R`) |
@@ -309,11 +309,12 @@ skipped without a model) and `bl_assemble()` (`R/result.R`).
 - the arguments for A3: `m`, `outlie`, `calc_hull`, `b_margin`.
 
 **Outputs** (`bl_result`):
-- the data and model: train/test data, `var_names`, model, `cutoff`, `b_margin`;
-- from A2: `V`, `tV`, `X_center`, `X_sd`, `method`, `standardise`, `proj_dims`, `metric`,
-  `metric_inv`, `metric_type`, `train_ranges`;
+- the data and model: train/test data, `var_names`, `num_vars`, `model`, `model_type`, `cutoff`,
+  `b_margin`, and the model's `accuracy` and `gini` (S2; NULL without a model);
+- from A2: `V`, `tV`, `X_center`, `X_sd`, `method`, `standardise`, `proj_dims`, `biplot_obj`,
+  `metric`, `metric_inv`, `metric_type`, `train_ranges`;
 - from A3: `polygon`, `hull_fraction`, and `biplot_grid`, the whole `bl_grid`;
-- `scaling`.
+- `scaling`, `call` and `created_at`.
 
 **Steps.**
 1. If CVA is chosen without a model or `cva_classes`, pass `as.factor(train_data$class)` to A2.
@@ -347,7 +348,8 @@ search.
 - the boundary points: `B_z`, `B_x`, `B_pred`;
 - the distances: `dist_z`, `dist_x`, `dist_mahalanobis`;
 - the observations: `Z_obs`, `x_obs`, `pred_obs`, `class_obs`;
-- the contours: `z_boundaries_list`, `z_boundary_type`, `nr_boundaries`, `position_store`.
+- the contours: `z_boundaries_list`, `z_boundary_type`, `nr_boundaries`, `position_store`;
+- the `bl_result` it was run on.
 
 **Steps.**
 1. **Project and score** the observations: $\mathbf{z}_i=\tilde{\mathbf{x}}_i\mathbf{V}_r$, and
@@ -453,7 +455,7 @@ plot method also returns `vec_to_boundary_sd`, `mahalanobis_check` and the plot.
 
 **Notes.**
 - The diagonal standardisation ignores the correlations in $\mathbf{W}$; the check measures what
-  that leaves out. The full Shapley decomposition is a future development (`future-developments.md` §1.6).
+  that leaves out. The full Shapley decomposition is a future development (`future-improvements-review.md` §1.6).
 - See Finding F3.
 
 ### B3. Biplot-region surrogate
@@ -466,10 +468,13 @@ model and with the labels is reported.
 `train_data`. Nothing is fitted.
 
 **Inputs.** `ct_surrogate` and `polygon` (A3), $\mathbf{V}_r$, $\bar{\mathbf{x}}$, $\mathbf{s}$, $c$.
-**Outputs.**
+**Outputs** (`bl_surrogate`):
 - `surrogate_pred`, `model_pred`, `class_obs`, `boundary_set_nr`;
 - `accuracy_vs_model`, `accuracy_vs_labels`;
-- `n_total`, `n_in_hull`, `hull_coverage`.
+- `n_total`, `n_in_hull`, `hull_coverage`;
+- `z_boundary_type`, `Z_obs` and the `bl_result` it was run on.
+
+It stops when the grid has no surrogate contours (`ct_surrogate`) or when none survives the clip.
 
 **Steps.**
 1. Project and score the observations, as in B1 step 1.
@@ -530,7 +535,10 @@ units.
 **Outputs** (`bl_filters`): `constraints`, `bl_target`, `hull`, `train_ranges`.
 
 **Steps.**
-1. Check that every named feature exists and that every constraint has a valid form.
+1. Check that every named feature exists and that every constraint has a valid form, and that
+   `hull` and `train_ranges` are each a single TRUE or FALSE (`.check_switch()`). Because the two
+   switches are arguments of `set_filters()`, a feature named `hull` or `train_ranges` cannot be
+   constrained through it.
 2. **Parse each constraint** (`.parse_constraint()`) into a type and an `integer` flag:
 
    | Form | Type | Integer flag |
@@ -615,8 +623,9 @@ inside C4.
 and find the nearest boundary point that satisfies every rule. Then choose, across the planes, the
 one whose counterfactual is nearest by the distance rule.
 
-**Entry.** `bl_find_local_cf(bl_result, bl_target, set_filters = NULL, max_pairs = 21L, m = 200L, distance = "auto")`
-(`R/local_cf.R`).
+**Entry.** `bl_find_local_cf(bl_result, bl_target, set_filters = NULL, max_pairs = 21L, m = 200L,
+distance = c("auto", "mahalanobis", "euclidean"), verbose = TRUE)` (`R/local_cf.R`). `verbose`
+prints each pair's distance and the chosen pair.
 
 **Inputs.**
 - From A4: $\mathbf{V}$, $\bar{\mathbf{x}}$, $\mathbf{s}$, $c$, $\varepsilon$, $\mathbf{W}^{-1}$,
@@ -628,10 +637,11 @@ one whose counterfactual is nearest by the distance rule.
 - the counterfactual: `B_z`, `B_x`, `B_pred`;
 - the distances: `dist_z`, `dist_x`, `dist_mahalanobis`;
 - the winning plane: `best_pair`, `Z_target`, `Vr_rot`, `tVr_rot`, `Z_train_rot`, `Zgrid`,
-  `grid_prob`, `ct_local`, `hull_polygon`;
+  `grid_prob`, `col_value`, `ct_local`, `xseq`, `yseq`, `min_val`, `max_val`, `hull_polygon`;
 - the per-pair distances: `all_distances`, `all_distances_x`, `all_distances_mahalanobis`;
 - the status: `distance`, `hull`, `train_ranges`, `solution_found`, `blocking_constraint`;
-- the companion objects: `bl_target`, `bl_counterfactual`, `fixed_check`, `integer_check`.
+- the companion objects: `bl_target`, `bl_counterfactual`, `bl_result`, `set_filters`,
+  `fixed_check`, `integer_check`.
 
 **Steps.**
 
@@ -719,8 +729,10 @@ contour order. Across pairs, the strict $<$ keeps the earlier pair on a tie.
 - Under a standardised PCA, $d_X=d_Z$ at the search point: the target has no component beyond the
   first two rotated axes.
 - The filter order and why the hull comes first: `documentation/local-convex-hull.md`.
-- A target outside the training data still gets a counterfactual, but only inside the training
-  data's hull; the local plot widens its window to show the target (Finding F4).
+- A target outside the training data can still get a counterfactual, but only inside the training
+  data's hull; when no boundary point inside the hull meets the rules, it gets none. The local plot
+  widens its window to show the target (Finding F4). A target inside every training range can also
+  lie outside the hull on a plane: `documentation/local-convex-hull.md` §3.
 - See Finding F4.
 
 ### C5. Fixed-feature restore
@@ -792,7 +804,7 @@ combination that still crosses the boundary and meets every rule.
 
 **Notes.**
 - With the Mahalanobis rule the nearest whole value need not be the one nearer the observed value.
-  In the harness, `credit_score` 634.22 becomes 635.
+  In the harness (Step 11), `credit_score` 634.05 becomes 635, not 634.
 - Rationale: `documentation/fixed-constraint-restore.md` §5 and
   `documentation/sparse-counterfactual.md` §3.
 
@@ -808,7 +820,8 @@ features, and class each feature by whether it moves the prediction towards the 
 **Outputs** (`bl_shapley`):
 - `shapley_df`, with columns `varnames`, `pred_data`, `data_to_boundary` ($\boldsymbol\delta$),
   `shapley_cause` ($\varphi_j$), `Contribute` and the labels;
-- `pred_prob`, `pred_class`, `pred_boundary`, `row_id`.
+- `pred_prob`, `pred_class`, `pred_boundary`, `row_id`;
+- the `bl_local_result` it was run on.
 
 **Steps.**
 1. **The game.** For a set $S$ of features,
@@ -841,7 +854,8 @@ session RNG unless `seed` is given.
 
 **Notes.**
 - With $f$ floored to 3 decimals, many features have an exact zero value, hence the "No effect"
-  class. The PhD rule counted zero as "Supports" (`documentation/sparse-counterfactual.md` §1).
+  class. Appendix A of the thesis counts an exact zero as "Supports" for a class-0 target and as
+  "Contradicts" for a class-1 target (p.216; methodology note §3.9).
 - See Finding F7.
 
 ### C8. Greedy sparse counterfactual
@@ -854,7 +868,7 @@ with an error (it is deprecated).
 
 **Inputs.** The Shapley table (C7), $\mathbf{x}$, $\mathbf{x}^{cf}$ and the constraints (C2).
 **Outputs** (`bl_sparse_result`): `x_sparse`, `pred_sparse`, `solution_valid`, `sparse_path`,
-and `shapley_df` with `used_in_sparse` and `x_sparse_val`.
+`shapley_df` with `used_in_sparse` and `x_sparse_val`, and the `bl_shapley` it was run on.
 
 **Steps.**
 1. **Candidates.** The "Supports" features that are not `"fixed"`, ordered by $|\varphi_j|$, largest
@@ -1020,8 +1034,8 @@ F3's measurements come from `scripts/paper1-pima/04_method-change-effects.R`.
     B1's gap is the in-plane move minus $\mathbf{w}_i\mathbf{V}^{-1}_{-r}\mathbf{S}$, the reset of the
     off-plane part to the mean, which has nothing to do with the boundary.
   - **Measured:** the off-plane part is 80% of the summed squared B1 gap on the loan 9-feature model,
-    59% on its 4-feature model, 78% on Pima's 7-feature model and 63% on its 4-feature model
-    (within-class SD units).
+    59% on its 4-feature model (both over the test rows), 78% on Pima's 7-feature model and 63%
+    on its 4-feature model (both over the training rows), in within-class SD units.
   - If B2 used B1's gap, the ranking would measure the reconstruction error: on the loan model
     `person_gender` would rank strongest instead of weakest, and Pima's three weakest variables would
     change.
@@ -1108,7 +1122,7 @@ scores a point.
 
 ### S3. Convex hull construction and clipping
 
-- `.build_hull_polygon(Z, min, max, outlie)` calls `aplpack::plothulls(fraction = outlie, n.hull = 1)`
+- `.build_hull_polygon(Z, min_val, max_val, outlie = 0.9)` calls `aplpack::plothulls(fraction = outlie, n.hull = 1)`
   on an off-screen device. With `outlie = 1` this is the convex hull of all the points; with a
   fraction below 1 it is a peeled hull. It restores the caller's graphics device and returns an
   `sp` polygon.

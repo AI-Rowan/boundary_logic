@@ -142,7 +142,7 @@ print.bl_model <- function(x, ...) {
 #' Wrap an externally fitted model for use in boundary logic analysis
 #'
 #' Use this function when you have fitted your own classification model
-#' outside of `bl_fit_model()` — for example, using custom hyperparameters,
+#' outside of `bl_fit_model()` -- for example, using custom hyperparameters,
 #' a caret workflow, or a model type not natively supported. The wrapped
 #' object is a `"bl_model"` compatible with `bl_build_grid()` and
 #' `bl_assemble()`.

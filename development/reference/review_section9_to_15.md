@@ -129,7 +129,7 @@ Run in RStudio with the Step 9b biplot open, then click the target circle (row 1
 
 | Parameter | Default | This call | Effect |
 |---|---|---|---|
-| `data` | `bl_result$train_data` | `bl_results_v2$test_data` | The rows a click can pick. `bl_bnd_v2` (Step 7b) holds one row per `test_data` row, so the two must match, or the arrows belong to other rows |
+| `data` | `NULL` (the training data) | `bl_results_v2$test_data` | The rows a click can pick. `bl_bnd_v2` (Step 7b) holds one row per `test_data` row, so the two must match, or the arrows belong to other rows |
 | `bl_boundary` | `NULL` | `bl_bnd_v2` | Draws each picked row's global counterfactual: a cross at `B_z` and an arrow to it |
 | `show_arrows` | `TRUE` | default | Draws the arrow from the row to its boundary point |
 
@@ -149,11 +149,11 @@ Esc ends the loop; the picked rows are returned invisibly as a data frame (`row`
 | observed | 12,000 | 12.69 | 0.05 | 634 | 0.111 |
 | global counterfactual (`B_x`) | 10,610.95 | 14.86 | 0.0175 | 650.27 | 0.538 |
 
-Its distances are `dist_z` = 0.0056, `dist_x` = 0.9253 and √`dist_mahalanobis` = 0.9106. The local search of Step 11 finds a closer counterfactual (√d²_M = 0.6934 for its boundary point with the Step 10 constraints, and 0.6996 for the reported counterfactual after the restore and the rounding; 0.5554 without constraints, Step 15), because it rotates the plane around the target instead of using the global one. (The global distances include the part of the target off the biplot plane, which the global counterfactual resets to the mean, so they are reported only: `documentation/boundary-distance-and-robustness.md` §2.) The global counterfactual also lowers the loan amount, which Step 10 fixes.
+Its distances are `dist_z` = 0.0056, `dist_x` = 0.9253 and √`dist_mahalanobis` = 0.9106. The local search of Step 11 finds a closer counterfactual (√d²_M = 0.6934 for its boundary point with the Step 10 constraints, and 0.6996 for the reported counterfactual after the restore and the rounding; 0.5554 without actionability constraints, Step 15), because it rotates the plane around the target instead of using the global one. (The global distances include the part of the target off the biplot plane, which the global counterfactual resets to the mean, so they are reported only: `documentation/boundary-distance-and-robustness.md` §2.) The global counterfactual also lowers the loan amount, which Step 10 fixes.
 
 **Caveat.** The arrows are drawn in the unrotated biplot plane. With `rotate_deg != 0` the plot is turned but the boundary coordinates are not, so keep `rotate_deg = 0` when picking points.
 
-`bl_pick_point()` is the only way the package draws these arrows. There is no batch arrow layer: drawing one arrow per observation at plot time caused zero-length-arrow warnings, so `plot_biplotEZ()` has no `boundary =` argument (CLAUDE.md §4).
+`bl_pick_point()` is the only way the package draws these arrows. There is no batch arrow layer, so `plot_biplotEZ()` has no `boundary =` argument: drawing one arrow per observation at plot time would raise a zero-length-arrow warning for every observation that lies on its own boundary point, and those warnings could not be suppressed (CLAUDE.md §4).
 
 ---
 
@@ -318,7 +318,7 @@ The constraints name only the four retained features, because `set_filters()` st
 
 No constraint = unconstrained (all contour points accepted for that feature). Without `"integer"` a feature is continuous. Here `credit_score` is a whole-number score, so it is `c("increase", "integer")`.
 
-The comparisons run on the stored values, which are in model units. For `bl_results_v2` those are z-scores, so the `"fixed"` tolerance of ±0.5 means ±0.5 training SD of that feature, and a `c(min, max)` range must be given in z-score units. For `loan_amnt`, whose training SD is 6,002, the tolerance is ±3,001 around the observed 12,000. A `"fixed"` feature can therefore still move in the search. `bl_find_local_cf()` then tries its observed value: that point is the counterfactual when it still crosses the boundary, and otherwise no counterfactual is reported (Step 11, Stage H). The sparse CF (Step 14) always holds it exactly.
+The comparisons run on the stored values, which are in model units. For `bl_results_v2` those are z-scores, so the `"fixed"` tolerance of ±0.5 means ±0.5 training SD of that feature, and a `c(min, max)` range must be given in z-score units. For `loan_amnt`, whose training SD is 6,002, the tolerance is ±3,001 around the observed 12,000. A `"fixed"` feature can therefore still move in the search. `bl_find_local_cf()` then tries its observed value: that point is the counterfactual when it still crosses the boundary and lies within `train_ranges` (with that switch on), and otherwise no counterfactual is reported (Step 11, Stage H). The sparse CF (Step 14) always holds it exactly.
 
 **Returned object — `flt` (S3 class `"bl_filters"`):**
 
@@ -375,7 +375,7 @@ Full argument list: `?bl_find_local_cf`.
 `bl_target`, its print method shows the counterfactual in original (raw) units when a scaling
 was recorded via `bl_set_scaling()` (reuses `.scale_to_raw()`). `print(bl_local)` shows the
 Target and Counterfactual blocks together. The raw counterfactual values are also available in
-the sparse table (`B_x` column, Step 14).
+the sparse table (`counterfactual` column, Step 14).
 
 ---
 
@@ -439,7 +439,7 @@ hull_poly = .build_hull_polygon(Z_train_rot, min_val, max_val,
                                 outlie = 1)       # the full hull, rebuilt per pair
 ```
 
-The global biplot's hull polygon (from `bl_build_grid()`) cannot be used here, because its coordinates belong to the unrotated plane; the hull is rebuilt on each rotated plane from the training data (`documentation/local-convex-hull.md`). The target is not part of it: the region a counterfactual may come from is set by the training data alone, as in the global search. (Appendix A of the thesis builds the hull from the training data and the target; the package did so until 2026-11-06.)
+The global biplot's hull polygon (from `bl_build_grid()`) cannot be used here, because its coordinates belong to the unrotated plane; the hull is rebuilt on each rotated plane from the training data (`documentation/local-convex-hull.md`). The target is not part of it: the region a counterfactual may come from is set by the training data alone, as in the global search. (Appendix A of the thesis builds the hull from the training data and the target. A hull built that way would reach out to a target outside the training data, such as Step 16's applicant, whose counterfactual would then be the one the search finds with the hull off: √d²_M 1.7026, credit score 489.44; `documentation/local-convex-hull.md` §6.)
 
 The 10% padding is needed because decision boundary contours frequently run near the *edge* of the training data cloud — that is where the class transition occurs. Without padding the grid would be flush with the outermost training observations, and contour lines that fall at or beyond the data range would be clipped, leaving no valid contour vertex for that pair. Adding 10% of the total range on each side gives boundary segments room to exist slightly outside the training envelope. The global grid built in `bl_build_grid()` takes its range differently, from the biplot's own plotting window (`.bl_get_plot_bounds()`; see `review_section4_to_6.md` Section 6.2).
 
@@ -638,7 +638,7 @@ Pair (3, 4) has the smallest squared Mahalanobis distance (0.4808), so it wins. 
 **The comparison table at the end of `print(bl_local)`.** One row per feature, with:
 - **Columns:** the observed value, the counterfactual, the change (counterfactual minus observed) and the Step 10 constraint (`"none"` when unconstrained; a range prints as `[lo, hi]`).
 - **Units:** raw, because `bl_results_v2` carries a scaling. Levels convert as `value * scale + center` and the change as `value * scale`, by `.scale_to_raw()`, so the counterfactual column matches the Counterfactual block above. Without a scaling the header reads "(model units)".
-- **Format:** fixed notation, never scientific, with 2 decimals. A row whose change would print as 0.00 gets more decimals, up to 4: here `loan_percent_income`, whose change is −0.0016. The Target and Counterfactual blocks above use the same decimals per feature. `print(bl_shapley_values)` and `print(bl_sparse)` use the same rule for their Shapley values. The sparse path's predictions keep 4 decimals only within 0.005 of the cutoff.
+- **Format:** fixed notation, never scientific, with 2 decimals. A row whose change would print as 0.00 gets more decimals, up to 4: here `loan_percent_income`, whose change is −0.0043. The Target and Counterfactual blocks above use the same decimals per feature. `print(bl_shapley_values)` and `print(bl_sparse)` use the same rule for their Shapley values. The sparse path's predictions keep 4 decimals only within 0.005 of the cutoff.
 - **Note:** printed only when the search moved a `"fixed"` feature and the restored point is the counterfactual. It explains the tolerance and the restore. When the restored point does not cross the boundary or leaves `train_ranges`, no counterfactual is reported: `solution_found` is `FALSE`, and the Reason line gives where the search moved the fixed feature, why the restored point fails, and that changing the constraints on the actionable features in `set_filters()` may make a counterfactual possible (`documentation/fixed-constraint-restore.md` §4).
 - **Integer line and note:** when an `"integer"` feature was rounded, the header gains `Integer rounded : credit_score`, and a second note gives the boundary value (634.0454), how many whole-number combinations were tried and how many still cross (2 of 2), and the value chosen (635), with its prediction. When no combination is valid, no counterfactual is reported and the Reason line says so.
 - **No table:** when no solution exists, `print()` shows the Reason line instead, and Steps 13 and 14 stop, because `bl_shapley()` needs a solution.
@@ -844,7 +844,7 @@ Each feature is classified as `"Supports"`, `"Contradicts"` or `"No effect"` on 
 | 1 (predicted default) | < 0 (pushes prob down, toward boundary) | `"Supports"` |
 | 1 (predicted default) | > 0 (pushes prob up, away from boundary) | `"Contradicts"` |
 
-A Shapley value of exactly 0 arises when a feature's change never moves the prediction, in any coalition. Here that happens because the change crosses no XGBoost split, and predictions are floor-rounded to 3 d.p. The PhD research script counted 0 as `"Supports"`. The `"No effect"` class keeps such a feature out of the sparse counterfactual (Step 14). See `documentation/sparse-counterfactual.md` §1.
+A Shapley value of exactly 0 arises when a feature's change never moves the prediction, in any coalition. Here that happens because the change crosses no XGBoost split, and predictions are floor-rounded to 3 d.p. The `"No effect"` class keeps such a feature out of the sparse counterfactual (Step 14). Without it, a zero would count as `"Supports"` for a class-0 target (the rule of the PhD research script), and the sparse counterfactual would change a feature that does not move the prediction. See `documentation/sparse-counterfactual.md` §1.
 
 **Row ordering:** rows are sorted by signed `shapley_cause`: ascending for a class-0 target, descending for a class-1 target. The plot draws the first row at the bottom, so for either class the strongest supporter of the move to the boundary sits at the top.
 
@@ -945,7 +945,7 @@ Builds a **sparse counterfactual**: it changes as few features as it needs to cr
 
    The candidates not reached stay at their observed values.
 3. **Why re-score and not sum Shapley values:** a Shapley value is a feature's average effect over all coalitions, not its effect when it is added first. Re-scoring after each step uses the model's actual prediction, and it costs at most one model call per candidate.
-4. **No rounding here.** Each changed feature takes its counterfactual value, so an `"integer"` feature keeps the whole value Step 11 rounded it to. `round_to`, which rounded z-scores without re-checking the constraints, is deprecated; `documentation/sparse-counterfactual.md` §3 shows how it was used and what replaced it.
+4. **No rounding here.** Each changed feature takes its counterfactual value, so an `"integer"` feature keeps the whole value Step 11 rounded it to. `round_to` is deprecated (a non-NULL value stops): it would round z-scores without re-checking the constraints. `documentation/sparse-counterfactual.md` §3 compares it with the `"integer"` constraint.
 5. **Validate:** `solution_valid = (pred_class_sparse != pred_class_target)`. If no step crosses, every candidate has been changed and `solution_valid` is `FALSE`.
 
 The selection follows the Shapley order, so it is not guaranteed to be the smallest possible subset.
@@ -1064,7 +1064,7 @@ print(bl_sparse_free)
 
 (The script also plots `bl_local_free`, `bl_shap_free` and `bl_sparse_free`.)
 
-Identical pipeline to Steps 11–14, with `set_filters = NULL`, which is the same as `set_filters(tgt)`: no actionability constraint, but the plausibility (hull) and feasibility (training ranges) rules still apply. The search finds the nearest boundary point within the hull and the training ranges. The fully unconstrained counterfactual of the thesis (p.115) drops both rules as well: `bl_find_local_cf(bl_results_v2, tgt, set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE))` (the script's comment shows it; it is not run). Comparing `bl_local` (constrained) vs `bl_local_free` (no actionability constraint) shows the cost of the actionability constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the unconstrained search also picks pair (3, 4), at a smaller distance (√d²_M = 0.5554, against 0.6934 for the constrained search's boundary point and 0.6996 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.2 and lowers the credit score to 633.43, two moves the constraints rule out.
+Identical pipeline to Steps 11–14, with `set_filters = NULL`, which is the same as `set_filters(tgt)`: no actionability constraint, but the plausibility (hull) and feasibility (training ranges) rules still apply. The search finds the nearest boundary point within the hull and the training ranges. The fully unconstrained counterfactual of the thesis (p.115) drops both rules as well: `bl_find_local_cf(bl_results_v2, tgt, set_filters = set_filters(tgt, hull = FALSE, train_ranges = FALSE))` (the script's comment shows it; it is not run). Comparing `bl_local` (constrained) vs `bl_local_free` (no actionability constraint) shows the cost of the actionability constraints: how much farther the boundary is when `loan_amnt` is fixed, `loan_int_rate` and `credit_score` may only increase, and `credit_score` must be a whole number. In the harness run the search without actionability constraints also picks pair (3, 4), at a smaller distance (√d²_M = 0.5554, against 0.6934 for the constrained search's boundary point and 0.6996 for its reported counterfactual), with boundary probability 0.542. Its counterfactual raises the loan amount to 12,544.23 and lowers the credit score to 633.43, two moves the constraints rule out.
 
 **`print(bl_sparse_free)` console output** (from the harness run):
 ```
@@ -1088,7 +1088,7 @@ credit_score          634.00         633.43   634.00   0.00       none FALSE
     2 loan_percent_income    0.14 0.54    TRUE
 ```
 
-Without constraints the sparse counterfactual makes the same two changes as the constrained one (Step 14). It raises the interest rate (to 14.11) and lowers the loan-to-income ratio (to 0.0399; the table prints it as 0.04, and the harness driver prints the unrounded 0.039858). The unconstrained moves in the loan amount and the credit score do not move the prediction, so both are `"No effect"` and stay at their observed values. The interest rate alone again reaches only 0.360, so both changes are needed.
+Without actionability constraints the sparse counterfactual needs two changes, where the constrained one (Step 14) needs one. It raises the interest rate (to 14.11) and lowers the loan-to-income ratio (to 0.0399; the table prints it as 0.04, and the harness driver prints the unrounded 0.039858). The interest rate alone reaches only 0.36 here, against 0.51 in Step 14, where the counterfactual raises it further (to 14.44), so the path takes the loan-to-income ratio as well and crosses at 0.54. The moves in the loan amount and the credit score do not move the prediction, so both are `"No effect"` (the Shapley plot of `bl_shap_free` shows them in grey) and stay at their observed values.
 
 ---
 
@@ -1123,17 +1123,19 @@ tgt  [bl_target]
      ▼
 flt  [bl_filters]
   ├── constraints = list(loan_amnt="fixed", loan_int_rate="increase", credit_score=c("increase", "integer"))
-  └── bl_target = tgt
+  ├── bl_target = tgt
+  ├── hull = TRUE          (plausibility switch)
+  └── train_ranges = TRUE  (feasibility switch)
      │
      │  bl_find_local_cf(bl_results_v2, tgt, set_filters=flt)   # max_pairs = 21; flt: hull, train_ranges on
      │
      │  [for each of the 6 component pairs (p = 4)]:
      │    .bl_rotate() → Vr_rot, tVr_rot (SVD-based local rotation)
-     │    .build_hull_polygon() → hull of training data + target on this plane
+     │    .build_hull_polygon() → hull of the training data on this plane
      │    build m×m rotated grid → Xgrid (back-projected)
      │    score through XGBoost → grid_prob
      │    extract contour lines → ct_local
-     │    filter: opposing class, hull, set_filters, train_ranges, consistency
+     │    filter: opposing class, hull (+ empty-region rule), set_filters, train_ranges, consistency
      │    .nearest_idx_block() → nearest boundary vertex
      │    update best if dist_mah improves (the default selector under CVA)
      │  [after the loop]: .restore_fixed() → loan_amnt back to 12,000, still 0.693 → used
@@ -1147,8 +1149,9 @@ bl_local  [bl_local_result]
   ├── integer_check (vars = credit_score, applied = TRUE, 2 candidates, 2 valid, search_point)
   ├── dist_z, dist_x, dist_mahalanobis, distance
   ├── Z_target, best_pair = (3, 4), Vr_rot, tVr_rot
-  ├── Z_train_rot, Zgrid, grid_prob, col_value, ct_local
+  ├── Z_train_rot, Zgrid, grid_prob, col_value, ct_local, hull_polygon
   ├── all_distances, all_distances_x, all_distances_mahalanobis, solution_found
+  ├── hull = TRUE, train_ranges = TRUE  (the switches that applied)
   ├── bl_target = tgt
   ├── bl_counterfactual  (the boundary point, printed in raw units)
   ├── bl_result = bl_results_v2
@@ -1215,7 +1218,7 @@ bl_sparse  [bl_sparse_result]
 
 5. **`"fixed"` constraint has three effects.** It models features the analyst knows cannot or should not change (for example a person's age).
    - **Search:** `bl_find_local_cf()` limits the search to values within ±0.5 of observed, in model units (±0.5 SD for the z-scored `bl_results_v2`).
-   - **Restore (Stage H):** it then sets each fixed feature the search moved back to its observed value, and uses that point when it still crosses the boundary. When it does not, no counterfactual is reported, so a reported counterfactual always holds the fixed feature exactly.
+   - **Restore (Stage H):** it then sets each fixed feature the search moved back to its observed value, and uses that point when it still crosses the boundary and lies within `train_ranges` (with that switch on). When it does not, no counterfactual is reported, so a reported counterfactual always holds the fixed feature exactly.
    - **Sparse CF:** `bl_find_sparse_cf()` always reverts it to observed, regardless of Shapley classification.
 
    The script's Step 10 fixes `loan_amnt`. The search moves it by 523.4, inside the ±3,001 tolerance, and the restore puts it back to 12,000 at the same prediction, 0.693.

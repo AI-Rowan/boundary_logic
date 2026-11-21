@@ -24,12 +24,12 @@ the ad-hoc \code{data.frame()} construction used in example scripts.
 \details{
 The returned data frame contains:
 \itemize{
-\item \code{row} — row index (1-based).
-\item \code{pred_prob} — model predicted probability (rounded to 3 d.p.).
-\item \code{pred_class} — predicted class (0 or 1).
-\item \code{true_class} — true class if a \code{"class"} column is present
+\item \code{row} -- row index (1-based).
+\item \code{pred_prob} -- model predicted probability (rounded to 3 d.p.).
+\item \code{pred_class} -- predicted class (0 or 1).
+\item \code{true_class} -- true class if a \code{"class"} column is present
 in \code{data}; otherwise omitted.
-\item \code{confusion} — \code{"TP"}, \code{"TN"}, \code{"FP"}, or
+\item \code{confusion} -- \code{"TP"}, \code{"TN"}, \code{"FP"}, or
 \code{"FN"} if true class is known; otherwise omitted.
 \item One column per feature variable from \code{bl_result$var_names}.
 }

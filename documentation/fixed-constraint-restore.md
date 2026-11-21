@@ -1,26 +1,26 @@
 # Technical Note: Restoring "fixed" Features and Rounding "integer" Features after the Local Search
 
+Date created: 2026-10-29
+Date last edited: 2026-11-16
+
 **Author:** Adriaan Rowan
-**Date:** 2026-10-29; revised 2026-11-04 (strict `"fixed"`; the `"integer"` constraint, §5); 2026-11-06 (the `train_ranges` switch of `set_filters()`)
 **Package:** `boundarylogic`
-**Branch:** `paper_nr1_changes`
 **Location:** `documentation/fixed-constraint-restore.md`
 **Companion documents (paths relative to this file):**
 - `../2 implementation_summary.txt` Section 4.8 (fixed-feature restore) and 4.9 -- code mechanics
 - `../development/reference/review_section9_to_15.md` Step 11, Stage H -- the harness walkthrough
-- `../.claude/reference/fixed-constraint-restore-plan.md` -- the approved plan that introduced the restore
-- `../.claude/reference/paper1-gate2-fixes-plan.md` -- the approved plan that made it strict
+- `methodology-changes/methodology-changes.md` §3.7 and §3.8 -- the history of both rules
 
 ---
 
-## 1. What changed
+## 1. What the rule does
 
 A `"fixed"` constraint in `set_filters()` marks a feature the applicant cannot or
 should not change. `bl_find_local_cf()` handles it in two steps:
 
 1. **The search** accepts a boundary point when the fixed feature lies within
    ±0.5 (model units) of its observed value (§2).
-2. **The restore**, after the best eigenvector pair is chosen, sets each fixed
+2. **The restore**, after the best component pair is chosen, sets each fixed
    feature the search moved back to its observed value and re-scores the point.
 
 | Situation | Result |
@@ -34,9 +34,10 @@ the feasibility switch of `set_filters()` is on (`train_ranges = TRUE`, the
 default; also with no filter object). With `train_ranges = FALSE` the search,
 the restore and the rounding all skip the training ranges.
 
-The last row is the 2026-11-04 change (§4). Before it, the search's point was
-kept, so a reported counterfactual could move a "fixed" feature by up to 0.5. A
-reported counterfactual now always holds every fixed feature exactly.
+The last row is the strict rule (§4): a failed restore means no solution, so a
+reported counterfactual always holds every fixed feature exactly. Without it, the
+search's point would be reported, and a counterfactual could move a "fixed"
+feature by up to 0.5 model units.
 
 A second post-search adjustment follows the restore: features marked
 `"integer"` are rounded to whole values and the point is checked again (§5).
@@ -71,8 +72,8 @@ plane of the chosen pair, so it cannot be searched for on that plane's contour.
 The restore therefore tests one specific off-plane point, the search's boundary
 point with its fixed features put back. This:
 
-- leaves the pair search, its distances and its per-pair tables exactly as
-  before (they describe how the pair was chosen);
+- leaves the pair search, its distances and its per-pair tables unchanged
+  (they describe how the pair was chosen);
 - changes only the features marked fixed, so the `"increase"`, `"decrease"` and
   range constraints, which the search point already met, still hold;
 - applies the same `train_ranges` feasibility check as the search (none when
@@ -88,17 +89,17 @@ point with its fixed features put back. This:
   found no boundary point;
 - `fixed_check` is kept, with `applied = FALSE` and the search's point in
   `search_point`, so the failure can be inspected;
-- `all_distances` and `all_distances_mahalanobis` keep the per-pair search
-  distances;
+- `all_distances`, `all_distances_x` and `all_distances_mahalanobis` keep the
+  per-pair search distances;
 - `bl_shapley()`, and so `bl_find_sparse_cf()`, stop with "No solution found".
 
 **Why.** A "fixed" feature is one the applicant cannot change. A counterfactual
 that changes it, even by a fraction of the tolerance, is not one the applicant
 can act on, and a table that shows it contradicts the constraint the user set.
-Keeping the search's point (the earlier behaviour) traded that for always
-returning an answer. Reporting no solution is honest about what the search
-found: on the chosen plane, every boundary point near the target needs the fixed
-feature to move.
+Keeping the search's point instead would always return an answer, at the cost of
+a counterfactual that breaks the constraint. Reporting no solution is honest
+about what the search found: on the chosen plane, every boundary point near the
+target needs the fixed feature to move.
 
 **The message.** The reason is given as `blocking_constraint`, shown on the
 `Reason` line of `print()`, and as a message from `bl_find_local_cf()`. It says:
@@ -112,25 +113,35 @@ feature to move.
    direction or a range on another feature changes which boundary points the
    search accepts, and so which point is restored.
 
-**An example.** In the Paper 1 Pima example (`scripts/paper1-pima/`), on the
-7-feature GAM of the Gate 2 run (before the pruning to four features of
-2026-11-04), the TP target with Pregnancies and Age both fixed (run 3) gives:
+**An example.** In the Paper 1 Pima example (`scripts/paper1-pima/`; Phase 3
+uses the GAM on four features, whose model units are raw units, so the tolerance
+is half a pregnancy or half a year), the true-negative target (test row 25) with
+Pregnancies and Age both fixed (run 3) gives:
 
-> Pregnancies is "fixed", but the boundary search moved it to 0.3149 (+0.3149).
-> Age is "fixed", but the boundary search moved it to 21.6057 (-0.3943). [...]
-> Restoring Pregnancies, Age to their observed values gives prediction 0.5610,
+> Pregnancies is "fixed", but the boundary search moved it to 10.0697 (+0.0697).
+> Age is "fixed", but the boundary search moved it to 39.4768 (+0.4768). [...]
+> Restoring Pregnancies, Age to their observed values gives prediction 0.4750,
 > which does not cross the boundary, so no counterfactual that holds
 > Pregnancies, Age fixed was found. Changing the constraints on the actionable
 > features in set_filters() may make a counterfactual that holds Pregnancies,
 > Age fixed possible.
 
-The target sits at the training minimum of Pregnancies (0) and near that of Age
-(21). The model is steep there: putting Pregnancies and Age back raises the
-prediction from 0.499 to 0.561. With Pregnancies alone fixed (run 4) the restore
-fails too (0.513), so the TP target has no counterfactual in either run; the TN
-target's restores in runs 3 and 4 both succeed. On the 4-feature model the
-example now uses, the TN target's restores fail in both runs instead (the
-follow-up search is a future development: `future-developments.md` §1.3).
+The search's point scores 0.501, just past the cutoff; putting Pregnancies and
+Age back lowers the prediction to 0.475. With Pregnancies alone fixed and Age
+`"increase"` (run 4) the restore fails too: the search moves Pregnancies to
+10.2082, and restoring it lowers the prediction from 0.500 to 0.487. The
+true-positive target (test row 23) has no counterfactual in runs 3 and 4 for a
+different reason: on none of the 6 pairs does it have a boundary point inside
+the hull that meets the constraints, so there is no point to restore. In run 7
+(Pregnancies fixed, Glucose `"decrease"`) the true negative's restore succeeds
+(0.501 to 0.512) and the true positive's fails (0.499 to 0.526). The
+false-positive target (test row 26, prediction 0.688) shows the restore
+succeeding in all three runs: its search points score 0.499, and the restored
+points 0.487 (run 3), 0.479 (run 4) and 0.486 (run 7), which still cross, so
+each restored point is the counterfactual
+(`scripts/paper1-pima/output/numbers.rds`). A follow-up search that holds the
+fixed features is a future development (`future-improvements-review.md`
+§1.3.1, "A follow-up search from the restored point").
 
 ## 5. Rounding "integer" features
 
@@ -166,8 +177,8 @@ as continuous, and the counterfactual it finds is then put onto whole values.
 4. **The choice.** The valid candidate nearest the target in X-space by the
    search's own distance (`.cf_sq_distance()`: squared Mahalanobis, or for
    `distance = "euclidean"`, the default under PCA, the Euclidean distance
-   with each feature divided by its total SD; until 2026-11-05 the latter was
-   measured in the rotated plane); on a tie, the first.
+   in X-space with each feature divided by its total SD); on a tie, the
+   first.
 5. **No valid candidate.** No counterfactual is reported, as for a failed
    restore (§4). `blocking_constraint` gives the boundary values, says that none
    of the combinations crosses the boundary within the constraints, and that
@@ -184,24 +195,24 @@ observed value is not whole, reverse it, and either can undo the crossing. Tryin
 both neighbours and re-checking keeps every valid option. Choosing among them by
 the selector that chose the pair keeps the counterfactual nearest in the same
 sense as the search. In the Mahalanobis metric that need not be the whole value
-nearest the observed one. In the loan harness `credit_score` reaches 634.22. Both
-634 and 635 cross, and 635 is chosen because its distance from the target is
-0.5914 against 0.5949 for 634: `W` correlates the credit score with the features
-that move.
+nearest the observed one. In the loan harness (Step 11) `credit_score` reaches
+634.0454. Both 634 (the observed value) and 635 cross, at 0.693, and 635 is
+chosen because its distance from the target is √d²_M 0.6996 against 0.7031 for
+634: `W` correlates the credit score with the features that move.
 
-**What it replaces.** `bl_find_sparse_cf()`'s `round_to` rounded the sparse
-counterfactual only, in model units (z-scores for a standardised model), with
-one value for every feature and no re-check. It is deprecated:
-`sparse-counterfactual.md` §3 shows how it was used, its harness result and how
-the `"integer"` constraint answers each of its problems.
+**The sparse counterfactual does not round.** It takes each changed feature's
+value from the rounded point (§7). `bl_find_sparse_cf()`'s `round_to` argument
+is deprecated: any value other than `NULL` stops with an error that points to
+the `"integer"` constraint (`sparse-counterfactual.md` §3).
 
 ## 6. What the restored or rounded point is, and is not
 
 - **It satisfies the fixed constraint exactly.** The fixed features equal the
   target's observed values.
 - **It crosses the boundary, but is not on it.** Its prediction can lie further
-  past the cutoff than the search point's. In the harness both score 0.547,
-  because the model is insensitive to the loan-amount change there.
+  past the cutoff than the search point's. In the harness (Step 11) the search
+  point, the restored point and the rounded point all score 0.693, because the
+  model is insensitive to the loan-amount and credit-score changes there.
 - **It need not be the nearest valid counterfactual.** The pair was chosen for
   the search's point. A different pair could give a restored point closer to the
   target, but the selection step does not compare restored points.
@@ -210,12 +221,12 @@ the `"integer"` constraint answers each of its problems.
   uses for the target. A point on the plane re-projects to itself; the restored
   point lands at its projection, slightly off the contour.
 - **It is accepted because it is tested.** It lies off the rotated plane the
-  search worked in, so the plane no longer certifies it. The model does: the
+  search worked in, so the plane does not certify it. The model does: the
   point is re-scored and must lie on the other side of the cutoff, and within
   `train_ranges`. A rounded point must also meet every `set_filters()`
   constraint.
 - **The same holds for a rounded point.** Its `"integer"` features are whole,
-  it lies off the plane, `B_z` is its projection, and `dist_z`,
+  it lies off the plane, `B_z` is its projection, and `dist_z`, `dist_x`,
   `dist_mahalanobis` and the per-pair tables still describe the search's point.
 
 ## 7. Interaction with Shapley values and the sparse counterfactual
@@ -236,28 +247,10 @@ feature is whole there too (when its observed value is whole).
 
 ## 8. Future developments
 
-The strict rule can lose a counterfactual that exists. Three ways to find one
-that holds the fixed features exactly, none implemented:
-
-- **A follow-up search from the restored point.** Keep the fixed features at
-  their observed values and extend the move in the free features, along the
-  search's own direction, until the model crosses the cutoff, within
-  `train_ranges` and the other constraints. This is a 1-D search, so it is
-  cheap and deterministic. Its point lies off the plane, as a restored point
-  already does, and its distance is at least the restored point's.
-- **Searching in the free features only.** Hold the fixed features at their
-  observed values *before* the rotation, so that the biplot and its boundary are
-  built in the subspace of the actionable features. Every boundary point then
-  holds the fixed features exactly and no restore is needed. This changes the
-  projection the local search uses, so it is a larger change of method.
-- **Retrying the restore on the next-best pair.** The restore is tried only on
-  the winning pair's point. Trying it on the other pairs' points, nearest first,
-  and taking the first that still crosses would rescue some targets. It needs
-  each pair's boundary point to be kept, which the search does not do now.
-
-For `"integer"`, rounding to other resolutions (a step of 0.5, or of 100 for a
-loan amount) would need a step size per feature in `set_filters()`; only whole
-numbers are supported.
+The future developments of the restore and the rounding are in `future-improvements-review.md`,
+with the reason each waits: a follow-up search from the restored point (§1.3.1), a search in the
+free features only (§1.3.2), retrying the restore on the next-best pair (§1.3.3) and other
+rounding step sizes (§1.4.2).
 
 ## 9. Reproducing the harness result
 
@@ -266,6 +259,7 @@ numbers are supported.
 `credit_score = c("increase", "integer")`. `print(bl_local)` reports
 `Fixed restored : loan_amnt` and `Integer rounded : credit_score`, ends with the
 observed vs counterfactual table, and explains both steps in notes. The search's
-point moves `loan_amnt` to 12,398.5 and `credit_score` to 634.22. The
-counterfactual keeps `loan_amnt` at 12,000, raises `loan_int_rate` to 14.146
-and `credit_score` to 635, and scores 0.547.
+point (pair (3,4), √d²_M 0.6934) moves `loan_amnt` to 12,523.4 and
+`credit_score` to 634.0454. The counterfactual keeps `loan_amnt` at 12,000,
+raises `loan_int_rate` from 12.69 to 14.44, lowers `loan_percent_income` from
+0.0500 to 0.0457, raises `credit_score` to 635, and scores 0.693.

@@ -1,5 +1,5 @@
 ############################################################
-# Internal prediction utilities — tidymodels edition
+# Internal prediction utilities -- tidymodels edition
 # Refactored from: scripts/2.2 Model_use fitting v2.R
 #
 # Primary path: models fitted by bl_fit_model() (except "GBM") are
@@ -12,7 +12,7 @@
 
 
 # --------------------------------------------------------------------------
-# SVM probability extraction — legacy fallback only
+# SVM probability extraction -- legacy fallback only
 # Used when a raw e1071 SVM object is passed via bl_wrap_model().
 # --------------------------------------------------------------------------
 

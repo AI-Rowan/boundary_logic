@@ -44,8 +44,9 @@ The package is fully implemented across three phases:
 
 The package is installable via devtools::install_github() or devtools::load_all().
 One vignette, Boundary_Logic_loan_default_workflow.Rmd, covers the complete
-workflow (Phases 1-3) on the bundled loan data; the README shows a shorter Pima
-example.
+workflow (Phases 1-3) on the bundled loan data. The README has a quick start on
+iris (Phases 1-3) and a Pima diabetes example that wraps a GAM
+(bl_wrap_model()) and sets actionability constraints.
 
 
 ========================================================
@@ -98,34 +99,43 @@ is exact. This should be communicated clearly in documentation and vignettes.
 
 The package is organised around a three-phase workflow. All Phase 1 outputs are
 stored in a single bl_result object that acts as the reproducible anchor for
-Phases 2 and 3.
+Phases 2 and 3. The step numbers are those of the loan harness
+(development/03_loan_status_Boundary_Logic.R) and the vignette.
 
 Phase 1: Build the pipeline
-  Step 1: Prepare data            bl_prepare_data() or bl_wrap_data()
-  Step 2: Filter outliers         bl_filter_outliers()            [optional]
-  Step 3: Fit or wrap model       bl_fit_model() or bl_wrap_model()
-  Steps 4-6: Build and assemble   bl_build_result()               [quick route]
+  Step 1: Load and encode data    read.csv(); categorical columns as integers
+  Step 2: Exploratory biplot      bl_prepare_data() + bl_build_result() with
+                                  no model + plot()
+  Step 3: Domain filter           subset the rows (no package function)
+  Step 4: Prepare data            bl_prepare_data() (split; outlier filter
+                                  through hull_fraction) or bl_wrap_data()
+  Step 5: Fit or wrap model       bl_fit_model() or bl_wrap_model()
+  Step 6: Build and assemble      bl_build_result()               [quick route]
              or individually:     bl_build_projection() +
                                   bl_build_grid() +
                                   bl_assemble()
-  Visualise:                      plot_biplotEZ()
+  Visualise:                      plot_biplotEZ() (or plot(bl_result)),
+                                  bl_project_points()
 
 Phase 2: Global interpretations (population level)
   Step 7: Nearest boundary point  bl_find_boundary()
-  Step 8: Distance-to-boundary    plot(bl_boundary)
-  Step 9: Surrogate model         bl_surrogate()
+          and distance plots      plot(bl_boundary)
+  Prune variables:                drop the weakest by the per-variable totals
+                                  plot(bl_boundary) prints; Steps 4b-6b refit
+                                  and rebuild, Step 7b repeats Step 7
+  Steps 8, 8b: Surrogate model    bl_surrogate() (full and reduced model)
 
 Phase 3: Local interpretation (single observation)
-  Step 10: Select target          bl_predict() + bl_select_target()
-  Step 12: Actionability filters  set_filters()                   [optional]
-  Step 13: Local counterfactual   bl_find_local_cf()
-  Step 14: Local biplot           plot(bl_local_result)
-  Step 15: Shapley attribution    bl_shapley()
-  Step 16: Sparse counterfactual  bl_find_sparse_cf()
-  Step 17: Unconstrained search   bl_find_local_cf() without set_filters
-  Step 18: External observation   bl_select_target() with a new data frame
-
-Note: Step 11 was merged into Step 10 in the final implementation.
+  Step 9: Choose the target       bl_predict() (+ bl_pick_point(), interactive)
+  Step 10: Target and constraints bl_select_target() + set_filters()
+  Step 11: Local counterfactual   bl_find_local_cf()
+  Step 12: Local biplot           plot(bl_local_result)
+  Step 13: Shapley attribution    bl_shapley()
+  Step 14: Sparse counterfactual  bl_find_sparse_cf()
+  Step 15: No actionability       bl_find_local_cf() without set_filters
+           constraints            [optional]
+  Step 16: External observation   bl_select_target() with a new data frame
+                                  (raw units converted by bl_apply_scaling())
 
 
 ========================================================
@@ -134,62 +144,92 @@ Note: Step 11 was merged into Step 10 in the final implementation.
 
 A. Data Preprocessing (R/data_prepare.R, R/outlier_filter.R)
 --------------------------------------------------------------
-bl_prepare_data(data, class_col, target_class, train_fraction, seed)
+bl_prepare_data(data, class_col, target_class, feature_cols, train_fraction,
+                seed, hull_fraction, verbose)
   - Converts raw data frame to binary 0/1 classification format
+  - Selects the features (feature_cols; default all columns but class_col)
   - Creates reproducible train/test split
-  - Returns: bl_data object
+  - Removes training outliers through bl_filter_outliers(): hull_fraction = 1
+    (the default) keeps every training row; the test data is never filtered
+  - Returns: bl_filter_result object
 
-bl_wrap_data(train_data, test_data, target_class)
-  - Registers pre-split, pre-coded data as a bl_data object
-  - For users whose data is already prepared externally
+bl_wrap_data(train_data, test_data, var_names, target_class)
+  - Registers pre-split data with a 0/1 "class" column as a bl_data object
+  - For users whose data is already prepared externally; does not filter
   - Returns: bl_data object
 
 bl_filter_outliers(bl_data, hull_fraction, verbose)
+  - Takes a bl_data object from bl_wrap_data() only (bl_prepare_data()
+    already filters); a tool for trying other hull fractions, not a step
   - Projects training data to a lightweight 2-PC space
   - Removes observations outside a convex hull enclosing hull_fraction of data
-  - Returns: bl_filter_result object (same structure as bl_data)
+    (default 0.9)
+  - Returns: bl_filter_result object: the bl_data fields (train_data,
+    test_data, var_names, num_vars, target_class) plus scaling, polygon,
+    hull_fraction, n_retained and n_removed
+
+bl_set_scaling(x, center, scale, method)
+  - Records the transform used to standardise the features before the model
+    was fitted, standardised = (raw - center) / scale, as x$scaling
+  - Display only: plots and prints show raw units; the model, projection and
+    grid are unchanged
+  - Returns: x (bl_data or bl_filter_result) with a scaling field
+
+bl_apply_scaling(data, bl_result)
+  - Converts new raw-unit data to model units with the recorded scaling
+  - Returns: data frame
 
 B. Model Fitting and Wrapping (R/model_fit.R, R/model_utils.R)
 ---------------------------------------------------------------
 bl_fit_model(train_data, var_names, model_type, cutoff, model_params)
-  - Fits one of eight supported classifier types:
-    GLM (logistic regression), GAM, GBM, LDA, SVM, NNET, RForrest, XGB
-  - All types except GBM use the parsnip/tidymodels backend
+  - Fits one of four classifier types: GLM (logistic regression), SVM,
+    NNET and RForest (an rpart decision tree; "RForrest" is a deprecated
+    alias)
+  - All four use the parsnip/tidymodels backend (a fitted workflow)
   - Returns: bl_model object
 
 bl_wrap_model(model, model_type, var_names, predict_fn, train_data, cutoff)
   - Registers an externally fitted model as a bl_model
+  - The only route for GAM, GBM, LDA and XGB
   - model_type = "custom": supply predict_fn = function(model, new_data)
     returning a numeric probability vector
   - Returns: bl_model object
 
-Supported model types: "GLM", "GAM", "GBM", "LDA", "SVM", "NNET",
-"RForrest", "XGB", "custom"
+Model types: bl_fit_model() takes "GLM", "SVM", "NNET", "RForest";
+bl_wrap_model() takes these and "GAM", "GBM", "LDA", "XGB", "custom"
 
 Key design decision: cutoff = 0.5 is the only methodologically valid value.
 Other values are accepted but will not produce correct boundary estimates.
 
 C. Projection and Biplot Construction (R/projection.R, R/biplot_grid.R)
 ------------------------------------------------------------------------
-bl_build_projection(train_data, var_names, method, standardise, proj_dims)
+bl_build_projection(train_data, var_names, method, standardise, proj_dims,
+                    bl_model, cva_classes, title)
   - Computes loading matrix V and its inverse tV
-  - method: "PCA" (variance-based) or "CVA" (between-class separation)
+  - method: "PCA" (variance-based) or "CVA" (between-class separation);
+    CVA groups are the model's TP/TN/FP/FN when bl_model is given
+  - Stores the metric W (metric), its inverse (metric_inv), metric_type
+    and the training ranges (train_ranges)
   - Returns: bl_projection object
 
-bl_build_grid(train_data, bl_projection, bl_model, m, cutoff, rounding,
-              b_margin, polygon, outlie, calc_hull)
+bl_build_grid(train_data, bl_projection, bl_model, m, cutoff, b_margin,
+              polygon, outlie, calc_hull)
   - Creates an m x m prediction grid in Z-space
   - Back-projects each grid point to X-space and scores through the model
-  - Extracts decision boundary contour lines
-  - rounding: controls contour band width ONLY (b_margin = 1/10^rounding)
-    - rounding = 2L: contour levels at 0.49/0.51 (wider band, smoother)
-    - rounding = 3L: contour levels at 0.499/0.501 (narrower, more precise)
-  - All model predictions are always floor-rounded to 3 d.p. regardless
+  - Extracts decision boundary contour lines at cutoff +/- b_margin
+  - b_margin: the contour band half-width, default 0.001 (contours at
+    0.499/0.501); must satisfy 0 < b_margin < 0.5. A wider band (e.g.
+    0.01, contours at 0.49/0.51) gives smoother contours
+  - All model predictions are always floor-rounded to 3 d.p., whatever
+    b_margin is
   - Returns: bl_grid object
 
-bl_build_result(bl_data, bl_model, method, title, m, rounding, ...)
+bl_build_result(bl_data, bl_model, method, proj_dims, standardise,
+                cva_classes, title, m, outlie, calc_hull, b_margin)
   - Combines bl_build_projection + bl_build_grid + bl_assemble in one call
   - Preferred interface for most users
+  - With bl_model = NULL: a model-free bl_result (no grid), for an
+    exploratory biplot coloured by true class
   - Returns: bl_result object
 
 bl_assemble(bl_data, bl_model, bl_projection, bl_grid)
@@ -201,17 +241,23 @@ Key design decision — polygon sourcing:
   bl_filter_result. The filter polygon is PCA-space only; the grid polygon
   is in the final Z-space (PCA or CVA).
 
-Key design decision — rounding separation:
-  rounding only determines the contour band width used to extract decision
+Key design decision — b_margin and prediction precision are separate:
+  b_margin only determines the contour band width used to extract decision
   boundary contours from the grid. It does NOT affect how model predictions
   are stored or displayed. Predictions are always rounded to 3 decimal places
   via floor(x * 1000) / 1000 inside .pred_function(). This separation was
   an important architectural decision made during method_developments.
+  b_margin is stored on bl_grid and bl_result; bl_find_local_cf() uses the
+  same value for its local contours.
 
 D. Counterfactual Identification (R/boundary.R, R/local_cf.R)
 --------------------------------------------------------------
 bl_find_boundary(bl_result, data, tdp)
   - Global search: finds nearest boundary point for each observation
+  - data defaults to bl_result$test_data
+  - Clips the contours to the grid hull (bl_result$polygon); a contour still
+    closed after the clip is kept only if it encloses training data
+    (.encloses_data())
   - Checks the counterfactuals against train_ranges after the search: those
     outside the training feature envelope are counted in a message and kept
   - Distances: dist_z (in the plane), dist_x (standardised X-space) and
@@ -223,15 +269,17 @@ bl_select_target(bl_result, target, data)
   - target: row index (integer) or single-row data frame (external observation)
   - Returns: bl_target object
 
-set_filters(bl_target, ...)
-  - Encodes actionability constraints for the local counterfactual search
+set_filters(bl_target, ..., hull = TRUE, train_ranges = TRUE)
+  - Encodes actionability constraints for the local counterfactual search,
+    and the plausibility (hull) and feasibility (train_ranges) switches
   - Valid types: "decrease", "increase", "fixed", c(min, max), "integer";
     "integer" combines with the others: c("increase", "integer"),
     list(c(min, max), "integer")
   - "fixed": search allows ±0.5 of observed (model units); then restored to
     observed. If the restored point does not cross the boundary or leaves
-    train_ranges, no counterfactual is reported (a counterfactual never moves
-    a fixed feature); always at observed in the sparse CF
+    train_ranges (when that switch is on), no counterfactual is reported
+    (a counterfactual never moves a fixed feature); always at observed in
+    the sparse CF
   - "integer": a whole number in raw units; the counterfactual is rounded
     after the search and re-checked (documentation/fixed-constraint-restore.md)
   - Returns: bl_filters object
@@ -239,7 +287,7 @@ set_filters(bl_target, ...)
 bl_find_local_cf(bl_result, bl_target, set_filters, max_pairs, m, distance,
                  verbose)
   - Local search: finds nearest boundary via biplot rotation
-  - Tests up to max_pairs eigenvector pairs: (1,2),(1,3),(2,3),(1,4),...
+  - Tests up to max_pairs component pairs: (1,2),(1,3),(2,3),(1,4),...
   - For each pair: rotates biplot, builds local grid, applies constraints,
     finds nearest opposing-class boundary point
   - Compares the pairs by distance = "auto" (the thesis rule, section
@@ -251,15 +299,21 @@ Key design decision — local CF hull rule:
   The global biplot's Z-space convex hull polygon (from bl_grid) is NOT
   applied in bl_find_local_cf(): rotation invalidates its coordinates.
   Instead, with hull = TRUE (the default since 2026-11-05, decided by the
-  author), the convex hull of the training data and the target is rebuilt
-  on each rotated plane and only the boundary points inside it are kept,
-  as the thesis requires (p.117, Appendix A). The actionability constraints
-  and train_ranges then constrain the search. All three of the thesis's
-  rules (actionability, feasibility, plausibility; p.116) are set in
+  author), the convex hull of the training data alone is rebuilt on each
+  rotated plane, as in Appendix A, and only the boundary points inside it
+  are kept: the thesis's plausibility rule (p.117). The target is not part
+  of the hull, so a target outside the training data can have no
+  counterfactual. A contour still closed after this clip is kept only if it
+  encloses training data on that plane (.encloses_data(), the empty-region
+  rule that bl_find_boundary() applies on the global plane). The
+  actionability constraints and train_ranges then constrain the search.
+  All three of the thesis's rules (actionability, feasibility,
+  plausibility; p.116) are set in
   set_filters(): the per-variable constraints, train_ranges = TRUE and
   hull = TRUE (both on by default, also with no filter object; since
   2026-11-06). hull = FALSE gives the earlier search; both FALSE with no
-  constraint gives the unconstrained counterfactual (p.115).
+  constraint gives the unconstrained counterfactual (p.115). See
+  documentation/local-convex-hull.md.
 
 E. Variable Contribution and Robustness Analysis (R/boundary_plot.R)
 ---------------------------------------------------------------
@@ -267,7 +321,10 @@ bl_robustness(bl_boundary, distance)
   - Quantifies per-variable contribution to distance-to-boundary
   - Standardises by distance = "auto": the total SD for a PCA biplot
     (as the thesis), the within-class SD for a CVA biplot
-  - Returns: named vector of per-variable totals + overall scalar
+  - Measures the in-plane gap from each observation to its boundary point,
+    not bl_find_boundary()'s dist_x / dist_mahalanobis
+  - Returns: list(sum_of_distance, robustness, distance): the per-variable
+    totals, their sum and the metric used
   - Note: plot(bl_boundary) already prints this to the console; call
     bl_robustness() separately only for programmatic access
 
@@ -281,57 +338,76 @@ bl_surrogate(bl_result, data)
 
 G. Shapley Attribution (R/shapley.R)
 --------------------------------------
-bl_shapley(bl_local_result)
+bl_shapley(bl_local_result, exact_max_vars, approx_perm, seed)
   - Decomposes target-to-counterfactual path using exact Shapley formula
-    (for p <= 14 variables; permutation approximation otherwise)
-  - Classifies each variable as Supports (darkblue), Contradicts (grey), or
-    No effect (mid grey; Shapley value 0)
+    (for p <= exact_max_vars = 14 variables; permutation approximation
+    otherwise)
+  - Classifies each variable as Supports (darkblue), Contradicts (light
+    grey), or No effect (mid grey; |Shapley value| < 1e-8)
   - Y-axis labels: "variable: observed -> counterfactual", with the
     comparison tables' decimals (documentation/scaling_axis_relabel_note.md)
   - Returns: bl_shapley object
 
-bl_find_sparse_cf(bl_shapley)
-  - Greedy: changes Supports variables one at a time, largest Shapley value
-    first, re-scoring the model after each; stops once the boundary is crossed
+bl_find_sparse_cf(bl_shapley_result, round_to)
+  - Greedy: changes Supports variables one at a time, largest absolute
+    Shapley value first, re-scoring the model after each; stops once the
+    boundary is crossed (sparse_path records each step)
   - Contradicts, No effect and "fixed" variables stay at observed values
   - Changed variables take their counterfactual values; a whole-number
     feature (a count or a score) is marked "integer" in set_filters(), and
     bl_find_local_cf() rounds the counterfactual in raw units and re-checks it
-    (round_to is deprecated)
+    (round_to is deprecated: any value but NULL stops with an error)
   - solution_valid = TRUE: sparse CF still crosses the boundary
   - Returns: bl_sparse_result object
 
 H. Plotting and Projection (R/plot_biplot.R, R/project_points.R)
 -----------------------------------------------------------------
-plot_biplotEZ(bl_result, points, boundary, target_point, target_label,
-              no_grid, no_points, no_contour, new_title, cex_z, label_cex,
-              tick_label_cex, label_dir, ticks_v, label_offset_var,
-              label_offset_dist, show_arrows, arrow_col, contour_col,
-              contour_lwd, contour_lty)
+plot_biplotEZ(bl_result, points, target_point, target_label, no_grid,
+              plot_points, confusion_cols, no_contour, new_title, cex_z,
+              label_dir, label_cex, tick_label_cex, ticks_v, ticks_var,
+              ticks_n, which, X_names, label_offset_var, label_offset_dist,
+              rotate_deg, grid_col, contour_col, contour_lwd, contour_lty)
   - Main biplot visualisation function
   - Shows: coloured prediction grid, training points (confusion colours),
     variable axes, decision boundary contour
   - points: overlay from bl_project_points()
-  - boundary: overlay from bl_find_boundary()
+  - No counterfactual arrows (there is no boundary argument): use
+    bl_pick_point(bl_result, data, bl_boundary) for those
+  - Model-free bl_result: no grid or contour; points coloured by true class
   - Confusion colours: TP=red, TN=blue, FP=purple, FN=orange
 
-bl_project_points(data, bl_result, filter_to_polygon)
+bl_pick_point(bl_result, data, bl_boundary, show_arrows, arrow_col)
+  - Interactive: for each click on the active biplot, prints and marks the
+    nearest point of data; with bl_boundary, also draws the arrow to that
+    point's boundary counterfactual
+  - Pass the same data to bl_find_boundary(); draw the biplot with
+    rotate_deg = 0 (the arrows use unrotated coordinates)
+  - Returns: data frame of the picked rows (invisibly)
+
+bl_project_points(data, bl_result, filter_to_polygon,
+                  filter_to_train_ranges)
   - Projects any data frame into the Z-space of bl_result
-  - Scores each point through the model (red=class1, blue=class0)
+  - Scores each point through the model: confusion colours when data has a
+    "class" column, otherwise red = predicted 1, blue = predicted 0
   - Returns: bl_points object for use in plot_biplotEZ()
 
 bl_predict(bl_result, data)
   - Scores every observation and returns a tidy data frame
-  - Columns: row, pred_prob (3 d.p.), pred_class, true_class, confusion,
-    plus all feature columns
+  - Columns: row, pred_prob (3 d.p.), pred_class, true_class and confusion
+    (when data has a "class" column), plus all feature columns
+  - data defaults to bl_result$test_data
   - Returns: data frame
 
 S3 plot methods:
   plot(bl_result)        — calls plot_biplotEZ(bl_result)
+  plot(bl_projection)    — biplot of a bl_projection (no grid), points
+                           coloured by class or confusion group
   plot(bl_boundary)      — jitter (default) or boxplot distance plot
   plot(bl_surrogate)     — hull-clipped grid + surrogate-coloured points
-  plot(bl_local_result)  — local biplot (rotated plane, no_points=TRUE default)
-  plot(bl_shapley)       — horizontal bar chart, Supports/Contradicts coloured
+  plot(bl_local_result)  — local biplot (rotated plane; plot_points = FALSE
+                           by default: target and counterfactual only)
+  plot(bl_shapley)       — horizontal bar chart, coloured Supports /
+                           Contradicts / No effect
   plot(bl_sparse_result) — local biplot with full CF + sparse CF overlaid
 
 
@@ -339,8 +415,10 @@ S3 plot methods:
 5. Key S3 Object Classes
 ========================================================
 
-bl_data           Output of bl_prepare_data() / bl_wrap_data()
-bl_filter_result  Output of bl_filter_outliers() — same fields as bl_data
+bl_data           Output of bl_wrap_data()
+bl_filter_result  Output of bl_prepare_data() / bl_filter_outliers() — the
+                  bl_data fields plus scaling, polygon, hull_fraction,
+                  n_retained, n_removed
 bl_model          Output of bl_fit_model() / bl_wrap_model()
 bl_projection     Output of bl_build_projection()
 bl_grid           Output of bl_build_grid()
@@ -352,18 +430,26 @@ bl_surrogate      Output of bl_surrogate()
 bl_target         Output of bl_select_target()
 bl_filters        Output of set_filters()
 bl_local_result   Output of bl_find_local_cf()
+bl_counterfactual The counterfactual point, bl_local_result$bl_counterfactual
+                  (model units + scaling; mirrors bl_target)
 bl_shapley        Output of bl_shapley()
 bl_sparse_result  Output of bl_find_sparse_cf()
 
-The bl_result object contains:
-  train_data, test_data, var_names, target_class
+The bl_result object contains (bl_assemble()):
+  train_data, test_data, var_names, num_vars
   model (the fitted model object), model_type, cutoff, accuracy, gini
-  V (loading matrix), tV (inverse), center, scale, method
-  biplot_grid (the bl_grid object)
+  b_margin (contour band half-width; bl_find_local_cf() uses it too)
+  V (loading matrix), tV (inverse), X_center, X_sd, method, standardise,
+    proj_dims
   biplot_obj (the biplotEZ object for plotting)
+  metric (W), metric_inv (its inverse), metric_type
+  polygon (convex hull in Z-space, from bl_grid), hull_fraction (the grid
+    hull's outlie value)
   train_ranges (feature envelope for feasibility checking)
-  polygon (convex hull in Z-space, from bl_grid)
-  rounding (stored for bl_find_local_cf() to compute its local b_margin)
+  scaling (display-only raw-unit scaling from bl_set_scaling(), or NULL)
+  biplot_grid (the bl_grid object)
+  call, created_at
+  Without a model, the model, grid and performance fields are NULL.
 
 Note on train_fraction = 1:
   When train_fraction = 1, all data is used for training and test_data has
@@ -392,8 +478,8 @@ Note on train_fraction = 1:
 
 6.4 Transparency
   All outputs retain metadata: centring/scaling values, projection matrices,
-  model metadata, grid settings, boundary estimation assumptions, rounding
-  settings, and counterfactual search constraints.
+  model metadata, grid settings, boundary estimation assumptions, the
+  contour band (b_margin), and counterfactual search constraints.
 
 6.5 Extensibility
   New projection methods, model backends, and explanation summaries can be
@@ -412,7 +498,9 @@ Note on train_fraction = 1:
 
 7.2 Function naming
   - All public functions: bl_* prefix (e.g., bl_fit_model, bl_find_boundary)
-  - Internal helpers: .* prefix (e.g., .pred_function, .fit_model)
+  - Internal helpers: .* prefix (e.g., .pred_function, .fit_model); the
+    internal helpers stop_if_*(), calc_gini(), get_variable_ranges()
+    and get_filter_logical_vector() have no prefix and are not exported
   - Exception: set_filters() and plot_biplotEZ() by design
 
 7.3 Validation
@@ -425,7 +513,8 @@ Note on train_fraction = 1:
   - All model predictions go through .pred_function() in R/predict_utils.R
   - .pred_function() dispatches by model_type and applies floor rounding
     to 3 d.p.: floor(x * 1000) / 1000
-  - rounding is NOT passed to .pred_function() — it only controls b_margin
+  - b_margin is NOT passed to .pred_function() — it only sets the contour
+    band
 
 7.5 Script variable naming conventions
   - Assembled pipeline result: always bl_results (not result or bl_result)
@@ -437,6 +526,12 @@ Note on train_fraction = 1:
   - calc_hull parameter in bl_build_grid(): visual-only, do not expose
   - bl_robustness() as a sequential step after plot(bl_bnd): redundant —
     plot(bl_bnd) already prints the scalar and per-variable totals
+  - boundary = in plot_biplotEZ(): the argument no longer exists; arrows
+    come from bl_pick_point(bl_results, bl_boundary = bl_bnd) in an
+    interactive session (eval = FALSE in vignettes)
+  - bl_filter_outliers() as a numbered workflow step: outlier filtering is
+    part of bl_prepare_data(hull_fraction = ); mention bl_filter_outliers()
+    only in prose, as a tool for trying hull fractions after bl_wrap_data()
 
 
 ========================================================
@@ -451,7 +546,8 @@ boundary_logic/
 │   ├── feasibility_utils.R    ← Variable range helpers (train_ranges)
 │   ├── hull_utils.R           ← Convex hull polygon helpers
 │   ├── model_utils.R          ← Internal .fit_model()
-│   ├── data_prepare.R         ← bl_prepare_data(), bl_wrap_data()
+│   ├── data_prepare.R         ← bl_prepare_data(), bl_wrap_data(),
+│   │                              bl_set_scaling(), bl_apply_scaling()
 │   ├── model_fit.R            ← bl_fit_model(), bl_wrap_model()
 │   ├── outlier_filter.R       ← bl_filter_outliers()
 │   ├── projection.R           ← bl_build_projection()
@@ -499,11 +595,11 @@ boundary_logic/
 │   ├── algorithms.md, local-convex-hull.md, boundary-distance-and-robustness.md
 │   ├── fixed-constraint-restore.md, sparse-counterfactual.md,
 │   │   nearest-vertex-tie-break.md, scaling_axis_relabel_note.md
-│   ├── future-developments.md ← Future code and method developments
+│   ├── future-improvements-review.md ← Future code and method developments
 │   ├── biplot-rotation/       ← Rotation note and the scripts behind it
 │   ├── select-target-class/   ← bl_select_target() class-lookup note
 │   ├── methodology-changes/   ← The record of the changes since the thesis
-│   └── the final thesis PDF, the Pima workflow HTML
+│   └── the final thesis PDF
 │
 ├── scripts/                   ← Git-ignored personal playground (Paper 1
 │                                  Pima example in scripts/paper1-pima/)
@@ -518,11 +614,16 @@ boundary_logic/
 9. Git Branch Structure
 ========================================================
 
+Local and on origin:
 main               — Current stable package code; public-facing
 method_developments — Active development branch
 paper_nr1_changes  — Package work for Paper 1 (JCGS); the session branch while
                      Paper 1 work is open (CLAUDE.md §10)
+
+On origin only (not checked out locally):
 original_PhD_code  — Preserved original PhD research scripts (read-only)
+Github_deployment  — Holds no commit that main lacks
+
 Tag v0.2.0         — The release Paper 1 installs:
                      devtools::install_github("AI-Rowan/boundary_logic@v0.2.0")
 
@@ -546,10 +647,13 @@ AI-Rowan/boundary_logic).
   are stored in bl_projection and propagated through bl_result.
 
 10.3 CVA-specific constraints
-  CVA requires at least two classes. The bl_build_projection() function
-  handles the 2-class CVA case specifically; do not break this pathway.
-  CVA within-class scatter must use the full maths (Wmat_inv), not a
-  simple matrix inverse.
+  CVA requires at least two classes. With a model, bl_build_projection()
+  uses the four confusion groups as classes (factor levels FN, FP, TN, TP,
+  alphabetical; empty groups dropped with a message). It warns when fewer
+  than three groups remain but still runs the 2-class CVA; do not break
+  this pathway. The inverse of the within-class covariance W
+  (metric_inv) uses chol2inv(chol(W)) with a ridge fallback
+  (.compute_metric_inverse()), not solve().
 
 10.4 Local CF rotation invalidates the global hull polygon
   When bl_find_local_cf() rotates the biplot plane for a component pair,
@@ -561,20 +665,23 @@ AI-Rowan/boundary_logic).
 
 10.5 Model type coupling
   The package should not become dependent on one classifier. New model
-  types should be addable by extending .fit_model() and .pred_function()
-  without touching other code.
+  types should be addable by extending .pred_function() (and .fit_model()
+  for a type bl_fit_model() fits) without touching other code.
 
 10.6 XGB model wrapping
   For XGB, bl_model$model must be a list of the form
   list(model = <xgb.Booster>, features = <character vector>).
-  This is the internal format produced by bl_fit_model() and expected by
-  .pred_function().
+  XGB is not available through bl_fit_model(): wrap the booster with
+  bl_wrap_model(model = list(model = <xgb.Booster>, features = ...),
+  model_type = "XGB"), the format .pred_function() expects. Do not change
+  this format. (An xgboost::xgboost() model fitted on a factor 0/1
+  response is accepted in place of the xgb.Booster.)
 
-10.7 Eigenvector pair limit
+10.7 Component pair limit
   bl_find_local_cf() tests pairs in order: (1,2),(1,3),(2,3),(1,4),...
-  Maximum tested pairs: max_pairs (default 21, every pair for p <= 7). For datasets where many
-  pairs are needed, increase max_pairs. Do not test more than
-  choose(ncol(V), 2) pairs.
+  Maximum tested pairs: max_pairs (default 21, every pair for p <= 7).
+  For datasets where many pairs are needed, increase max_pairs. Do not
+  test more than choose(ncol(V), 2) pairs (.generate_pairs() stops there).
 
 
 ========================================================
@@ -593,7 +700,9 @@ AI-Rowan/boundary_logic).
   - Silently change default scaling, centring, or projection conventions
   - Remove metadata needed for inverse projection or interpretation
   - Entangle plotting code with computation code
-  - Pass rounding to .pred_function() — it does not belong there
+  - Pass b_margin to .pred_function() — it does not belong there
+  - Add a boundary = argument back to plot_biplotEZ() (arrows belong in
+    bl_pick_point())
   - Apply the global biplot's Z-space hull polygon inside bl_find_local_cf()
     (the hull rebuilt on each rotated plane is the one the local search uses)
   - Show outlie, calc_hull, or bl_robustness() as sequential steps in examples
@@ -622,29 +731,26 @@ AI-Rowan/boundary_logic).
   3. Add a prediction branch in .pred_function() (R/predict_utils.R)
   4. Test with a simple binary dataset (iris two-class)
   5. Document in the supported model types table in bl_fit_model() roxygen
+  A type supported by bl_wrap_model() only needs steps 1 (bl_wrap_model()
+  only), 3 and 4.
 
 11.6 Documentation priorities
   1. Function help files (roxygen2) — highest priority
   2. Package README
-  3. Getting-started vignette (iris, Phases 1-3)
-  4. Pima diabetes vignette (clinical context, Phases 1-3)
-  5. Mathematical method vignette — not yet written; future priority
+  3. The vignette, Boundary_Logic_loan_default_workflow (loan data,
+     Phases 1-3; precomputed: edit the .Rmd.orig, run vignettes/precompile.R)
+  4. Mathematical method vignette — not yet written; future work (item B22
+     of documentation/future-improvements-review.md)
 
 
 ========================================================
 12. Deferred / Future Work
 ========================================================
 
-- Mathematical method vignette: derives the biplot projection, inverse
-  projection, and counterfactual geometry from first principles
-- Unit tests for the values of the Phase 3 search (bl_find_local_cf's
-  boundary point) and of the Shapley values; bl_select_target, set_filters,
-  the fixed restore, the integer rounding and the sparse path are tested
-- Unit tests for bl_build_result() (bl_assemble() is tested)
-- (Implemented since: the Mahalanobis distance to the boundary, as
-  bl_find_boundary()$dist_mahalanobis and plot.bl_boundary(distance =
-  "mahalanobis"); see documentation/boundary-distance-and-robustness.md)
-- CRAN submission preparation: check(), vignette build, README badges
+Every future development (method, code and interface, tests,
+documentation and release) is listed in one place:
+documentation/future-improvements-review.md. Do not implement one without
+a new instruction (CLAUDE.md §9).
 
 
 ========================================================
@@ -653,7 +759,7 @@ AI-Rowan/boundary_logic).
 
 Minimum viable:
   - The package is installable via devtools::install_github()
-  - The main workflow can be executed by a new user from the vignettes
+  - The main workflow can be executed by a new user from the vignette
   - Phase 1, 2, and 3 functions are stable and tested
   - The package accurately reflects the PhD methodology
   - The package is structured so LLM agents can safely extend it

@@ -43,7 +43,7 @@ and \code{bl_assemble()}.
 }
 \description{
 Use this function when you have fitted your own classification model
-outside of \code{bl_fit_model()} — for example, using custom hyperparameters,
+outside of \code{bl_fit_model()} -- for example, using custom hyperparameters,
 a caret workflow, or a model type not natively supported. The wrapped
 object is a \code{"bl_model"} compatible with \code{bl_build_grid()} and
 \code{bl_assemble()}.

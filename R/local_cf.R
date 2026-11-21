@@ -836,8 +836,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
     # Plausibility (thesis section 4.3.1): the convex hull of the training
     # data on this rotated plane, rebuilt for every pair (the global grid's
     # polygon does not apply after the rotation). The target is not part of
-    # it (since 2026-11-06), so the valid region is set by the training data
-    # alone, as it is for bl_find_boundary().
+    # it, so the valid region is set by the training data alone, as it is for
+    # bl_find_boundary().
     hull_poly <- if (hull) {
       .build_hull_polygon(Z_train_rot, min_val, max_val, outlie = 1)
     } else {
@@ -1720,8 +1720,8 @@ bl_find_local_cf <- function(bl_result, bl_target,
 #' \code{\link{bl_select_target}} from the target's own row), or red/blue by
 #' predicted class when it is not. The nearest boundary point is shown as a cross
 #' with an arrow. When the search applied the convex hull (\code{x$hull}), the
-#' prediction grid is coloured only inside the hull of the training data and
-#' the target on this plane, as the global biplot colours only inside its hull:
+#' prediction grid is coloured only inside the hull of the training data on
+#' this plane, as the global biplot colours only inside its hull:
 #' the coloured area is where the search could choose boundary points, and
 #' boundary lines in the white area lie outside it.
 #'

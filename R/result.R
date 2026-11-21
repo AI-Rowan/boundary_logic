@@ -130,7 +130,7 @@ bl_assemble <- function(bl_data,
       call. = FALSE)
 
   # ---- Resolve filtered vs unfiltered data ------------------------------
-  # Accept either bl_data or bl_filter_result — both carry train_data / test_data
+  # Accept either bl_data or bl_filter_result -- both carry train_data / test_data
   train_data <- bl_data$train_data
   test_data  <- bl_data$test_data
 
@@ -214,7 +214,7 @@ bl_assemble <- function(bl_data,
 
 
 # --------------------------------------------------------------------------
-# bl_build_result(): single-call convenience wrapper for Steps 4-6
+# bl_build_result(): single-call convenience wrapper for Steps 3-5
 # --------------------------------------------------------------------------
 
 #' Build and assemble a full boundary logic result in one step
@@ -323,7 +323,7 @@ bl_build_result <- function(bl_data     = NULL,
          call. = FALSE)
 
   # The projection matrix V is always built from the training data.
-  # bl_build_result() does not support building V from test data — use
+  # bl_build_result() does not support building V from test data -- use
   # bl_build_projection() directly if a non-standard data source is needed.
   train_data <- bl_data$train_data
   var_names  <- bl_data$var_names
@@ -355,8 +355,9 @@ bl_build_result <- function(bl_data     = NULL,
     title       = title
   )
 
-  # Copy any user-set raw-unit scaling onto the projection so the model-free
-  # exploratory plot.bl_projection() can relabel its axes too.
+  # Copy any user-set raw-unit scaling onto the projection too, for
+  # consistency. The plot methods read bl_result$scaling, which bl_assemble()
+  # takes from bl_data; this projection is not returned on its own.
   bl_proj$scaling <- bl_data$scaling
 
   # ---- Step 5: build prediction grid (skipped when no model) -----------

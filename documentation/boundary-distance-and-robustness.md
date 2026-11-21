@@ -17,9 +17,7 @@ including how the local search uses $\mathbf{W}$, are in
 **Companion documents:**
 
 - `../1 Foundation intro documents.txt`: methodological principles;
-- `../2 implementation_summary.txt` §4.2.1, §4.5, §4.6 and §4.6.1: code mechanics;
-- `../.claude/reference/mahalanobis_implementation_plan.md`: the approved plan (2026-05-20) that introduced
-  $\mathbf{W}$ into the package.
+- `../2 implementation_summary.txt` §4.2.1, §4.5, §4.6 and §4.6.1: code mechanics.
 
 ---
 
@@ -69,7 +67,7 @@ $$
 
 - **This is general.** It holds for any CVA biplot the package builds, including 2-group CVA, by construction.
 - **The consequence:** distances measured with $\mathbf{W}$ are consistent with the CVA biplot's axes.
-- **The PhD research code** used biplotEZ's `Wmat` directly. The package recomputes it with the divisor $n-g$.
+- **The PhD research code** uses biplotEZ's `Wmat` directly. The package recomputes it with the divisor $n-g$.
   This scales every distance by the same constant and changes no comparison.
 - **Why the package computes $\mathbf{W}$ rather than reading `bp$Wmat`:**
   - **PCA has no `Wmat`.** A biplotEZ PCA object has none, so `.compute_metric_inverse()` must compute the
@@ -80,7 +78,7 @@ $$
     ([`methodology-changes/methodology-changes.md`](methodology-changes/methodology-changes.md), "The metric W as
     a covariance matrix") records this reason and its effect.
   - **Under CVA the two agree:** `bp$Wmat / (n - g)` equals `metric` to rounding (checked on iris with four
-    groups, biplotEZ 2.2, 2026-11-06).
+    groups, biplotEZ 2.2).
 
 The rotation note (§3.4) proves the consequence that matters for the local search. Under CVA, for any displacement
 lying in a biplot plane, rotated or not, the squared Mahalanobis distance is $(n-g)$ times the squared in-plane
@@ -130,11 +128,11 @@ For every observation, `bl_find_boundary()` finds the nearest point on the oppos
 - **`train_ranges`** are checked *after* selection and reported, not used to discard points. Discarding would pick
   a farther, geometrically wrong point (`2 implementation_summary.txt` §6.11).
 - **Closed contours.** A contour still closed after clipping to the training hull is kept only if it encloses
-  *training* rows (`.encloses_data()`; the thesis's empty-region rule, §3.10 step 4, p.93). Until 2026-11-06 the
-  rows being searched decided (as in the PhD code), so a row's counterfactual could depend on which other rows
-  were searched with it (`documentation/algorithms.md`, finding F2). On the loan harness's 4-feature model the
-  change keeps 18 contours instead of 12 and moves 346 of the 4,429 test rows' counterfactuals; on the Pima
-  example and the 9-feature loan model nothing changes.
+  *training* rows (`.encloses_data()`; the thesis's empty-region rule, §3.10 step 4, p.93), so a row's
+  counterfactual does not depend on which other rows are searched with it (`documentation/algorithms.md`,
+  finding F2). Judged on the rows being searched instead, the rule would keep 12 contours instead of 18 on the
+  loan harness's 4-feature model and would move 346 of the 4,429 test rows' counterfactuals; on the 9-feature
+  loan model and on the Pima example (both models, training and test rows) nothing would change.
 
 It returns three distances (`R/boundary.R`, the "Distances" block of `bl_find_boundary()`):
 
@@ -146,7 +144,7 @@ It returns three distances (`R/boundary.R`, the "Distances" block of `bl_find_bo
 
 `dist_mahalanobis` is squared, as the field of the same name in `bl_find_local_cf()` is, so the two can be compared
 directly; `sqrt()` gives the distance, and `print()` shows the mean of that. It is `NA` where no boundary point was
-found and, with a warning, when `metric_inv` is missing (an older `bl_result`, §5).
+found and, with a warning, when `metric_inv` is missing (§5).
 
 **How they differ.**
 
@@ -158,7 +156,7 @@ found and, with a warning, when `metric_inv` is missing (an older `bl_result`, �
   distance of that in-plane displacement (§1.2). It equals `dist_mahalanobis` only when the observation lies in the
   plane, which in the global biplot it rarely does.
 
-**Why they differ, and how they are used** (`documentation/algorithms.md`, finding F3, decided 2026-11-06). Write
+**Why they differ, and how they are used** (`documentation/algorithms.md`, finding F3). Write
 the observation's full coordinates as $(\mathbf{x}_i-\bar{\mathbf{x}})\mathbf{S}^{-1}\mathbf{V} = [\mathbf{z}_i,
 \mathbf{w}_i]$: $\mathbf{z}_i$ holds the two plotted ones and $\mathbf{w}_i$ the other $p-2$. Then
 $\mathbf{x}_i = \bar{\mathbf{x}} + \mathbf{z}_i\mathbf{V}_r^{-}\mathbf{S} + \mathbf{w}_i\mathbf{V}_{-r}^{-}\mathbf{S}$,
@@ -170,9 +168,10 @@ $$
 $$
 
 the move along the plane to the boundary, plus the reset of the observation's off-plane part to the mean, which has
-nothing to do with the boundary. The off-plane part is most of the global gap: 80% of its summed squared length on the
-loan harness's 9-feature model, 59% on its 4-feature model and 78% on Pima's 7-feature model (within-class SD units;
-the methodology note's F3 rows). Hence:
+nothing to do with the boundary. The off-plane part is most of the global gap, in within-class SD units: 80% of its
+summed squared length on the loan harness's 9-feature model and 59% on its 4-feature model (test rows; 80% and 60% on
+the training rows), and 78% on Pima's 7-feature model and 63% on its 4-feature model (training rows; the F3 rows of
+`methodology-changes/method-change-effects.csv`). Hence:
 
 - **The variable importance and the robustness (§3) use only the in-plane move**, as the thesis does. They are not
   computed from `dist_x` or `dist_mahalanobis`, and their totals do not decompose them.
@@ -183,7 +182,7 @@ the methodology note's F3 rows). Hence:
 
 ### 2.1 Why the distance uses $\mathbf{W}$, not a rotated $\mathbf{W}$
 
-The local search rotates the biplot for each eigenvector pair: pair $i$ has its own orthogonal rotation
+The local search rotates the biplot for each component pair: pair $i$ has its own orthogonal rotation
 $\mathbf{A}_i$ ($\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$). It is natural to ask whether a distance should allow for
 that rotation, using a "rotated" metric. It need not, for three reasons.
 
@@ -200,9 +199,8 @@ that rotation, using a "rotated" metric. It need not, for three reasons.
      $\mathbf{A}_i\mathbf{A}_i' = \mathbf{I}$ and cancels. The rotation note §3.4 proves this, so a Z-space and an
      X-space measurement agree.
    - **Under PCA it is not a multiple of the identity,** so a Z-space distance would depend on the rotation.
-     Measuring in X-space avoids that. (Under PCA `bl_find_local_cf()` compares the pairs by the Euclidean
-     distance in X-space by default, `dist_x`, since 2026-11-05; this point applies when `"mahalanobis"` is
-     passed.)
+     Measuring in X-space avoids that. (Under PCA `bl_find_local_cf()` compares the pairs by default by the
+     Euclidean distance in X-space, `dist_x`; this point applies when `"mahalanobis"` is passed.)
 
 So "allowing for $\mathbf{A}$" is either automatic (CVA: it cancels) or the wrong thing to do (PCA: it would make
 the distance depend on the plane chosen to display the move).
@@ -260,13 +258,13 @@ sum_of_distance    <- colSums(abs(vec_to_boundary_sd), na.rm = TRUE)
   `sum_of_distance` ($T_j$).
 - **The robustness score:** `bl_robustness()` returns the same totals and their sum, `robustness`. The score is
   computed on the rows the boundary was found on: by default `test_data`, where the thesis used the training data.
-- **The denominator** is set by `distance`. The default, `"auto"` (since 2026-11-05), follows the thesis's rule by
-  projection: the total SD for a PCA biplot, the within-class SD for a CVA biplot. Before, `"mahalanobis"` was the
-  default for both.
+- **The denominator** is set by `distance`. The default, `"auto"`, chooses by projection: the total SD for a PCA
+  biplot (the thesis's rule), the within-class SD for a CVA biplot (the package's choice, §3.3; the thesis uses the
+  total SD for both).
 
 | `distance` | denominator | |
 |---|---|---|
-| `"mahalanobis"` (CVA default) | $\sqrt{\mathbf{W}_{jj}}$, the within-class SD | the package's choice (2026-05) |
+| `"mahalanobis"` (CVA default) | $\sqrt{\mathbf{W}_{jj}}$, the within-class SD | the package's choice (§3.3) |
 | `"euclidean"` (PCA default) | `X_sd`, the total SD | the thesis's rule |
 
 ### 3.3 Why the CVA default is the within-class SD
@@ -292,8 +290,8 @@ $$
 - per-feature totals on the plot's axis;
 - a scalar robustness.
 
-Only the denominator differs from the thesis. Under PCA the default keeps the thesis's total SD (since
-2026-11-05), so the departure applies to CVA biplots, where $\mathbf{W}$ is the metric the projection is built on.
+Only the denominator differs from the thesis. Under PCA the default is the thesis's total SD, so the departure
+applies to CVA biplots, where $\mathbf{W}$ is the metric the projection is built on.
 Under PCA $\mathbf{W}$ comes from the 0/1 class (`W_binary`), which the PCA axes do not use.
 
 ---
@@ -359,7 +357,7 @@ Mahalanobis check (squared distances, summed across obs):
   plotted (per feature) = 9675.25 | full d_M^2 = 11754.70 | difference = 2079.45 (+17.7% of full)
 ```
 
-For the four-feature model of Step 7b the difference is +15.9%.
+For the four-feature model of Step 7b the difference is +16.0% (plotted 7968.57, full 9486.73).
 
 **Reading it:**
 
@@ -374,10 +372,10 @@ For the four-feature model of Step 7b the difference is +15.9%.
 - **The numbers are returned** as `mahalanobis_check` (`plotted`, `full`, `difference`, `pct`) in
   `plot.bl_boundary()`'s invisible result; `NULL` for `"euclidean"`.
 
-**Changed 2026-10-31.** The diagnostic's "diagonal" used to be $\sum_j v_j^2(\mathbf{W}^{-1})_{jj}$, the diagonal
-of the *inverse*. That is not the plotted measure: for an SPD matrix $(\mathbf{W}^{-1})_{jj} \ge 1/\mathbf{W}_{jj}$,
-with equality only when feature $j$ is uncorrelated with the others. On the same Step 7 run it reported −42.6%,
-which mostly measured that mismatch.
+**Why "plotted" divides by $\mathbf{W}_{jj}$.** A check built on the diagonal of the *inverse*,
+$\sum_j v_j^2(\mathbf{W}^{-1})_{jj}$, would not compare the plotted measure: for an SPD matrix
+$(\mathbf{W}^{-1})_{jj} \ge 1/\mathbf{W}_{jj}$, with equality only when feature $j$ is uncorrelated with the others.
+On the same Step 7 run it would report −42.6% (−14.2% on Step 7b), which mostly measures that mismatch.
 
 ---
 
@@ -388,7 +386,7 @@ which mostly measured that mismatch.
 2. **PCA without class information.** The metric falls back to $\boldsymbol{\Sigma} = $ `cov(X)`: standard rather
    than within-class Mahalanobis.
 3. **Older `bl_result` objects.**
-   - **The cause:** objects built before 2026-05-20 have no `metric` / `metric_inv`.
+   - **The case:** a `bl_result` without `metric` / `metric_inv`, such as one saved by version 0.1.0.
    - **What `plot.bl_boundary()` / `bl_robustness()` do:** if `metric` is missing, they fall back to
      `"euclidean"`, with a warning to rebuild.
    - **What `bl_find_local_cf()` does:** the same, if `metric_inv` is missing.
@@ -396,7 +394,7 @@ which mostly measured that mismatch.
 4. **External targets.** No class information is needed when distances are computed: the metric was fixed when the
    projection was built.
 5. **Reproducing the thesis.** `distance = "euclidean"` reproduces the thesis's Phase 2 measure; it is the default
-   for a PCA biplot (`"auto"`, since 2026-11-05).
+   for a PCA biplot (`"auto"`).
 
 ---
 
@@ -425,12 +423,7 @@ All paths are relative to this file.
 
 ## 7. Future work
 
-- **Shapley attribution of the full Mahalanobis distance in Phase 2.**
-  - **What it gives:** the theoretically correct per-feature decomposition.
-  - **Why it waits:** the cost is $O(n\cdot 2^p)$ (`future-developments.md` §1.6).
-- **A Cholesky-whitened diagnostic plot.** It would show the whitened decomposition ($u_k^2$) across the training
-  set, without claiming per-variable attribution. That is useful when the check's percentage is large; it has
-  not been requested.
-- **Calibrated probabilities from the boundary distance.** The thesis's §6.4 (pp.145–146) proposes Platt scaling on
-  the change vector's Euclidean or Mahalanobis length. That would give a model-agnostic posterior class probability
-  from the distance to the boundary.
+The future developments of this note's subject are in `future-improvements-review.md`, with the
+reason each waits: the Shapley attribution of the full Mahalanobis distance in Phase 2 (§1.6), a
+Cholesky-whitened diagnostic plot (§1.7.3) and calibrated probabilities from the boundary distance
+(§1.7.2).

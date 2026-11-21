@@ -38,7 +38,7 @@ test_that(".nearest_idx_block uses no random numbers", {
 
 
 # ---- The searches on the standardised-iris pipeline -----------------------------
-# With the random tie-break, eigenvector pair (1,3) of target 1 returned one of
+# With the random tie-break, component pair (1,3) of target 1 returned one of
 # two counterfactuals depending on the RNG state.
 
 std_iris <- iris

@@ -138,8 +138,8 @@ class is known (\code{bl_target$class_obs}, resolved by
 \code{\link{bl_select_target}} from the target's own row), or red/blue by
 predicted class when it is not. The nearest boundary point is shown as a cross
 with an arrow. When the search applied the convex hull (\code{x$hull}), the
-prediction grid is coloured only inside the hull of the training data and
-the target on this plane, as the global biplot colours only inside its hull:
+prediction grid is coloured only inside the hull of the training data on
+this plane, as the global biplot colours only inside its hull:
 the coloured area is where the search could choose boundary points, and
 boundary lines in the white area lie outside it.
 }

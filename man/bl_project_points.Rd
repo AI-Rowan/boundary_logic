@@ -41,7 +41,7 @@ convex hull. Always \code{TRUE} when \code{bl_result$polygon} is \code{NULL}.}
 }
 }
 \description{
-Projects any data frame — training, test, or new observations — into the
+Projects any data frame -- training, test, or new observations -- into the
 2D biplot plane using the projection matrix V stored in a \code{"bl_result"}
 object. Also scores each observation through the fitted model and assigns
 point colours:
@@ -69,10 +69,10 @@ result  <- bl_assemble(bl_dat, bl_model = bl_mod,
 # Project training data
 train_pts <- bl_project_points(result$train_data, result)
 
-# Project test data (class column present — confusion colours)
+# Project test data (class column present -- confusion colours)
 test_pts  <- bl_project_points(result$test_data, result)
 
-# Project new observations (no class column — red/blue by prediction)
+# Project new observations (no class column -- red/blue by prediction)
 new_obs   <- result$test_data[1:5, result$var_names]
 new_pts   <- bl_project_points(new_obs, result)
 

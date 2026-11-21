@@ -20,7 +20,7 @@ Thesis pages are the printed pages of the final thesis (printed page = PDF page 
   the convex hull of the training data" (§4.3.1, p.117). The hull ensures that the counterfactual is
   plausible: it lies in a region the training data covers (p.116). The rule is dropped only when an
   unconstrained solution is acceptable (p.115).
-- **Appendix A** rebuilds the hull on each rotated plane from the target and the training data
+- **Appendix A7** rebuilds the hull on each rotated plane from the target and the training data
   (pp.207, 209).
 - **Empty regions.** "Any local decision boundary area that does not contain data points is
   discarded" (§3.10 step 4, p.93).
@@ -30,7 +30,7 @@ Thesis pages are the printed pages of the final thesis (printed page = PDF page 
 The global biplot's hull polygon (from `bl_build_grid()`) has coordinates on the unrotated plane.
 The local search turns the plane for every component pair (`.bl_rotate()`), so that polygon does not
 describe the training data on a rotated plane, and the local search never uses it. Instead it
-projects the training data onto each rotated plane and builds the hull there, as Appendix A does.
+projects the training data onto each rotated plane and builds the hull there, as Appendix A7 does.
 
 ## 3. What the code does
 
@@ -65,14 +65,40 @@ hull removes.
 
 | Choice | What the code does | Reason |
 |---|---|---|
-| The points the hull is built from | The training data (Appendix A also includes the target) | The valid region is set by the training data alone, as the text says ("the convex hull of the training data", p.117) and as in the global search. A target outside the training data does not enlarge the region its counterfactual may come from |
+| The points the hull is built from | The training data (Appendix A7 also includes the target) | The valid region is set by the training data alone, as the text says ("the convex hull of the training data", p.117) and as in the global search. A target outside the training data does not enlarge the region its counterfactual may come from |
 | A switch | `set_filters(hull = TRUE)` by default; `hull = FALSE` gives the search without the rule (§6) | The thesis rule by default, with the unconstrained search one call away |
 | The rotation scripts (`17_1` to `17_3`) | Pin `set_filters(tgt, hull = FALSE)` | Their measurements concern the rotation and the pair search, so the rotation note's numbers do not depend on the hull |
 | An enclosure rule for closed contours | With the hull on, a closed contour is kept only if it encloses training data on the plane | The same empty-region rule as the global search (§3.10 step 4, p.93), tested on the training data in both searches |
 
 **Off the plane.** The hull applies to the boundary points on the plane. The restored point of a
-`"fixed"` feature, the rounded point of an `"integer"` feature and the sparse counterfactual lie off
-the plane, and are checked against the constraints and the training ranges only.
+`"fixed"` feature and the rounded point of an `"integer"` feature lie off the plane, and are checked
+against the constraints and the training ranges only. The sparse counterfactual
+(`bl_find_sparse_cf()`) also lies off the plane; it is re-scored by the model and checked against no
+rule.
+
+**A target inside every training range can lie outside the hull.** This follows from how the hull
+is built, and is not an error:
+
+- The hull is built from the training rows projected onto the rotated plane. The projection is
+  linear, so the hull on a plane is the projection of the convex hull of the training data in
+  X-space.
+- The training ranges check each feature on its own. Together they form a box, and the training data
+  fill only part of it, so a target inside the box can lie outside the data's convex hull.
+- The rotation places the target in the plane, so its position on the plane is exact, while the
+  training rows are projections. On a plane that separates the target from the data, the target lies
+  outside the plane's hull; on another plane it can lie inside. A target inside the convex hull in
+  X-space lies inside the hull on every plane.
+- The biplot axes do not show this. A value read off an axis is that of the projected point, so the
+  axes show the training ranges only approximately.
+
+The hull applies to the counterfactual, not the target, so the search still returns a counterfactual
+inside the hull. On the Pima example, the made-up patient C (*Pregnancies* 4, *Glucose* 95,
+*Insulin* 400, *Age* 35; `rule_patients` in `scripts/paper1-pima/00_setup.R`) is inside every
+training range but outside the training data's convex hull in four dimensions: no training row has
+*Insulin* of 350 or more with *Glucose* of 110 or less. On pair (3,4), which the search chooses, the
+patient lies outside the plane's hull; on pair (1,3) it lies inside. Its counterfactual lies inside
+the hull on both. Patient D (*Pregnancies* 4, *Glucose* 130, *Insulin* 30, *Age* 35) lies inside the
+four-dimensional hull, and so inside the hull on every plane.
 
 ## 4. The effect
 
@@ -85,8 +111,9 @@ the plane, and are checked against the constraints and the training ranges only.
 - The TP target's run 1 lies on pair (3,4) at a search distance of 1.84. Without the hull it would lie
   on pair (2,3) at 1.50, raising *Age* from 51 to 59.6 and *Pregnancies* from 7 to 10, a point
   outside the training data on its plane. Inside the hull every TP counterfactual lowers *Age*, to
-  about 41, so run 4 (*Pregnancies* fixed, *Age* unable to decrease) has no counterfactual; without
-  the hull it would have one (Figure 7(a)). Run 3 (both fixed) has none either way. Run 5 (pair
+  about 41, so run 2 (*Pregnancies* and *Age* unable to decrease) and run 4 (*Pregnancies* fixed,
+  *Age* unable to decrease) have no counterfactual; without the hull each would have one (run 4's is
+  Figure 7(a)). Run 3 (both fixed) has none either way. Run 5 (pair
   (1,2) only) has a boundary point inside the hull, but no whole-number *Pregnancies* value still
   crosses the boundary.
 
@@ -154,7 +181,7 @@ with run 1's filter (`Pregnancies = "integer"`). Distances are the search's √d
 
 | Target | Default (both on) | `hull = FALSE` | `train_ranges = FALSE` | Both off |
 |---|---|---|---|---|
-| Loan Step 10 test row | pair (3,4), √d²_M 0.5554 | the same | the same | the same |
+| Loan test row 13, Step 15 (no actionability constraints) | pair (3,4), √d²_M 0.5554 | the same | the same | the same |
 | Loan Step 16 external applicant | pair (1,2), √d²_M 2.8241; credit score 534.92 | pair (1,2), 1.7026; credit score 489.44 | the same as the default | pair (1,4), 0.4750; credit score 421.26 |
 | Pima patient A (Pregnancies 17, Glucose 150, Insulin 200, Age 45) | pair (2,4), √d²_M 3.1973; Pregnancies 9 | pair (1,4), 2.5145; Pregnancies 13 | the same as the default | the same as `hull = FALSE` |
 | Pima patient B (Pregnancies 4, Glucose 180, Insulin 900, Age 25) | pair (2,4), √d²_M 2.4535; Insulin 641.45 | pair (2,3), 0.7658; Insulin 819.01 | the same as the default | the same as `hull = FALSE` |
@@ -165,7 +192,7 @@ must lie inside the training data's hull, which already keeps the credit score w
 dropping the ranges changes nothing. With the hull off and the ranges on, the nearest counterfactual
 sits at the range's lower end; with both off it leaves the credit score near 420, outside the
 training data, at a sixth of the default's distance. (If the hull also included the applicant, as
-Appendix A builds it, the default would equal the `hull = FALSE` column.)
+Appendix A7 builds it, the default would equal the `hull = FALSE` column.)
 
 The two Pima patients lie outside the training data on every plane chosen. Patient A's *Pregnancies*
 (17) is above its range (0 to 15), and patient B's *Insulin* (900) is above its range (15 to 846).
@@ -173,7 +200,7 @@ The two Pima patients lie outside the training data on every plane chosen. Patie
   counterfactuals keep every feature within its training range (*Pregnancies* 13, *Insulin* 819.01)
   but leave the training data. The ranges hold each feature separately, not the point.
 - **Dropping the ranges with the hull on changes nothing,** as for the loan applicant.
-- **If the hull also included the patient** (as Appendix A builds it):
+- **If the hull also included the patient** (as Appendix A7 builds it):
   - Patient B's default would equal the `hull = FALSE` column, as the loan applicant's would: that
     hull would reach out to the point.
   - Patient A's default would not change, because that hull would not reach a nearer boundary
@@ -181,3 +208,10 @@ The two Pima patients lie outside the training data on every plane chosen. Patie
 
 The review page of the Pima example (`review.html`) draws both patients with the hull on and off
 (`fig-ext.R`).
+
+**The training ranges on a target inside the data.** The made-up Pima patient D (*Pregnancies* 4,
+*Glucose* 130, *Insulin* 30, *Age* 35), inside every range and inside the training data, shows what
+the ranges add to the hull. With both rules on, the counterfactual lies on pair (1,4) at √d²_M 0.8407,
+with *Insulin* 111.72. With `train_ranges = FALSE` it would lie on pair (3,4) at 0.5686, with
+*Insulin* −15.41: inside the plane's hull, but a value no patient can have. Over the 79 Pima test
+rows (run 1's filter), the ranges change 6 counterfactuals (`scripts/paper1-pima/07_rule-effects.R`).

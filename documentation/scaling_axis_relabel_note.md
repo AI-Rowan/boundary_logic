@@ -24,7 +24,10 @@ affine transform
 
 on a `bl_data` / `bl_filter_result` object as `x$scaling = list(center, scale, method)`.
 It propagates through `bl_filter_outliers()` and `bl_assemble()` into
-`bl_result$scaling` (and onto `bl_projection$scaling`). It is display-only metadata;
+`bl_result$scaling`. `bl_build_result()` also copies it onto the projection it
+builds and passes to `bl_assemble()`; a projection from `bl_build_projection()`
+carries no scaling, so `plot.bl_projection()` relabels its axes only when
+`scaling` is set on that object. It is display-only metadata;
 a custom model wrapped with `bl_wrap_model(predict_fn = ...)` keeps receiving the
 standardised data it was trained on, because the grid back-projects to the data's
 own (standardised) units.
@@ -70,8 +73,7 @@ numbers. The plotted positions are byte-identical (verified by `all.equal()` on
   numbers, again without moving any plotted point.
 
 The implementation (`.bl_rescale_biplot_axes()` in `R/plot_biplot.R`) is a no-op
-when `scaling` is `NULL` (back-compatible with older `bl_result` objects) and
-warns, leaving axes in standardised units, if the scaling does not cover every
+when `scaling` is `NULL` (no scaling recorded) and warns, leaving axes in standardised units, if the scaling does not cover every
 biplot feature.
 
 ## Scope and limitations
@@ -80,9 +82,12 @@ biplot feature.
   `plot.bl_projection()`, `plot.bl_local_result()` (the SVD-rotated local biplot --
   `$means`/`$sd` are rotation-invariant, so the relabel composes with the rotation),
   `plot.bl_surrogate()`, and `plot.bl_sparse_result()` (via pass-through).
-- **Feature-value displays now also convert (2026-06-16).** The observed and
+- **Feature-value displays convert too.** The observed and
   counterfactual feature values in `plot.bl_shapley()`, `print.bl_shapley()`,
-  `print.bl_sparse_result()`, and `print.bl_target()` are converted back to raw
+  `print.bl_sparse_result()`, `print.bl_local_result()` (its comparison table
+  and its `"fixed"` and `"integer"` notes), `print.bl_target()` and
+  `print.bl_counterfactual()`, and in the `blocking_constraint` message of
+  `bl_find_local_cf()`, are converted back to raw
   units at display time via the private helper `.scale_to_raw(values, scaling,
   var_names, kind)` (`R/data_prepare.R`). A **level** (observed, full CF, sparse,
   counterfactual) converts as `value * scale + center`; a **delta** (the Shapley
@@ -97,7 +102,8 @@ biplot feature.
   transform families (z-score / min-max / log / none mixed) are future work -- and
   non-affine inverses (e.g. log) would need biplotEZ's spline-calibrated axis path
   (`PCOaxes = "splines"`) since a linear biplot axis cannot render non-linear ticks
-  exactly. See `CLAUDE.md` Section 9.
+  exactly. See `future-improvements-review.md` §1.8.3, "A different
+  transformation per feature".
 
 ## Display conventions
 
@@ -158,5 +164,4 @@ The stored tables stay unrounded.
 ## See also
 
 - `2 implementation_summary.txt` Section 4.4.1 -- function-level mechanics.
-- `.claude/reference/scaling_axis_relabel_plan.md` -- the approved implementation plan.
 - `development/reference/review_section4_to_6.md` -- `bl_set_scaling()` in the loan workflow.
