@@ -8,20 +8,37 @@ live in `CLAUDE.md`. Older sessions are condensed to one line each under **Histo
 
 ## Next session: start here
 
-**Commit the session-14 work first, if the user says so** (item 15), then **update the Paper 1 plan**
-(item 1), then write its algorithm boxes (item 2). Start on branch `paper_nr1_changes` (CLAUDE.md
-§10). The plan to update is
-`../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/.claude/plans/paper-1-plan.md`
-(last edited 2026-10-29). Plan the update first; what it must take in is under item 1. The hand-over
-for the paper work is the Claude Doc
-[boundarylogic v0.2.0: hand-over for Paper 1](https://claude.ai/artifact/Rb8YYhaNf43Xdj2dyZvyHz).
-**Open decision for the user** (item 16): the Phase 2 full Shapley decomposition.
+Start on branch `paper_nr1_changes` (CLAUDE.md §10). Everything is committed and pushed (2026-11-21):
+`main`, `method_developments` and `paper_nr1_changes` are at the same commit. Nothing is a blocker.
+
+**Remaining next steps, in order:**
+
+1. **Update the Paper 1 plan** (item 1):
+   `../Explain XAI code/reference-materials/Paper_nr1/Exploring_boundaries/.claude/plans/paper-1-plan.md`
+   (last edited 2026-10-29). Write a plan for the update first and get it approved; what the update
+   must take in is listed under item 1.
+2. **Write the paper's four algorithm boxes** (item 2), straight after item 1.
+3. Optional: reasons for the 17 future items marked "Reason: not recorded" (item 17).
+
+**Open questions for the user:**
+
+- **Item 16:** use the closed-form Phase 2 Shapley decomposition φ_j = v_j (W⁻¹v)_j (sums to the
+  full distance, no model calls), or keep the per-feature diagonal measure? Four documents and B14's
+  agreed paper sentence depend on the answer.
+- **Item 17:** supply reasons for the 17 future items, or leave them as "not recorded"?
+- **Inside item 1, the user decides:** which new Pima material goes in the paper. That covers Table 1's
+  layout (three targets, runs 1 and 3–8), the FP figures (`fig-fp-a` to `-d`), the rule-patient figures
+  (`fig-rule-*`) and `fig-ext`.
+
+The hand-over for the paper work is the Claude Doc
+[boundarylogic v0.2.0: hand-over for Paper 1](https://claude.ai/artifact/Rb8YYhaNf43Xdj2dyZvyHz)
+(updated 2026-11-21).
 
 ---
 
-## Outstanding items (reviewed 2026-11-16)
+## Outstanding items (reviewed 2026-11-21)
 
-Items 3–14 are closed (below, one line each). Nothing open is a blocker.
+Items 3–15 are closed (below, one line each). Nothing open is a blocker.
 
 ### Paper 1
 
@@ -66,13 +83,6 @@ Items 3–14 are closed (below, one line each). Nothing open is a blocker.
 
 ### This repo
 
-15. **Commit the session-13 rest and session-14 work** when the user says so: on `paper_nr1_changes`
-    (the session-13 commit `c866b27` is local, not pushed), push, then fast-forward `main` and
-    `method_developments`. Documentation, R/ text (roxygen and comments only) and regenerated help
-    pages, so no reinstall and no new tag. Then add the commit SHA to the hand-over Claude Doc
-    ("Install and versions") together with the third target and the target rule. The staged index
-    already holds three changes (`git mv` of the reply form, `git rm` of `future-developments.md` and
-    of the old Pima HTML export): commit them deliberately (CLAUDE.md §5 on `git mv`).
 16. **Decide on the Phase 2 full Shapley decomposition** (`future-improvements-review.md` §1.6). With
     d²_M = v'W⁻¹v as the value function the exact Shapley values have a closed form,
     φ_j = v_j (W⁻¹v)_j, which sums to the full distance and needs no model calls; the documents'
@@ -97,6 +107,9 @@ Items 3–14 are closed (below, one line each). Nothing open is a blocker.
 - 13. `local-convex-hull.md`'s missing §7: CLAUDE.md §2 and the notes now cite §3 and §6 (2026-11-16).
 - 14. Every technical note, the implementation summary and the walkthroughs follow the current-code
   rule (2026-11-16).
+- 15. The session-14 work committed as `4a52776` (with the three staged changes) and pushed together
+  with `c866b27`. `main` and `method_developments` were fast-forwarded and pushed, the package
+  reinstalled, and the hand-over Claude Doc updated (2026-11-21).
 
 ---
 
@@ -105,12 +118,12 @@ Items 3–14 are closed (below, one line each). Nothing open is a blocker.
 - **Paper 1 work is on branch `paper_nr1_changes`** (branched from `method_developments` at
   `b7aee65` on 2026-10-29, pushed with upstream). Start Paper 1 sessions on that branch
   (CLAUDE.md §10).
-- **`paper_nr1_changes` is at `c866b27` locally** (the session-13 close-out, not pushed);
-  `origin/paper_nr1_changes`, `main` and `method_developments` are at `e41f22f`. **Tag `v0.2.0` =
-  `0689341`.** The session-14 work is uncommitted (item 15). Commit and push only when the user says
-  so.
-- **The installed `boundarylogic` is 0.2.0** (reinstalled 2026-11-07). Reinstall after each merge to
-  `main` that changes package code (CLAUDE.md §5); the session-14 R/ changes are text only.
+- **`main`, `method_developments` and `paper_nr1_changes` are at the same commit, pushed**
+  (2026-11-21): the progress commit after `4a52776`, the session-14 work. **Tag `v0.2.0` =
+  `0689341`.** Since the tag, R/ has changed only in comments, help text and two message wordings,
+  so every result is the tag's. Commit and push only when the user says so.
+- **The installed `boundarylogic` is 0.2.0, reinstalled from `4a52776` on 2026-11-21.** Reinstall after
+  each merge to `main` (CLAUDE.md §5).
 - **`scripts/` is gitignored** (the user's playground). The Paper 1 Pima example lives in
   `scripts/paper1-pima/` (local only): review page `review.html` (with a coverage table of every
   behaviour of the method and where it is shown), `issues.md` (issues 1–17; the two Gate 2 review
@@ -135,7 +148,22 @@ Items 3–14 are closed (below, one line each). Nothing open is a blocker.
 
 ---
 
-## Session summary (2026-11-15 to 2026-11-16, session 14, latest)
+## Session summary (2026-11-21, session 15, latest)
+
+- Catch-up, then item 15 on the user's word. The session-14 work was committed as `4a52776`; its message
+  lists the changes. `c866b27` and `4a52776` were pushed on `paper_nr1_changes`, and `main` and
+  `method_developments` were fast-forwarded and pushed.
+- The package was reinstalled (`devtools::install(build_vignettes = TRUE)`).
+- The hand-over Claude Doc was brought up to the committed state: the branch commit, the
+  documentation commit, the three Pima targets and their rule, run 8, `tests.R`'s 18 checks,
+  `07_rule-effects.R`, and the moved `future-improvements-review.md`.
+- No code changed, and the tests were not re-run: 578 PASS / 0 FAIL / 4 WARN (2026-11-16) stands.
+  Blockers: none.
+- **Next:** the Paper 1 plan update (item 1); the open questions are at the top of this file.
+
+---
+
+## Session summary (2026-11-15 to 2026-11-16, session 14)
 
 Plan: `.claude/reference/pima-targets-docs-consistency-plan.md` (archived; working copy
 `.claude/plans/before-the-next-steps-temporal-storm.md`).
